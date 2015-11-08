@@ -16,7 +16,6 @@ var SCServer = function (options) {
   var self = this;
 
   var opts = {
-    // TODO: Use a basic client by default, rename this to brokerEngine
     brokerEngine: scSimpleBroker,
     allowClientPublish: true,
     ackTimeout: 10000,
@@ -24,7 +23,7 @@ var SCServer = function (options) {
     pingInterval: 8000,
     origins: '*:*',
     appName: uuid.v4(),
-    defaultAuthTokenExpiryInMinutes: 1440,
+    defaultAuthTokenExpiry: 86400,
     path: '/socketcluster/',
     authKey: crypto.randomBytes(32).toString('hex'),
     middlewareEmitNotices: true
@@ -73,7 +72,7 @@ var SCServer = function (options) {
   this._path = opts.path;
 
   this.authKey = opts.authKey;
-  this.defaultAuthTokenExpiryInMinutes = opts.defaultAuthTokenExpiryInMinutes;
+  this.defaultAuthTokenExpiry = opts.defaultAuthTokenExpiry;
 
   if (opts.authEngine) {
     this.auth = opts.authEngine;

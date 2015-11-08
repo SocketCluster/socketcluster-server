@@ -268,8 +268,8 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
   if (options == null) {
     options = {};
   }
-  if (options.expiresInMinutes == null && options.expiresInSeconds == null) {
-    options.expiresInMinutes = this.server.defaultAuthTokenExpiryInMinutes;
+  if (options.expiresIn == null) {
+    options.expiresIn = this.server.defaultAuthTokenExpiry;
   }
 
   this.server.auth.signToken(data, this.server.authKey, options, function (err, signedToken) {

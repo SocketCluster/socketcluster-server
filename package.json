@@ -1,12 +1,12 @@
 {
   "name": "socketcluster-server",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "dependencies": {
     "async": "1.5.0",
     "base64id": "0.1.0",
-    "jsonwebtoken": "5.4.1",
+    "lodash": "3.10.1",
     "node-uuid": "1.4.3",
     "sc-auth": "1.0.x",
     "sc-emitter": "1.0.x",

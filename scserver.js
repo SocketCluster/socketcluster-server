@@ -24,6 +24,7 @@ var SCServer = function (options) {
     origins: '*:*',
     appName: uuid.v4(),
     path: '/socketcluster/',
+    authDefaultExpiry: 86400,
     middlewareEmitNotices: true
   };
 
@@ -69,28 +70,31 @@ var SCServer = function (options) {
   this.middlewareEmitNotices = opts.middlewareEmitNotices;
   this._path = opts.path;
 
-  var authOptions = opts.authOptions || {};
-  this.authOptions = authOptions;
-
-  if (authOptions.privateKey != null || authOptions.publicKey != null) {
-    if (authOptions.privateKey == null) {
-      throw new Error('The authOptions.privateKey option must be specified if authOptions.publicKey is specified');
-    } else if (authOptions.publicKey == null) {
-      throw new Error('The authOptions.publicKey option must be specified if authOptions.privateKey is specified');
+  if (opts.authPrivateKey != null || opts.authPublicKey != null) {
+    if (opts.authPrivateKey == null) {
+      throw new Error('The authPrivateKey option must be specified if authPublicKey is specified');
+    } else if (opts.authPublicKey == null) {
+      throw new Error('The authPublicKey option must be specified if authPrivateKey is specified');
     }
-    this.signatureKey = authOptions.privateKey;
-    this.verificationKey = authOptions.publicKey;
+    this.signatureKey = opts.authPrivateKey;
+    this.verificationKey = opts.authPublicKey;
   } else {
-    if (authOptions.key == null) {
-      authOptions.key = crypto.randomBytes(32).toString('hex');
+    if (opts.authKey == null) {
+      opts.authKey = crypto.randomBytes(32).toString('hex');
     }
-    this.signatureKey = authOptions.key;
-    this.verificationKey = authOptions.key;
+    this.signatureKey = opts.authKey;
+    this.verificationKey = opts.authKey;
   }
 
-  if (authOptions.expiresIn == null) {
-    authOptions.expiresIn = 86400;
+  this.defaultVerificationOptions = {};
+  if (opts.authAlgorithm != null) {
+    this.defaultVerificationOptions.algorithms = [opts.authAlgorithm];
   }
+
+  this.defaultSignatureOptions = {
+    algorithm: opts.authAlgorithm,
+    expiresIn: opts.authDefaultExpiry
+  };
 
   if (opts.authEngine) {
     this.auth = opts.authEngine;
@@ -143,13 +147,13 @@ SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
   scSocket.emit('error', errorMessage);
 };
 
-SCServer.prototype._processTokenError = function (socket, err, encryptedAuthToken) {
+SCServer.prototype._processTokenError = function (socket, err, signedAuthToken) {
   // In case of an expired, malformed or invalid token, emit an event
   // and keep going without a token.
   var authError = null;
 
   if (err) {
-    err.encryptedAuthToken = encryptedAuthToken;
+    err.signedAuthToken = signedAuthToken;
     socket.emit('badAuthToken', err);
     this.emit('badSocketAuthToken', socket, err);
 
@@ -180,11 +184,11 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     self._handleSocketError(err);
   });
 
-  scSocket.on('#authenticate', function (encryptedAuthToken, respond) {
-    self.auth.verifyToken(encryptedAuthToken, self.verificationKey, self.authOptions, function (err, authToken) {
+  scSocket.on('#authenticate', function (signedAuthToken, respond) {
+    self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
-      var authError = self._processTokenError(scSocket, err, encryptedAuthToken);
+      var authError = self._processTokenError(scSocket, err, signedAuthToken);
 
       var authStatus = {
         isAuthenticated: !!authToken,
@@ -208,16 +212,16 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     if (!data) {
       data = {};
     }
-    var encryptedAuthToken = data.authToken;
+    var signedAuthToken = data.authToken;
     clearTimeout(scSocket._handshakeTimeout);
 
-    self.auth.verifyToken(encryptedAuthToken, self.verificationKey, self.authOptions, function (err, authToken) {
+    self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
       var authError;
 
-      if (encryptedAuthToken != null) {
-        authError = self._processTokenError(scSocket, err, encryptedAuthToken);
+      if (signedAuthToken != null) {
+        authError = self._processTokenError(scSocket, err, signedAuthToken);
       }
 
       self.clients[id] = scSocket;

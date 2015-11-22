@@ -271,7 +271,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
     var err = new Error('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
     SCEmitter.prototype.emit.call(this, 'error', err);
   }
-  options = _.defaults({}, options, this.server.authOptions);
+  options = _.defaults({}, options, this.server.defaultSignatureOptions);
   this.server.auth.signToken(data, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
       self._onSCClose(4002, err);

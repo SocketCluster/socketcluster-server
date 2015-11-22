@@ -57,7 +57,7 @@ var SCSocket = function (id, server, socket) {
     // If not pong, we need to parse the message.
     // If it is pong, we don't need to do anything since it has already
     // served its purpose of resetting the pong timeout (see above).
-    if (message != '2') {
+    if (message != '#2') {
       var obj = self.parse(message);
 
       if (obj == null) {
@@ -133,7 +133,7 @@ SCSocket.errorStatuses = {
 
 SCSocket.prototype._sendPing = function () {
   if (this.state != this.CLOSED) {
-    this.send('1');
+    this.send('#1');
   }
 };
 

@@ -1,3 +1,4 @@
+var _ = require('lodash');
 var WebSocket = require('ws');
 var SCEmitter = require('sc-emitter').SCEmitter;
 var formatter = require('sc-formatter');
@@ -265,14 +266,13 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
 
   this.authToken = data;
 
-  if (options == null) {
-    options = {};
+  if (options != null && options.algorithm != null) {
+    delete options.algorithm;
+    var err = new Error('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
+    SCEmitter.prototype.emit.call(this, 'error', err);
   }
-  if (options.expiresIn == null) {
-    options.expiresIn = this.server.defaultAuthTokenExpiry;
-  }
-
-  this.server.auth.signToken(data, this.server.authKey, options, function (err, signedToken) {
+  options = _.defaults({}, options, this.server.authOptions);
+  this.server.auth.signToken(data, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
       self._onSCClose(4002, err);
       self.socket.close(4002);

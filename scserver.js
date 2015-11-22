@@ -23,9 +23,7 @@ var SCServer = function (options) {
     pingInterval: 8000,
     origins: '*:*',
     appName: uuid.v4(),
-    defaultAuthTokenExpiry: 86400,
     path: '/socketcluster/',
-    authKey: crypto.randomBytes(32).toString('hex'),
     middlewareEmitNotices: true
   };
 
@@ -71,8 +69,28 @@ var SCServer = function (options) {
   this.middlewareEmitNotices = opts.middlewareEmitNotices;
   this._path = opts.path;
 
-  this.authKey = opts.authKey;
-  this.defaultAuthTokenExpiry = opts.defaultAuthTokenExpiry;
+  var authOptions = opts.authOptions || {};
+  this.authOptions = authOptions;
+
+  if (authOptions.privateKey != null || authOptions.publicKey != null) {
+    if (authOptions.privateKey == null) {
+      throw new Error('The authOptions.privateKey option must be specified if authOptions.publicKey is specified');
+    } else if (authOptions.publicKey == null) {
+      throw new Error('The authOptions.publicKey option must be specified if authOptions.privateKey is specified');
+    }
+    this.signatureKey = authOptions.privateKey;
+    this.verificationKey = authOptions.publicKey;
+  } else {
+    if (authOptions.key == null) {
+      authOptions.key = crypto.randomBytes(32).toString('hex');
+    }
+    this.signatureKey = authOptions.key;
+    this.verificationKey = authOptions.key;
+  }
+
+  if (authOptions.expiresIn == null) {
+    authOptions.expiresIn = 86400;
+  }
 
   if (opts.authEngine) {
     this.auth = opts.authEngine;
@@ -163,7 +181,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   });
 
   scSocket.on('#authenticate', function (encryptedAuthToken, respond) {
-    self.auth.verifyToken(encryptedAuthToken, self.authKey, function (err, authToken) {
+    self.auth.verifyToken(encryptedAuthToken, self.verificationKey, self.authOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
       var authError = self._processTokenError(scSocket, err, encryptedAuthToken);
@@ -193,7 +211,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     var encryptedAuthToken = data.authToken;
     clearTimeout(scSocket._handshakeTimeout);
 
-    self.auth.verifyToken(encryptedAuthToken, self.authKey, function (err, authToken) {
+    self.auth.verifyToken(encryptedAuthToken, self.verificationKey, self.authOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
       var authError;

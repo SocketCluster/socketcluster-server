@@ -380,9 +380,14 @@ SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
 
   var callbackInvoked = false;
 
+  var request = {};
+
   if (this._isPrivateTransmittedEvent(event)) {
     if (event == this._subscribeEvent) {
-      async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], socket, data,
+      request.socket = socket;
+      request.channel = data;
+
+      async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
         function (err) {
           if (callbackInvoked) {
             self.emit('notice', new Error('Callback for ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware was already invoked'));
@@ -401,7 +406,11 @@ SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
       );
     } else if (event == this._publishEvent) {
       if (this.allowClientPublish) {
-        async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], socket, data.channel, data.data,
+        request.socket = socket;
+        request.channel = data.channel;
+        request.data = data.data;
+
+        async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
           function (err) {
             if (callbackInvoked) {
               self.emit('notice', new Error('Callback for ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware was already invoked'));
@@ -430,7 +439,11 @@ SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
       cb();
     }
   } else {
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_EMIT], socket, event, data,
+    request.socket = socket;
+    request.event = event;
+    request.data = data;
+
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_EMIT], request,
       function (err) {
         if (callbackInvoked) {
           self.emit('notice', new Error('Callback for ' + self.MIDDLEWARE_EMIT + ' middleware was already invoked'));
@@ -456,7 +469,12 @@ SCServer.prototype.verifyOutboundEvent = function (socket, event, data, cb) {
   var callbackInvoked = false;
 
   if (event == this._publishEvent) {
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], socket, data.channel, data.data,
+    var request = {
+      socket: socket,
+      channel: data.channel,
+      data: data.data
+    };
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
       function (err) {
         if (callbackInvoked) {
           self.emit('notice', new Error('Callback for ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware was already invoked'));

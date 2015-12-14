@@ -4,6 +4,11 @@ var SCEmitter = require('sc-emitter').SCEmitter;
 var formatter = require('sc-formatter');
 var Response = require('./response').Response;
 
+var scErrors = require('sc-errors');
+var InvalidArgumentsError = scErrors.InvalidArgumentsError;
+var InvalidMessageError = scErrors.InvalidMessageError;
+var SocketProtocolError = scErrors.SocketProtocolError;
+
 
 var SCSocket = function (id, server, socket) {
   var self = this;
@@ -18,7 +23,8 @@ var SCSocket = function (id, server, socket) {
     '_disconnect': 1,
     'message': 1,
     'error': 1,
-    'badAuthToken': 1,
+    'authenticate': 1,
+    'deauthenticate': 1,
     'raw': 1
   };
 
@@ -61,7 +67,7 @@ var SCSocket = function (id, server, socket) {
       var obj = self.parse(message);
 
       if (obj == null) {
-        var err = new Error('Received empty message');
+        var err = new InvalidMessageError('Received empty message');
         SCEmitter.prototype.emit.call(self, 'error', err);
 
       } else if (obj.event) {
@@ -93,7 +99,8 @@ var SCSocket = function (id, server, socket) {
         if (ret) {
           clearTimeout(ret.timeout);
           delete self._callbackMap[obj.rid];
-          ret.callback(obj.error, obj.data);
+          var rehydratedError = scErrors.hydrateError(obj.error);
+          ret.callback(rehydratedError, obj.data);
         }
       } else {
         // The last remaining case is to treat the message as raw
@@ -109,27 +116,8 @@ SCSocket.CONNECTING = SCSocket.prototype.CONNECTING = 'connecting';
 SCSocket.OPEN = SCSocket.prototype.OPEN = 'open';
 SCSocket.CLOSED = SCSocket.prototype.CLOSED = 'closed';
 
-SCSocket.ignoreStatuses = {
-  1000: 'Socket closed normally',
-  1001: 'Socket hung up'
-};
-
-SCSocket.errorStatuses = {
-  1002: 'A WebSocket protocol error was encountered',
-  1003: 'Server terminated socket because it received invalid data',
-  1005: 'Socket closed without status code',
-  1006: 'Socket hung up',
-  1007: 'Message format was incorrect',
-  1008: 'Encountered a policy violation',
-  1009: 'Message was too big to process',
-  1010: 'Client ended the connection because the server did not comply with extension requirements',
-  1011: 'Server encountered an unexpected fatal condition',
-  4000: 'Server ping timed out',
-  4001: 'Client pong timed out',
-  4002: 'Server failed to sign auth token',
-  4003: 'Failed to complete handshake',
-  4004: 'Client failed to save auth token'
-};
+SCSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
+SCSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
 SCSocket.prototype._sendPing = function () {
   if (this.state != this.CLOSED) {
@@ -171,8 +159,7 @@ SCSocket.prototype._onSCClose = function (code, data) {
     SCEmitter.prototype.emit.call(this, 'disconnect', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
-      var err = new Error(SCSocket.errorStatuses[code] || 'Socket connection failed for unknown reasons');
-      err.code = code;
+      var err = new SocketProtocolError(SCSocket.errorStatuses[code] || 'Socket connection failed for unknown reasons', code);
       SCEmitter.prototype.emit.call(this, 'error', err);
     }
   }
@@ -244,8 +231,7 @@ SCSocket.prototype.emit = function (event, data, callback) {
       } else {
         if (callback) {
           var timeout = setTimeout(function () {
-            var error = new Error("Event response for '" + event + "' timed out");
-            error.type = 'timeout';
+            var error = new TimeoutError("Event response for '" + event + "' timed out");
 
             delete self._callbackMap[eventObject.cid];
             callback(error, eventObject);
@@ -268,7 +254,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
 
   if (options != null && options.algorithm != null) {
     delete options.algorithm;
-    var err = new Error('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
+    var err = new InvalidArgumentsError('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
     SCEmitter.prototype.emit.call(this, 'error', err);
   }
   options = _.defaults({}, options, this.server.defaultSignatureOptions);
@@ -290,7 +276,7 @@ SCSocket.prototype.getAuthToken = function () {
   return this.authToken;
 };
 
-SCSocket.prototype.removeAuthToken = function (callback) {
+SCSocket.prototype.deauthenticate = function (callback) {
   this.authToken = null;
   this.emit('#removeAuthToken', null, callback);
 };

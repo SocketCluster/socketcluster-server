@@ -201,11 +201,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       if (authStatus.isAuthenticated) {
         scSocket.emit('authenticate', authToken);
       }
-
-      // TODO: Maybe this should be passed back as a custom Error as first argument
-      // We will have to change the frontend to not throw error when it receieves err as first argument
-      // Treat authentication failure as a 'soft' error
-      respond(null, authStatus);
+      
+      respond(authError, authStatus);
     });
   });
 
@@ -406,7 +403,7 @@ SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
   };
 
   var token = socket.getAuthToken();
-  if (this._isAuthTokenExpired(token)) {
+  if (this.isAuthTokenExpired(token)) {
     request.authTokenExpiredError = new AuthTokenExpiredError('The socket auth token has expired', token.exp);
 
     socket.deauthenticate();
@@ -415,7 +412,7 @@ SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
   this._passThroughMiddleware(request, cb);
 };
 
-SCServer.prototype._isAuthTokenExpired = function (token) {
+SCServer.prototype.isAuthTokenExpired = function (token) {
   if (token && token.exp != null) {
     var currentTime = Date.now();
     var expiryMilliseconds = token.exp * 1000;
@@ -441,29 +438,38 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
 
   if (this._isPrivateTransmittedEvent(event)) {
     if (event == this._subscribeEvent) {
-      request.channel = options.data;
+      var data = options.data || {};
+      request.channel = data.channel;
+      request.waitForAuth = data.waitForAuth;
 
-      async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
-        function (err) {
-          if (callbackInvoked) {
-            self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware was already invoked'));
-          } else {
-            callbackInvoked = true;
-            if (err) {
-              if (err === true) {
-                err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware', self.MIDDLEWARE_SUBSCRIBE);
-              } else if (self.middlewareEmitWarnings) {
-                self.emit('warning', err);
+      if (request.waitForAuth && request.authTokenExpiredError) {
+        // If the channel has the waitForAuth flag set, then we will handle the expiry quietly
+        // and we won't pass this request through the subscribe middleware.
+        cb(request.authTokenExpiredError);
+      } else {
+        async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
+          function (err) {
+            if (callbackInvoked) {
+              self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware was already invoked'));
+            } else {
+              callbackInvoked = true;
+              if (err) {
+                if (err === true) {
+                  err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware', self.MIDDLEWARE_SUBSCRIBE);
+                } else if (self.middlewareEmitWarnings) {
+                  self.emit('warning', err);
+                }
               }
+              cb(err);
             }
-            cb(err);
           }
-        }
-      );
+        );
+      }
     } else if (event == this._publishEvent) {
       if (this.allowClientPublish) {
-        request.channel = options.data.channel;
-        request.data = options.data.data;
+        var data = options.data || {};
+        request.channel = data.channel;
+        request.data = data.data;
 
         async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
           function (err) {

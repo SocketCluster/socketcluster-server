@@ -60,10 +60,14 @@ var SCSocket = function (id, server, socket) {
 
     SCEmitter.prototype.emit.call(self, 'message', message);
 
-    // If not pong, we need to parse the message.
-    // If it is pong, we don't need to do anything since it has already
-    // served its purpose of resetting the pong timeout (see above).
-    if (message != '#2') {
+    // If not pong, we don't need to parse the message.
+    // We just check the token expiry and deauthenticate the socket if it has expired.
+    if (message == '#2') {
+      var token = self.getAuthToken();
+      if (self.server.isAuthTokenExpired(token)) {
+        self.deauthenticate();
+      }
+    } else {
       var obj = self.parse(message);
 
       if (obj == null) {

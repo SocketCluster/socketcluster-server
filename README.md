@@ -25,6 +25,7 @@ scServer.on('connection', function (socket) {
   // ... Handle new socket connections here
 });
 
+httpServer.listen(8000);
 ```
 
 ## Using with Express (example)
@@ -49,6 +50,7 @@ scServer.on('connection', function (socket) {
   // ... Handle new socket connections here
 });
 
+httpServer.listen(8000);
 ```
 
 Note that the full SocketCluster framework (https://github.com/SocketCluster/socketcluster) uses this module behind the scenes so the API is exactly the same and it works with the socketcluster-client out of the box.

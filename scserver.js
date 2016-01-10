@@ -71,8 +71,9 @@ var SCServer = function (options) {
   this.allowClientPublish = opts.allowClientPublish;
   this.perMessageDeflate = opts.perMessageDeflate;
   this.httpServer = opts.httpServer;
+  this.socketChannelLimit = opts.socketChannelLimit;
 
-  this._brokerEngine = opts.brokerEngine;
+  this.brokerEngine = opts.brokerEngine;
   this.appName = opts.appName || '';
   this.middlewareEmitWarnings = opts.middlewareEmitWarnings;
   this._path = opts.path;
@@ -113,7 +114,7 @@ var SCServer = function (options) {
   this.clients = {};
   this.clientsCount = 0;
 
-  this.exchange = this.global = this._brokerEngine.exchange();
+  this.exchange = this.global = this.brokerEngine.exchange();
 
   this.wsServer = new WSServer({
     server: this.httpServer,
@@ -145,6 +146,98 @@ SCServer.prototype._handleSocketError = function (error) {
 
 SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
   scSocket.disconnect(4005);
+};
+
+SCServer.prototype._subscribeSocket = function (socket, channels, callback) {
+  var self = this;
+
+  if (channels instanceof Array) {
+    var tasks = [];
+    for (var i in channels) {
+      if (channels.hasOwnProperty(i)) {
+        (function (channel) {
+          tasks.push(function (cb) {
+            self._subscribeSocketToSingleChannel(socket, channel, cb);
+          });
+        })(channels[i]);
+      }
+    }
+    async.waterfall(tasks, function (err) {
+      callback && callback(err);
+    });
+  } else {
+    this._subscribeSocketToSingleChannel(socket, channels, callback);
+  }
+};
+
+SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channel, callback) {
+  var self = this;
+
+  if (this.socketChannelLimit && socket.channelSubscriptionsCount >= this.socketChannelLimit) {
+    callback && callback('Socket ' + socket.id + ' tried to exceed the channel subscription limit of ' +
+      this.socketChannelLimit);
+  } else {
+    if (socket.channelSubscriptionsCount == null) {
+      socket.channelSubscriptionsCount = 0;
+    }
+    if (socket.channelSubscriptions[channel] == null) {
+      socket.channelSubscriptions[channel] = true;
+      socket.channelSubscriptionsCount++;
+    }
+
+    this.brokerEngine.subscribeSocket(socket, channel, function (err) {
+      if (err) {
+        delete socket.channelSubscriptions[channel];
+        socket.channelSubscriptionsCount--;
+      } else {
+        socket.emit('subscribe', channel);
+      }
+      callback && callback(err);
+    });
+  }
+};
+
+SCServer.prototype._unsubscribeSocket = function (socket, channels, callback) {
+  var self = this;
+
+  if (channels == null) {
+    channels = [];
+    for (var channel in socket.channelSubscriptions) {
+      if (socket.channelSubscriptions.hasOwnProperty(channel)) {
+        channels.push(channel);
+      }
+    }
+  }
+  if (channels instanceof Array) {
+    var tasks = [];
+    var len = channels.length;
+    for (var i = 0; i < len; i++) {
+      (function (channel) {
+        tasks.push(function (cb) {
+          self._unsubscribeSocketFromSingleChannel(socket, channel, cb);
+        });
+      })(channels[i]);
+    }
+    async.waterfall(tasks, function (err) {
+      callback && callback(err);
+    });
+  } else {
+    this._unsubscribeSocketFromSingleChannel(socket, channels, callback);
+  }
+};
+
+SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, channel, callback) {
+  var self = this;
+
+  delete socket.channelSubscriptions[channel];
+  if (socket.channelSubscriptionsCount != null) {
+    socket.channelSubscriptionsCount--;
+  }
+
+  this.brokerEngine.unsubscribeSocket(socket, channel, function (err) {
+    socket.emit('unsubscribe', channel);
+    callback && callback(err);
+  });
 };
 
 SCServer.prototype._processTokenError = function (socket, err, signedAuthToken) {
@@ -201,7 +294,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       if (authStatus.isAuthenticated) {
         scSocket.emit('authenticate', authToken);
       }
-      
+
       respond(authError, authStatus);
     });
   });
@@ -212,13 +305,61 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     scSocket.emit('deauthenticate', oldToken);
   });
 
+  scSocket.on('#subscribe', function (channelOptions, res) {
+    if (!channelOptions) {
+      channelOptions = {};
+    }
+    self._subscribeSocket(scSocket, channelOptions.channel, function (err) {
+      if (err) {
+        res(err);
+
+        var error = new BrokerError('Failed to subscribe socket to channel - ' + err);
+        scSocket.emit('error', error);
+      } else {
+        res();
+      }
+    });
+  });
+
+  scSocket.on('#unsubscribe', function (channel, res) {
+    self._unsubscribeSocket(scSocket, channel, function (err) {
+      if (err) {
+        res(err);
+
+        var error = new BrokerError('Failed to unsubscribe socket from channel - ' + err);
+        scSocket.emit('error', error);
+      } else {
+        res();
+      }
+    });
+  });
+
   scSocket.once('_disconnect', function () {
     clearTimeout(scSocket._handshakeTimeout);
+
     scSocket.off('#handshake');
     scSocket.off('#authenticate');
     scSocket.off('#removeAuthToken');
+    scSocket.off('#subscribe');
+    scSocket.off('#unsubscribe');
     scSocket.off('authenticate');
     scSocket.off('deauthenticate');
+
+    var isClientFullyConnected = !!self.clients[id];
+
+    if (isClientFullyConnected) {
+      delete self.clients[id];
+      self.clientsCount--;
+    }
+
+    self._unsubscribeSocket(scSocket, null, function (err) {
+      if (err) {
+        scSocket.emit('error', new BrokerError('Failed to unsubscribe socket from all channels - ' + err));
+      } else if (isClientFullyConnected) {
+        self.emit('_disconnection', scSocket);
+        self.emit('disconnection', scSocket);
+      }
+    });
   });
 
   scSocket._handshakeTimeout = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.ackTimeout);
@@ -246,54 +387,28 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       self.clients[id] = scSocket;
       self.clientsCount++;
 
-      self._brokerEngine.bind(scSocket, function (err, sock, isWarning) {
-        if (err) {
-          scSocket.disconnect(4006);
-          if (!isWarning) {
-            var error = new BrokerError('Failed to bind socket to broker cluster - ' + err);
-            self.emit('error', error);
-          }
-          respond(err);
+      scSocket.state = scSocket.OPEN;
+      scSocket.exchange = scSocket.global = self.exchange;
 
-        } else {
-          scSocket.state = scSocket.OPEN;
-          scSocket.exchange = scSocket.global = self.exchange;
+      self.emit('_connection', scSocket);
+      self.emit('connection', scSocket);
 
-          self.emit('_connection', scSocket);
-          self.emit('connection', scSocket);
+      var status = {
+        id: scSocket.id,
+        isAuthenticated: !!authToken,
+        pingTimeout: self.pingTimeout
+      };
 
-          var status = {
-            id: scSocket.id,
-            isAuthenticated: !!authToken,
-            pingTimeout: self.pingTimeout
-          };
+      if (authError) {
+        status.authError = authError;
+      }
 
-          if (authError) {
-            status.authError = authError;
-          }
+      if (status.isAuthenticated) {
+        scSocket.emit('authenticate', authToken);
+      }
 
-          if (status.isAuthenticated) {
-            scSocket.emit('authenticate', authToken);
-          }
-
-          // Treat authentication failure as a 'soft' error
-          respond(null, status);
-        }
-      });
-
-      scSocket.once('_disconnect', function () {
-        delete self.clients[id];
-        self.clientsCount--;
-
-        self._brokerEngine.unbind(scSocket, function (err) {
-          if (err) {
-            self.emit('error', new BrokerError('Failed to unbind socket from io cluster - ' + err));
-          } else {
-            self.emit('_disconnection', scSocket);
-            self.emit('disconnection', scSocket);
-          }
-        });
-      });
+      // Treat authentication failure as a 'soft' error
+      respond(null, status);
     });
   });
 };
@@ -312,7 +427,7 @@ SCServer.prototype.generateId = function () {
 
 SCServer.prototype.on = function (event, listener) {
   if (event == 'ready') {
-    this._brokerEngine.once(event, listener);
+    this.brokerEngine.once(event, listener);
   } else {
     EventEmitter.prototype.on.apply(this, arguments);
   }
@@ -320,7 +435,7 @@ SCServer.prototype.on = function (event, listener) {
 
 SCServer.prototype.removeListener = function (event, listener) {
   if (event == 'ready') {
-    this._brokerEngine.removeListener(event, listener);
+    this.brokerEngine.removeListener(event, listener);
   } else {
     EventEmitter.prototype.removeListener.apply(this, arguments);
   }

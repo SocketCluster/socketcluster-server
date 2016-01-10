@@ -43,6 +43,9 @@ var SCSocket = function (id, server, socket) {
   this._cid = 1;
   this._callbackMap = {};
 
+  this.channelSubscriptions = {};
+  this.channelSubscriptionsCount = 0;
+
   this.socket.on('error', function (err) {
     SCEmitter.prototype.emit.call(self, 'error', err);
   });
@@ -283,6 +286,33 @@ SCSocket.prototype.getAuthToken = function () {
 SCSocket.prototype.deauthenticate = function (callback) {
   this.authToken = null;
   this.emit('#removeAuthToken', null, callback);
+};
+
+SCSocket.prototype.kickOut = function (channel, message, callback) {
+  if (channel == null) {
+    for (var i in this.channelSubscriptions) {
+      if (this.channelSubscriptions.hasOwnProperty(i)) {
+        this.emit('#kickOut', {message: message, channel: i});
+      }
+    }
+  } else {
+    this.emit('#kickOut', {message: message, channel: channel});
+  }
+  this.server.brokerEngine.unsubscribeClientSocket(this, channel, callback);
+};
+
+SCSocket.prototype.subscriptions = function () {
+  var subs = [];
+  for (var i in this.channelSubscriptions) {
+    if (this.channelSubscriptions.hasOwnProperty(i)) {
+      subs.push(i);
+    }
+  }
+  return subs;
+};
+
+SCSocket.prototype.isSubscribed = function (channel) {
+  return !!this.channelSubscriptions[channel];
 };
 
 module.exports = SCSocket;

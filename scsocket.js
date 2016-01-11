@@ -298,7 +298,7 @@ SCSocket.prototype.kickOut = function (channel, message, callback) {
   } else {
     this.emit('#kickOut', {message: message, channel: channel});
   }
-  this.server.brokerEngine.unsubscribeClientSocket(this, channel, callback);
+  this.server.brokerEngine.unsubscribeSocket(this, channel, callback);
 };
 
 SCSocket.prototype.subscriptions = function () {

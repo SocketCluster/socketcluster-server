@@ -308,6 +308,10 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   scSocket.on('#subscribe', function (channelOptions, res) {
     if (!channelOptions) {
       channelOptions = {};
+    } else if (typeof channelOptions == 'string') {
+      channelOptions = {
+        channel: channelOptions
+      };
     }
     self._subscribeSocket(scSocket, channelOptions.channel, function (err) {
       if (err) {

@@ -1,5 +1,4 @@
 var _ = require('lodash');
-var WebSocket = require('ws');
 var SCEmitter = require('sc-emitter').SCEmitter;
 var formatter = require('sc-formatter');
 var Response = require('./response').Response;

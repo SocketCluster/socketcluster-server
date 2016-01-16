@@ -315,9 +315,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     }
     self._subscribeSocket(scSocket, channelOptions.channel, function (err) {
       if (err) {
-        res(err);
-
         var error = new BrokerError('Failed to subscribe socket to channel - ' + err);
+        res(error);
         scSocket.emit('error', error);
       } else {
         res();
@@ -328,9 +327,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   scSocket.on('#unsubscribe', function (channel, res) {
     self._unsubscribeSocket(scSocket, channel, function (err) {
       if (err) {
-        res(err);
-
         var error = new BrokerError('Failed to unsubscribe socket from channel - ' + err);
+        res(error);
         scSocket.emit('error', error);
       } else {
         res();

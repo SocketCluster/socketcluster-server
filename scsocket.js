@@ -7,6 +7,7 @@ var scErrors = require('sc-errors');
 var InvalidArgumentsError = scErrors.InvalidArgumentsError;
 var InvalidMessageError = scErrors.InvalidMessageError;
 var SocketProtocolError = scErrors.SocketProtocolError;
+var TimeoutError = scErrors.TimeoutError;
 
 
 var SCSocket = function (id, server, socket) {

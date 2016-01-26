@@ -596,7 +596,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
               callbackInvoked = true;
               if (err) {
                 if (err === true) {
-                  err =  new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware', self.MIDDLEWARE_PUBLISH_IN);
+                  err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware', self.MIDDLEWARE_PUBLISH_IN);
                 } else if (self.middlewareEmitWarnings) {
                   self.emit('warning', err);
                 }

@@ -135,6 +135,9 @@ SCServer.prototype.setAuthEngine = function (authEngine) {
 };
 
 SCServer.prototype._handleServerError = function (error) {
+  if (typeof error == 'string') {
+    error = new ServerProtocolError(error);
+  }
   this.emit('error', error);
 };
 

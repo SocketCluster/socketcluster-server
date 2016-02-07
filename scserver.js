@@ -28,6 +28,7 @@ var SCServer = function (options) {
     brokerEngine: scSimpleBroker,
     allowClientPublish: true,
     ackTimeout: 10000,
+    handshakeTimeout: 10000,
     pingTimeout: 20000,
     pingInterval: 8000,
     origins: '*:*',
@@ -66,6 +67,7 @@ var SCServer = function (options) {
   this._allowAllOrigins = this.origins.indexOf('*:*') != -1;
 
   this.ackTimeout = opts.ackTimeout;
+  this.handshakeTimeout = opts.handshakeTimeout;
   this.pingInterval = opts.pingInterval;
   this.pingTimeout = opts.pingTimeout;
   this.allowClientPublish = opts.allowClientPublish;
@@ -340,7 +342,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   });
 
   scSocket.once('_disconnect', function () {
-    clearTimeout(scSocket._handshakeTimeout);
+    clearTimeout(scSocket._handshakeTimeoutRef);
 
     scSocket.off('#handshake');
     scSocket.off('#authenticate');
@@ -367,14 +369,13 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     });
   });
 
-  scSocket._handshakeTimeout = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.ackTimeout);
-
+  scSocket._handshakeTimeoutRef = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.handshakeTimeout);
   scSocket.once('#handshake', function (data, respond) {
     if (!data) {
       data = {};
     }
     var signedAuthToken = data.authToken;
-    clearTimeout(scSocket._handshakeTimeout);
+    clearTimeout(scSocket._handshakeTimeoutRef);
 
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;

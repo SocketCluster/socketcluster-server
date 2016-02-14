@@ -285,7 +285,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
-      if (err && err.name == 'TokenExpiredError') {
+      if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
         scSocket.deauthenticate();
       }
 
@@ -380,7 +380,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       scSocket.authToken = authToken || null;
 
-      if (err && err.name == 'TokenExpiredError') {
+      if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
         scSocket.deauthenticate();
       }
 

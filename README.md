@@ -33,6 +33,7 @@ httpServer.listen(8000);
 ```js
 var http = require('http');
 var socketClusterServer = require('socketcluster-server');
+var serveStatic = require('serve-static');
 var path = require('path');
 var app = require('express')();
 

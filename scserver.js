@@ -283,7 +283,13 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
 
   scSocket.on('#authenticate', function (signedAuthToken, respond) {
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
-      scSocket.authToken = authToken || null;
+      if (authToken) {
+        scSocket.authToken = authToken;
+        scSocket.authState = scSocket.AUTHENTICATED;
+      } else {
+        scSocket.authToken = null;
+        scSocket.authState = scSocket.UNAUTHENTICATED;
+      }
 
       if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
         scSocket.deauthenticate();
@@ -307,6 +313,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   scSocket.on('#removeAuthToken', function () {
     var oldToken = scSocket.authToken;
     scSocket.authToken = null;
+    scSocket.authState = scSocket.UNAUTHENTICATED;
     scSocket.emit('deauthenticate', oldToken);
   });
 
@@ -378,7 +385,13 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     clearTimeout(scSocket._handshakeTimeoutRef);
 
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
-      scSocket.authToken = authToken || null;
+      if (authToken) {
+        scSocket.authToken = authToken;
+        scSocket.authState = scSocket.AUTHENTICATED;
+      } else {
+        scSocket.authToken = null;
+        scSocket.authState = scSocket.UNAUTHENTICATED;
+      }
 
       if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
         scSocket.deauthenticate();

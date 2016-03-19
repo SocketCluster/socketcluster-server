@@ -123,6 +123,9 @@ SCSocket.CONNECTING = SCSocket.prototype.CONNECTING = 'connecting';
 SCSocket.OPEN = SCSocket.prototype.OPEN = 'open';
 SCSocket.CLOSED = SCSocket.prototype.CLOSED = 'closed';
 
+SCSocket.AUTHENTICATED = SCSocket.prototype.AUTHENTICATED = 'authenticated';
+SCSocket.UNAUTHENTICATED = SCSocket.prototype.UNAUTHENTICATED = 'unauthenticated';
+
 SCSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 SCSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
@@ -258,6 +261,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
   var self = this;
 
   this.authToken = data;
+  this.authState = this.AUTHENTICATED;
 
   if (options != null && options.algorithm != null) {
     delete options.algorithm;
@@ -285,6 +289,7 @@ SCSocket.prototype.getAuthToken = function () {
 
 SCSocket.prototype.deauthenticate = function (callback) {
   this.authToken = null;
+  this.authState = this.UNAUTHENTICATED;
   this.emit('#removeAuthToken', null, callback);
 };
 

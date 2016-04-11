@@ -253,7 +253,7 @@ SCSocket.prototype.emit = function (event, data, callback) {
       }
     });
   } else {
-    SCEmitter.prototype.emit.call(this, event, data);
+    SCEmitter.prototype.emit.apply(this, arguments);
   }
 };
 

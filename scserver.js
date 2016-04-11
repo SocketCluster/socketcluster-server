@@ -153,30 +153,31 @@ SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
   scSocket.disconnect(4005);
 };
 
-SCServer.prototype._subscribeSocket = function (socket, channels, callback) {
+SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback) {
   var self = this;
 
-  if (channels instanceof Array) {
+  if (channelOptions instanceof Array) {
     var tasks = [];
-    for (var i in channels) {
-      if (channels.hasOwnProperty(i)) {
-        (function (channel) {
+    for (var i in channelOptions) {
+      if (channelOptions.hasOwnProperty(i)) {
+        (function (singleChannelOptions) {
           tasks.push(function (cb) {
-            self._subscribeSocketToSingleChannel(socket, channel, cb);
+            self._subscribeSocketToSingleChannel(socket, singleChannelOptions, cb);
           });
-        })(channels[i]);
+        })(channelOptions[i]);
       }
     }
     async.waterfall(tasks, function (err) {
       callback && callback(err);
     });
   } else {
-    this._subscribeSocketToSingleChannel(socket, channels, callback);
+    this._subscribeSocketToSingleChannel(socket, channelOptions, callback);
   }
 };
 
-SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channel, callback) {
+SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channelOptions, callback) {
   var self = this;
+  var channelName = channelOptions.channel;
 
   if (this.socketChannelLimit && socket.channelSubscriptionsCount >= this.socketChannelLimit) {
     callback && callback('Socket ' + socket.id + ' tried to exceed the channel subscription limit of ' +
@@ -185,17 +186,17 @@ SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channel, 
     if (socket.channelSubscriptionsCount == null) {
       socket.channelSubscriptionsCount = 0;
     }
-    if (socket.channelSubscriptions[channel] == null) {
-      socket.channelSubscriptions[channel] = true;
+    if (socket.channelSubscriptions[channelName] == null) {
+      socket.channelSubscriptions[channelName] = true;
       socket.channelSubscriptionsCount++;
     }
 
-    this.brokerEngine.subscribeSocket(socket, channel, function (err) {
+    this.brokerEngine.subscribeSocket(socket, channelName, function (err) {
       if (err) {
-        delete socket.channelSubscriptions[channel];
+        delete socket.channelSubscriptions[channelName];
         socket.channelSubscriptionsCount--;
       } else {
-        socket.emit('subscribe', channel);
+        socket.emit('subscribe', channelName, channelOptions);
       }
       callback && callback(err);
     });
@@ -325,7 +326,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
         channel: channelOptions
       };
     }
-    self._subscribeSocket(scSocket, channelOptions.channel, function (err) {
+    self._subscribeSocket(scSocket, channelOptions, function (err) {
       if (err) {
         var error = new BrokerError('Failed to subscribe socket to channel - ' + err);
         res(error);
@@ -575,6 +576,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
       var data = options.data || {};
       request.channel = data.channel;
       request.waitForAuth = data.waitForAuth;
+      request.data = data.data;
 
       if (request.waitForAuth && request.authTokenExpiredError) {
         // If the channel has the waitForAuth flag set, then we will handle the expiry quietly

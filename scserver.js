@@ -120,6 +120,7 @@ var SCServer = function (options) {
 
   this.wsServer = new WSServer({
     server: this.httpServer,
+    path: this._path,
     clientTracking: false,
     perMessageDeflate: this.perMessageDeflate,
     handleProtocols: opts.handleProtocols,
@@ -384,7 +385,6 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     }
     var signedAuthToken = data.authToken;
     clearTimeout(scSocket._handshakeTimeoutRef);
-
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
       if (authToken) {
         scSocket.authToken = authToken;
@@ -426,7 +426,6 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       if (status.isAuthenticated) {
         scSocket.emit('authenticate', authToken);
       }
-
       // Treat authentication failure as a 'soft' error
       respond(null, status);
     });

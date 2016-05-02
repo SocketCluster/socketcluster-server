@@ -169,7 +169,12 @@ SCSocket.prototype._onSCClose = function (code, data) {
     SCEmitter.prototype.emit.call(this, 'disconnect', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
-      var err = new SocketProtocolError(SCSocket.errorStatuses[code] || 'Socket connection failed for unknown reasons', code);
+      if (data) {
+        failureMessage = 'Socket connection failed: ' + data;
+      } else {
+        failureMessage = 'Socket connection failed for unknown reasons';
+      }
+      var err = new SocketProtocolError(SCSocket.errorStatuses[code] || failureMessage, code);
       SCEmitter.prototype.emit.call(this, 'error', err);
     }
   }

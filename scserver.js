@@ -1,5 +1,3 @@
-var ws = require('ws');
-var WSServer = ws.Server;
 var SCSocket = require('./scsocket');
 var AuthEngine = require('sc-auth').AuthEngine;
 var EventEmitter = require('events').EventEmitter;
@@ -26,6 +24,7 @@ var SCServer = function (options) {
 
   var opts = {
     brokerEngine: scSimpleBroker,
+    wsEngine: 'ws',
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,
@@ -79,6 +78,13 @@ var SCServer = function (options) {
   this.appName = opts.appName || '';
   this.middlewareEmitWarnings = opts.middlewareEmitWarnings;
   this._path = opts.path;
+
+  var wsEngine = require(opts.wsEngine);
+  if (!wsEngine || !wsEngine.Server) {
+    throw new InvalidOptionsError('The wsEngine option must be a path or module name which points ' +
+      'to a valid WebSocket engine module with a compatible interface');
+  }
+  var WSServer = wsEngine.Server;
 
   if (opts.authPrivateKey != null || opts.authPublicKey != null) {
     if (opts.authPrivateKey == null) {

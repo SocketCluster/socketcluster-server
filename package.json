@@ -13,7 +13,8 @@
     "sc-errors": "1.0.x",
     "sc-formatter": "1.0.x",
     "sc-simple-broker": "1.2.x",
-    "ws": "1.0.1"
+    "ws": "1.0.1",
+    "uws": "0.3.4"
   },
   "devDependencies": {},
   "scripts": {

@@ -37,8 +37,24 @@ var SCSocket = function (id, server, socket) {
   this.socket = socket;
   this.state = this.CONNECTING;
 
-  this.request = this.socket.upgradeReq;
-  this.remoteAddress = this.request.remoteAddress;
+  this.request = this.socket.upgradeReq || {};
+
+  // If uws module is used.
+  if (!this.request.connection) {
+    this.request.connection = this.socket._socket;
+  }
+  if (this.request.connection) {
+    this.remoteAddress = this.request.connection.remoteAddress;
+    this.remoteFamily = this.request.connection.remoteFamily;
+    this.remotePort = this.request.connection.remotePort;
+  } else {
+    this.remoteAddress = this.request.remoteAddress;
+    this.remoteFamily = this.request.remoteFamily;
+    this.remotePort = this.request.remotePort;
+  }
+  if (this.request.forwardedForAddress) {
+    this.forwardedForAddress = this.request.forwardedForAddress;
+  }
 
   this._cid = 1;
   this._callbackMap = {};

@@ -244,7 +244,7 @@ SCSocket.prototype.sendObject = function (object) {
   }
 };
 
-SCSocket.prototype.emit = function (event, data, callback) {
+SCSocket.prototype.emit = function (event, data, callback, options) {
   var self = this;
 
   if (this._localEvents[event] == null) {
@@ -270,7 +270,12 @@ SCSocket.prototype.emit = function (event, data, callback) {
 
           self._callbackMap[eventObject.cid] = {callback: callback, timeout: timeout};
         }
-        self.sendObject(eventObject);
+        if (options && options.stringifiedData != null) {
+          // Optimized
+          self.send(options.stringifiedData);
+        } else {
+          self.sendObject(eventObject);
+        }
       }
     });
   } else {

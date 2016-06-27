@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "4.2.5",
+  "version": "4.2.6",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "dependencies": {
@@ -16,7 +16,7 @@
     "ws": "1.0.1"
   },
   "optionalDependencies": {
-    "uws": "0.6.2"
+    "uws": "0.6.3"
   },
   "devDependencies": {},
   "scripts": {

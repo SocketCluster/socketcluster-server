@@ -185,6 +185,7 @@ SCSocket.prototype._onSCClose = function (code, data) {
     SCEmitter.prototype.emit.call(this, 'disconnect', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
+      var failureMessage;
       if (data) {
         failureMessage = 'Socket connection failed: ' + data;
       } else {

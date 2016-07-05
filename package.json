@@ -16,7 +16,7 @@
     "ws": "1.0.1"
   },
   "optionalDependencies": {
-    "uws": "0.6.3"
+    "uws": "0.7.0"
   },
   "devDependencies": {},
   "scripts": {

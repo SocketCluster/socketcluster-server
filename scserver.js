@@ -670,7 +670,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
   }
 };
 
-SCServer.prototype.verifyOutboundEvent = function (socket, event, data, cb) {
+SCServer.prototype.verifyOutboundEvent = function (socket, event, data, options, cb) {
   var self = this;
 
   var callbackInvoked = false;
@@ -695,6 +695,9 @@ SCServer.prototype.verifyOutboundEvent = function (socket, event, data, cb) {
             }
             cb(err);
           } else {
+            if (options && request.useCache) {
+              options.useCache = true;
+            }
             cb();
           }
         }

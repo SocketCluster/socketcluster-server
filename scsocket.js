@@ -249,7 +249,7 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
   var self = this;
 
   if (this._localEvents[event] == null) {
-    this.server.verifyOutboundEvent(this, event, data, function (err) {
+    this.server.verifyOutboundEvent(this, event, data, options, function (err) {
       var eventObject = {
         event: event
       };
@@ -271,7 +271,7 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
 
           self._callbackMap[eventObject.cid] = {callback: callback, timeout: timeout};
         }
-        if (options && options.stringifiedData != null) {
+        if (options && options.useCache && options.stringifiedData != null) {
           // Optimized
           self.send(options.stringifiedData);
         } else {

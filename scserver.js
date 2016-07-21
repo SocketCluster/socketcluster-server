@@ -4,7 +4,7 @@ var EventEmitter = require('events').EventEmitter;
 var base64id = require('base64id');
 var async = require('async');
 var url = require('url');
-var domain = require('domain');
+var domain = require('sc-domain');
 var crypto = require('crypto');
 var uuid = require('node-uuid');
 var scSimpleBroker = require('sc-simple-broker');
@@ -276,7 +276,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
 
   var id = this.generateId();
 
-  var socketDomain = domain.createDomain();
+  var socketDomain = domain.create();
   var scSocket = new SCSocket(id, this, wsSocket);
   socketDomain.add(scSocket);
 

@@ -98,19 +98,20 @@ var SCSocket = function (id, server, socket) {
 
         if (self._localEvents[eventName] == null) {
           var response = new Response(self, obj.cid);
-          self.server.verifyInboundEvent(self, eventName, obj.data, function (err) {
+          self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newData) {
             if (err) {
               response.error(err);
             } else {
+              var eventData = newData;
               if (eventName == '#disconnect') {
-                var eventData = obj.data || {};
-                self._onSCClose(eventData.code, eventData.data);
+                var disconnectData = eventData || {};
+                self._onSCClose(disconnectData.code, disconnectData.data);
               } else {
                 if (self._autoAckEvents[eventName]) {
                   response.end();
-                  SCEmitter.prototype.emit.call(self, eventName, obj.data);
+                  SCEmitter.prototype.emit.call(self, eventName, eventData);
                 } else {
-                  SCEmitter.prototype.emit.call(self, eventName, obj.data, response.callback.bind(response));
+                  SCEmitter.prototype.emit.call(self, eventName, eventData, response.callback.bind(response));
                 }
               }
             }
@@ -249,12 +250,12 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
   var self = this;
 
   if (this._localEvents[event] == null) {
-    this.server.verifyOutboundEvent(this, event, data, options, function (err) {
+    this.server.verifyOutboundEvent(this, event, data, options, function (err, newData) {
       var eventObject = {
         event: event
       };
-      if (data !== undefined) {
-        eventObject.data = data;
+      if (newData !== undefined) {
+        eventObject.data = newData;
       }
       eventObject.cid = self._nextCallId();
 

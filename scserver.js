@@ -535,11 +535,11 @@ SCServer.prototype._isPrivateTransmittedEvent = function (event) {
   return !!event && event.indexOf('#') == 0;
 };
 
-SCServer.prototype.verifyInboundEvent = function (socket, event, data, cb) {
+SCServer.prototype.verifyInboundEvent = function (socket, eventName, eventData, cb) {
   var request = {
     socket: socket,
-    event: event,
-    data: data
+    event: eventName,
+    data: eventData
   };
 
   var token = socket.getAuthToken();
@@ -578,15 +578,15 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
 
   if (this._isPrivateTransmittedEvent(event)) {
     if (event == this._subscribeEvent) {
-      var data = options.data || {};
-      request.channel = data.channel;
-      request.waitForAuth = data.waitForAuth;
-      request.data = data.data;
+      var eventData = options.data || {};
+      request.channel = eventData.channel;
+      request.waitForAuth = eventData.waitForAuth;
+      request.data = eventData.data;
 
       if (request.waitForAuth && request.authTokenExpiredError) {
         // If the channel has the waitForAuth flag set, then we will handle the expiry quietly
         // and we won't pass this request through the subscribe middleware.
-        cb(request.authTokenExpiredError);
+        cb(request.authTokenExpiredError, eventData);
       } else {
         async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
           function (err) {
@@ -601,16 +601,19 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                   self.emit('warning', err);
                 }
               }
-              cb(err);
+              if (request.data !== undefined) {
+                eventData.data = request.data;
+              }
+              cb(err, eventData);
             }
           }
         );
       }
     } else if (event == this._publishEvent) {
       if (this.allowClientPublish) {
-        var data = options.data || {};
-        request.channel = data.channel;
-        request.data = data.data;
+        var eventData = options.data || {};
+        request.channel = eventData.channel;
+        request.data = eventData.data;
 
         async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
           function (err) {
@@ -618,20 +621,23 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
               self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware was already invoked'));
             } else {
               callbackInvoked = true;
+              if (request.data !== undefined) {
+                eventData.data = request.data;
+              }
               if (err) {
                 if (err === true) {
                   err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware', self.MIDDLEWARE_PUBLISH_IN);
                 } else if (self.middlewareEmitWarnings) {
                   self.emit('warning', err);
                 }
-                cb(err);
+                cb(err, eventData);
               } else {
                 self.exchange.publish(request.channel, request.data, function (err) {
                   if (err) {
                     err = new BrokerError(err);
                     self.emit('warning', err);
                   }
-                  cb(err);
+                  cb(err, eventData);
                 });
               }
             }
@@ -640,11 +646,11 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
       } else {
         var noPublishError = new InvalidActionError('Client publish feature is disabled');
         self.emit('warning', noPublishError);
-        cb(noPublishError);
+        cb(noPublishError, options.data);
       }
     } else {
       // Do not allow blocking other reserved events or it could interfere with SC behaviour
-      cb();
+      cb(null, options.data);
     }
   } else {
     request.event = event;
@@ -663,23 +669,23 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
               self.emit('warning', err);
             }
           }
-          cb(err);
+          cb(err, request.data);
         }
       }
     );
   }
 };
 
-SCServer.prototype.verifyOutboundEvent = function (socket, event, data, options, cb) {
+SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, cb) {
   var self = this;
 
   var callbackInvoked = false;
 
-  if (event == this._publishEvent) {
+  if (eventName == this._publishEvent) {
     var request = {
       socket: socket,
-      channel: data.channel,
-      data: data.data
+      channel: eventData.channel,
+      data: eventData.data
     };
     async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
       function (err) {
@@ -687,24 +693,27 @@ SCServer.prototype.verifyOutboundEvent = function (socket, event, data, options,
           self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware was already invoked'));
         } else {
           callbackInvoked = true;
+          if (request.data !== undefined) {
+            eventData.data = request.data;
+          }
           if (err) {
             if (err === true) {
               err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware', self.MIDDLEWARE_PUBLISH_OUT);
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);
             }
-            cb(err);
+            cb(err, eventData);
           } else {
             if (options && request.useCache) {
               options.useCache = true;
             }
-            cb();
+            cb(null, eventData);
           }
         }
       }
     );
   } else {
-    cb();
+    cb(null, eventData);
   }
 };
 

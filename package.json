@@ -14,7 +14,7 @@
     "sc-errors": "1.0.x",
     "sc-formatter": "1.0.x",
     "sc-simple-broker": "1.2.x",
-    "uws": "0.7.9",
+    "uws": "0.9.0",
     "ws": "1.1.1"
   },
   "devDependencies": {},

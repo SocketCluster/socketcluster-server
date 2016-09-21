@@ -6,7 +6,7 @@
   "dependencies": {
     "async": "1.5.0",
     "base64id": "0.1.0",
-    "lodash.defaults": "^4.2.0",
+    "lodash.defaults": "4.2.0",
     "node-uuid": "1.4.7",
     "sc-auth": "3.0.x",
     "sc-domain": "1.x.x",

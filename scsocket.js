@@ -1,6 +1,5 @@
 var _ = require('lodash');
 var SCEmitter = require('sc-emitter').SCEmitter;
-var formatter = require('sc-formatter');
 var Response = require('./response').Response;
 
 var scErrors = require('sc-errors');
@@ -227,11 +226,11 @@ SCSocket.prototype.send = function (data, options) {
 };
 
 SCSocket.prototype.decode = function (message) {
-  return formatter.decode(message);
+  return this.server.codec.decode(message);
 };
 
 SCSocket.prototype.encode = function (object) {
-  return formatter.encode(object);
+  return this.server.codec.encode(object);
 };
 
 SCSocket.prototype.sendObject = function (object) {

@@ -1,5 +1,6 @@
 var SCSocket = require('./scsocket');
 var AuthEngine = require('sc-auth').AuthEngine;
+var formatter = require('sc-formatter');
 var EventEmitter = require('events').EventEmitter;
 var base64id = require('base64id');
 var async = require('async');
@@ -119,6 +120,13 @@ var SCServer = function (options) {
     this.auth = new AuthEngine();
   }
 
+  if (opts.codecEngine) {
+    this.codec = opts.codecEngine;
+  } else {
+    // Default codec engine
+    this.codec = formatter;
+  }
+
   this.clients = {};
   this.clientsCount = 0;
 
@@ -141,6 +149,10 @@ SCServer.prototype = Object.create(EventEmitter.prototype);
 
 SCServer.prototype.setAuthEngine = function (authEngine) {
   this.auth = authEngine;
+};
+
+SCServer.prototype.setCodecEngine = function (codecEngine) {
+  this.codec = codecEngine;
 };
 
 SCServer.prototype._handleServerError = function (error) {

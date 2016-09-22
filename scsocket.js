@@ -79,7 +79,7 @@ var SCSocket = function (id, server, socket) {
 
     SCEmitter.prototype.emit.call(self, 'message', message);
 
-    // If not pong, we don't need to parse the message.
+    // If pong, we don't need to decode the message.
     // We just check the token expiry and deauthenticate the socket if it has expired.
     if (message == '#2') {
       var token = self.getAuthToken();
@@ -87,7 +87,7 @@ var SCSocket = function (id, server, socket) {
         self.deauthenticate();
       }
     } else {
-      var obj = self.parse(message);
+      var obj = self.decode(message);
 
       if (obj == null) {
         var err = new InvalidMessageError('Received empty message');
@@ -226,18 +226,18 @@ SCSocket.prototype.send = function (data, options) {
   });
 };
 
-SCSocket.prototype.parse = function (message) {
-  return formatter.parse(message);
+SCSocket.prototype.decode = function (message) {
+  return formatter.decode(message);
 };
 
-SCSocket.prototype.stringify = function (object) {
-  return formatter.stringify(object);
+SCSocket.prototype.encode = function (object) {
+  return formatter.encode(object);
 };
 
 SCSocket.prototype.sendObject = function (object) {
   var str;
   try {
-    str = this.stringify(object);
+    str = this.encode(object);
   } catch (err) {
     SCEmitter.prototype.emit.call(this, 'error', err);
   }

@@ -544,7 +544,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
 };
 
 SCServer.prototype._isPrivateTransmittedEvent = function (event) {
-  return !!event && event.indexOf('#') == 0;
+  return typeof event == 'string' && event.indexOf('#') == 0;
 };
 
 SCServer.prototype.verifyInboundEvent = function (socket, eventName, eventData, cb) {

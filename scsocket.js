@@ -1,4 +1,4 @@
-var _ = require('lodash');
+var defaults = require('lodash.defaults');
 var SCEmitter = require('sc-emitter').SCEmitter;
 var Response = require('./response').Response;
 
@@ -295,7 +295,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
     var err = new InvalidArgumentsError('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
     SCEmitter.prototype.emit.call(this, 'error', err);
   }
-  options = _.defaults({}, options, this.server.defaultSignatureOptions);
+  options = defaults({}, options, this.server.defaultSignatureOptions);
   this.server.auth.signToken(data, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
       self._onSCClose(4002, err);

@@ -255,12 +255,15 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
       if (newData !== undefined) {
         eventObject.data = newData;
       }
-      eventObject.cid = self._nextCallId();
 
       if (err) {
-        callback && callback(err, eventObject);
+        if (callback) {
+          eventObject.cid = self._nextCallId();
+          callback(err, eventObject);
+        }
       } else {
         if (callback) {
+          eventObject.cid = self._nextCallId();
           var timeout = setTimeout(function () {
             var error = new TimeoutError("Event response for '" + event + "' timed out");
 

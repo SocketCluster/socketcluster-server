@@ -7,7 +7,7 @@ var async = require('async');
 var url = require('url');
 var domain = require('sc-domain');
 var crypto = require('crypto');
-var uuid = require('node-uuid');
+var uuid = require('uuid');
 var scSimpleBroker = require('sc-simple-broker');
 
 var scErrors = require('sc-errors');

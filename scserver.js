@@ -47,6 +47,7 @@ var SCServer = function (options) {
   this.MIDDLEWARE_HANDSHAKE = 'handshake';
   this.MIDDLEWARE_EMIT = 'emit';
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
+  this.MIDDLEWARE_UNSUBSCRIBE = 'unsubscribe';
   this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
   this.MIDDLEWARE_PUBLISH_OUT = 'publishOut';
 
@@ -54,12 +55,14 @@ var SCServer = function (options) {
   this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
 
   this._subscribeEvent = '#subscribe';
+  this._unsubscribeEvent = '#unsubscribe';
   this._publishEvent = '#publish';
 
   this._middleware = {};
   this._middleware[this.MIDDLEWARE_HANDSHAKE] = [];
   this._middleware[this.MIDDLEWARE_EMIT] = [];
   this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
+  this._middleware[this.MIDDLEWARE_UNSUBSCRIBE] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_IN] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_OUT] = [];
 
@@ -660,6 +663,20 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
         self.emit('warning', noPublishError);
         cb(noPublishError, options.data);
       }
+    } else if (event == this._unsubscribeEvent) {
+      async.applyEachSeries(this._middleware[this.MIDDLEWARE_UNSUBSCRIBE], request,
+        function (err) {
+          if (callbackInvoked) {
+            self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_UNSUBSCRIBE + ' middleware was already invoked'));
+          } else {
+            callbackInvoked = true;
+            if (err) {
+              self.emit('warning', new InvalidActionError(self.MIDDLEWARE_UNSUBSCRIBE + ' action can not be blocked and was not blocked'));
+            }
+            cb(null, options.data);
+          }
+        }
+      );
     } else {
       // Do not allow blocking other reserved events or it could interfere with SC behaviour
       cb(null, options.data);

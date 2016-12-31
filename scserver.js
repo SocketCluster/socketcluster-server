@@ -664,6 +664,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
         cb(noPublishError, options.data);
       }
     } else if (event == this._unsubscribeEvent) {
+      request.channel = options.data;
       async.applyEachSeries(this._middleware[this.MIDDLEWARE_UNSUBSCRIBE], request,
         function (err) {
           if (callbackInvoked) {

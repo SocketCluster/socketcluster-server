@@ -78,7 +78,16 @@ var SCSocket = function (id, server, socket) {
 
     SCEmitter.prototype.emit.call(self, 'message', message);
 
-    var obj = self.decode(message);
+    var obj;
+    try {
+      obj = self.decode(message);
+    } catch (err) {
+      if (err.name == 'Error') {
+        err.name = 'InvalidMessageError';
+      }
+      SCEmitter.prototype.emit.call(self, 'error', err);
+      return;
+    }
 
     // If pong
     if (obj == '#2') {
@@ -88,8 +97,8 @@ var SCSocket = function (id, server, socket) {
       }
     } else {
       if (obj == null) {
-        var err = new InvalidMessageError('Received empty message');
-        SCEmitter.prototype.emit.call(self, 'error', err);
+        var emptyMessageError = new InvalidMessageError('Received an empty message');
+        SCEmitter.prototype.emit.call(self, 'error', emptyMessageError);
 
       } else if (obj.event) {
         var eventName = obj.event;

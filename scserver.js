@@ -104,14 +104,14 @@ var SCServer = function (options) {
   }
 
   this.defaultVerificationOptions = {};
-  if (opts.authAlgorithm != null) {
-    this.defaultVerificationOptions.algorithms = [opts.authAlgorithm];
-  }
-
   this.defaultSignatureOptions = {
-    algorithm: opts.authAlgorithm,
     expiresIn: opts.authDefaultExpiry
   };
+
+  if (opts.authAlgorithm != null) {
+    this.defaultVerificationOptions.algorithms = [opts.authAlgorithm];
+    this.defaultSignatureOptions.algorithm = opts.authAlgorithm;
+  }
 
   if (opts.authEngine) {
     this.auth = opts.authEngine;

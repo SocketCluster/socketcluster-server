@@ -115,7 +115,11 @@ var SCSocket = function (id, server, socket) {
                 self._onSCClose(disconnectData.code, disconnectData.data);
               } else {
                 if (self._autoAckEvents[eventName]) {
-                  response.end(eventData.data);
+                  if (eventData && eventData.data !== undefined) {
+                    response.end(eventData.data);
+                  } else {
+                    response.end();
+                  }
                   SCEmitter.prototype.emit.call(self, eventName, eventData);
                 } else {
                   SCEmitter.prototype.emit.call(self, eventName, eventData, response.callback.bind(response));

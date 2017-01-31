@@ -212,6 +212,11 @@ SCSocket.prototype._onSCClose = function (code, data) {
 SCSocket.prototype.disconnect = function (code, data) {
   code = code || 1000;
 
+  if (typeof code != 'number') {
+    var err = new InvalidArgumentsError('If specified, the code argument must be a number');
+    SCEmitter.prototype.emit.call(this, 'error', err);
+  }
+
   if (this.state != this.CLOSED) {
     var packet = {
       code: code,

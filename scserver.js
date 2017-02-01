@@ -49,6 +49,7 @@ var SCServer = function (options) {
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
   this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
   this.MIDDLEWARE_PUBLISH_OUT = 'publishOut';
+  this.MIDDLEWARE_AUTHENTICATE = 'authenticate';
 
   // Deprecated
   this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
@@ -315,18 +316,31 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
         scSocket.deauthenticate();
       }
 
-      var authError = self._processTokenError(scSocket, err, signedAuthToken);
+      var isAuthenticated = !!scSocket.authToken; // TODO: Test
 
-      var authStatus = {
-        isAuthenticated: !!authToken,
-        authError: authError
-      };
-
-      if (authStatus.isAuthenticated) {
-        scSocket.emit('authenticate', authToken);
+      if (isAuthenticated) {
+        // TODO
+        self._passThroughAuthenticateMiddleware({
+          socket: scSocket,
+          authToken: scSocket.authToken
+        }, function (err) {
+          if (err) {
+            // TODO
+            if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
+              scSocket.deauthenticate();
+            }
+          }
+          scSocket.emit('authenticate', scSocket.authToken);
+          respond(authError, authStatus);
+        });
+      } else {
+        var authError = self._processTokenError(scSocket, err, signedAuthToken);
+        var authStatus = {
+          isAuthenticated: isAuthenticated,
+          authError: authError
+        };
+        respond(authError, authStatus);
       }
-
-      respond(authError, authStatus);
     });
   });
 
@@ -404,6 +418,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     var signedAuthToken = data.authToken;
     clearTimeout(scSocket._handshakeTimeoutRef);
     self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
+      // TODO
       if (authToken) {
         scSocket.authToken = authToken;
         scSocket.authState = scSocket.AUTHENTICATED;
@@ -433,7 +448,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
 
       var status = {
         id: scSocket.id,
-        isAuthenticated: !!authToken,
+        isAuthenticated: !!scSocket.authToken,
         pingTimeout: self.pingTimeout
       };
 
@@ -442,7 +457,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       }
 
       if (status.isAuthenticated) {
-        scSocket.emit('authenticate', authToken);
+        scSocket.emit('authenticate', scSocket.authToken);
       }
       // Treat authentication failure as a 'soft' error
       respond(null, status);
@@ -686,6 +701,34 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
       }
     );
   }
+};
+
+// TODO
+SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
+  var self = this;
+  var callbackInvoked = false;
+
+  var request = {
+    socket: options.socket
+  };
+
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
+    function (err) {
+      if (callbackInvoked) {
+        self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
+      } else {
+        callbackInvoked = true;
+        if (err) {
+          if (err === true) {
+            err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware', self.MIDDLEWARE_AUTHENTICATE);
+          } else if (self.middlewareEmitWarnings) {
+            self.emit('warning', err);
+          }
+        }
+        cb(err);
+      }
+    }
+  );
 };
 
 SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, cb) {

@@ -13,6 +13,8 @@ var scSimpleBroker = require('sc-simple-broker');
 var scErrors = require('sc-errors');
 var AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
 var AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
+var AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
+var AuthTokenError = scErrors.AuthTokenError;
 var SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
 var InvalidOptionsError = scErrors.InvalidOptionsError;
 var InvalidActionError = scErrors.InvalidActionError;
@@ -49,6 +51,7 @@ var SCServer = function (options) {
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
   this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
   this.MIDDLEWARE_PUBLISH_OUT = 'publishOut';
+  this.MIDDLEWARE_AUTHENTICATE = 'authenticate';
 
   // Deprecated
   this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
@@ -265,22 +268,62 @@ SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, chann
   });
 };
 
-SCServer.prototype._processTokenError = function (socket, err, signedAuthToken) {
-  // In case of an expired, malformed or invalid token, emit an event
-  // and keep going without a token.
+SCServer.prototype._processTokenError = function (socket, err) {
   var authError = null;
+  var isBadToken = true;
 
   if (err) {
     if (err.name == 'TokenExpiredError') {
       authError = new AuthTokenExpiredError(err.message, err.expiredAt);
     } else if (err.name == 'JsonWebTokenError') {
       authError = new AuthTokenInvalidError(err.message);
+    } else if (err.name == 'NotBeforeError') {
+      authError = new AuthTokenNotBeforeError(err.message);
+      // In this case, the token is good; it's just not active yet.
+      isBadToken = false;
+    } else {
+      authError = new AuthTokenError(err.message);
     }
-
-    socket.emit('error', err);
   }
 
-  return authError;
+  return {
+    authError: authError,
+    isBadToken: isBadToken
+  };
+};
+
+SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
+  var self = this;
+
+  this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
+    if (authToken) {
+      scSocket.authToken = authToken;
+      scSocket.authState = scSocket.AUTHENTICATED;
+    } else {
+      scSocket.authToken = null;
+      scSocket.authState = scSocket.UNAUTHENTICATED;
+    }
+
+    // If the socket is authenticated, pass it through the MIDDLEWARE_AUTHENTICATE middleware.
+    // If the token is bad, we will tell the client to remove it.
+    // If there is an error but the token is good, then we will send back a 'quiet' error instead
+    // (as part of the status object only).
+    if (scSocket.authToken) {
+      self._passThroughAuthenticateMiddleware({
+        socket: scSocket,
+        authToken: scSocket.authToken
+      }, function (middlewareError, isBadToken) {
+        if (middlewareError) {
+          scSocket.authToken = null;
+          scSocket.authState = scSocket.UNAUTHENTICATED;
+        }
+        callback(middlewareError, isBadToken || false);
+      });
+    } else {
+      var errorData = self._processTokenError(scSocket, err);
+      callback(errorData.authError, errorData.isBadToken);
+    }
+  });
 };
 
 SCServer.prototype._handleSocketConnection = function (wsSocket) {
@@ -302,31 +345,24 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
   });
 
   scSocket.on('#authenticate', function (signedAuthToken, respond) {
-    self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
-      if (authToken) {
-        scSocket.authToken = authToken;
-        scSocket.authState = scSocket.AUTHENTICATED;
+    self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
+      if (err) {
+        if (isBadToken) {
+          scSocket.deauthenticate();
+        }
+        scSocket.emit('error', err);
       } else {
-        scSocket.authToken = null;
-        scSocket.authState = scSocket.UNAUTHENTICATED;
+        scSocket.emit('authenticate', scSocket.authToken);
       }
-
-      if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
-        scSocket.deauthenticate();
-      }
-
-      var authError = self._processTokenError(scSocket, err, signedAuthToken);
-
       var authStatus = {
-        isAuthenticated: !!authToken,
-        authError: authError
+        isAuthenticated: !!scSocket.authToken,
+        authError: err
       };
-
-      if (authStatus.isAuthenticated) {
-        scSocket.emit('authenticate', authToken);
+      if (err && isBadToken) {
+        respond(err, authStatus);
+      } else {
+        respond(null, authStatus);
       }
-
-      respond(authError, authStatus);
     });
   });
 
@@ -403,24 +439,24 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     }
     var signedAuthToken = data.authToken;
     clearTimeout(scSocket._handshakeTimeoutRef);
-    self.auth.verifyToken(signedAuthToken, self.verificationKey, self.defaultVerificationOptions, function (err, authToken) {
-      if (authToken) {
-        scSocket.authToken = authToken;
-        scSocket.authState = scSocket.AUTHENTICATED;
-      } else {
-        scSocket.authToken = null;
-        scSocket.authState = scSocket.UNAUTHENTICATED;
-      }
 
-      if (err && (err.name == 'TokenExpiredError' || err.name == 'JsonWebTokenError')) {
-        scSocket.deauthenticate();
-      }
+    self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
+      var status = {
+        id: scSocket.id,
+        pingTimeout: self.pingTimeout
+      };
 
-      var authError;
-
-      if (signedAuthToken != null) {
-        authError = self._processTokenError(scSocket, err, signedAuthToken);
+      if (err) {
+        if (isBadToken) {
+          scSocket.deauthenticate();
+        }
+        status.authError = err;
+        // Only log an error if the token was provided as part of the handshake.
+        if (signedAuthToken != null) {
+          scSocket.emit('error', err);
+        }
       }
+      status.isAuthenticated = !!scSocket.authToken;
 
       self.clients[id] = scSocket;
       self.clientsCount++;
@@ -431,18 +467,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       self.emit('_connection', scSocket);
       self.emit('connection', scSocket);
 
-      var status = {
-        id: scSocket.id,
-        isAuthenticated: !!authToken,
-        pingTimeout: self.pingTimeout
-      };
-
-      if (authError) {
-        status.authError = authError;
-      }
-
       if (status.isAuthenticated) {
-        scSocket.emit('authenticate', authToken);
+        scSocket.emit('authenticate', scSocket.authToken);
       }
       // Treat authentication failure as a 'soft' error
       respond(null, status);
@@ -686,6 +712,34 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
       }
     );
   }
+};
+
+SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
+  var self = this;
+  var callbackInvoked = false;
+
+  var request = {
+    socket: options.socket,
+    authToken: options.authToken
+  };
+
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
+    function (err) {
+      if (callbackInvoked) {
+        self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
+      } else {
+        callbackInvoked = true;
+        if (err) {
+          if (err === true) {
+            err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware', self.MIDDLEWARE_AUTHENTICATE);
+          } else if (self.middlewareEmitWarnings) {
+            self.emit('warning', err);
+          }
+        }
+        cb(err);
+      }
+    }
+  );
 };
 
 SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, cb) {

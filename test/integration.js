@@ -26,7 +26,7 @@ var connectionHandler = function (socket) {
       socket.setAuthToken(userDetails);
       respond();
     } else {
-      var err = new Error();
+      var err = new Error('Failed to login');
       err.name = 'FailedLoginError';
       respond(err);
     }

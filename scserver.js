@@ -326,9 +326,16 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
           scSocket.authToken = null;
           scSocket.authState = scSocket.UNAUTHENTICATED;
         }
+        // If an error is passed back from the authenticate middleware, it will be treated as a
+        // server warning and not a socket error.
         callback(middlewareError, isBadToken || false);
       });
     } else {
+      // If the error is related to the JWT being badly formatted, then we will
+      // treat the error as a socket error.
+      if (err && signedAuthToken != null) {
+        scSocket.emit('error', err);
+      }
       var errorData = self._processTokenError(scSocket, err);
       callback(errorData.authError, errorData.isBadToken);
     }
@@ -359,13 +366,12 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
         if (isBadToken) {
           scSocket.deauthenticate();
         }
-        scSocket.emit('error', err);
       } else {
         scSocket.emit('authenticate', scSocket.authToken);
       }
       var authStatus = {
         isAuthenticated: !!scSocket.authToken,
-        authError: err
+        authError: scErrors.dehydrateError(err)
       };
       if (err && isBadToken) {
         respond(err, authStatus);
@@ -459,8 +465,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
         if (signedAuthToken != null) {
           // Because the token is optional as part of the handshake, we don't count
           // it as an error if the token wasn't provided.
-          status.authError = err;
-          scSocket.emit('error', err);
+          status.authError = scErrors.dehydrateError(err);
 
           if (isBadToken) {
             scSocket.deauthenticate();
@@ -735,10 +740,14 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
   };
 
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
-    function (err) {
+    function (err, results) {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
       } else {
+        var isBadToken = false;
+        if (results.length) {
+          isBadToken = results[results.length - 1] || false;
+        }
         callbackInvoked = true;
         if (err) {
           if (err === true) {
@@ -747,7 +756,7 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
             self.emit('warning', err);
           }
         }
-        cb(err);
+        cb(err, isBadToken);
       }
     }
   );

@@ -447,13 +447,15 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
       };
 
       if (err) {
-        if (isBadToken) {
-          scSocket.deauthenticate();
-        }
-        status.authError = err;
-        // Only log an error if the token was provided as part of the handshake.
         if (signedAuthToken != null) {
+          // Because the token is optional as part of the handshake, we don't count
+          // it as an error if the token wasn't provided.
+          status.authError = err;
           scSocket.emit('error', err);
+
+          if (isBadToken) {
+            scSocket.deauthenticate();
+          }
         }
       }
       status.isAuthenticated = !!scSocket.authToken;

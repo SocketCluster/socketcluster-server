@@ -8,7 +8,7 @@ var url = require('url');
 var domain = require('sc-domain');
 var crypto = require('crypto');
 var uuid = require('uuid');
-var scSimpleBroker = require('sc-simple-broker');
+var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
 
 var scErrors = require('sc-errors');
 var AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
@@ -26,7 +26,7 @@ var SCServer = function (options) {
   var self = this;
 
   var opts = {
-    brokerEngine: scSimpleBroker,
+    brokerEngine: new SCSimpleBroker(),
     wsEngine: 'uws',
     allowClientPublish: true,
     ackTimeout: 10000,

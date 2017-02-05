@@ -41,10 +41,9 @@ module.exports.listen = function (port, options, fn) {
     res.end('Not Implemented');
   });
 
-  server.listen(port, fn);
-
   var engine = module.exports.attach(server, options);
   engine.httpServer = server;
+  server.listen(port, fn);
 
   return engine;
 };

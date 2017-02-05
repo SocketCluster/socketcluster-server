@@ -7,7 +7,7 @@
     "async": "2.0.0",
     "base64id": "0.1.0",
     "lodash.clonedeep": "4.5.0",
-    "sc-auth": "~3.1.0",
+    "sc-auth": "~3.2.0",
     "sc-domain": "~1.0.1",
     "sc-emitter": "~1.1.0",
     "sc-errors": "~1.1.0",

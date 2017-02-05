@@ -37,6 +37,8 @@ var SCServer = function (options) {
     appName: uuid.v4(),
     path: '/socketcluster/',
     authDefaultExpiry: 86400,
+    authSignAsync: false,
+    authVerifyAsync: true,
     middlewareEmitWarnings: true
   };
 
@@ -65,6 +67,7 @@ var SCServer = function (options) {
   this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_IN] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_OUT] = [];
+  this._middleware[this.MIDDLEWARE_AUTHENTICATE] = [];
 
   this.origins = opts.origins;
   this._allowAllOrigins = this.origins.indexOf('*:*') != -1;
@@ -106,9 +109,15 @@ var SCServer = function (options) {
     this.verificationKey = opts.authKey;
   }
 
-  this.defaultVerificationOptions = {};
+  this.authVerifyAsync = opts.authVerifyAsync;
+  this.authSignAsync = opts.authSignAsync;
+
+  this.defaultVerificationOptions = {
+    async: this.authVerifyAsync
+  };
   this.defaultSignatureOptions = {
-    expiresIn: opts.authDefaultExpiry
+    expiresIn: opts.authDefaultExpiry,
+    async: this.authSignAsync
   };
 
   if (opts.authAlgorithm != null) {

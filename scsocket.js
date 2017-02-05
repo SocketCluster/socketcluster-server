@@ -329,6 +329,9 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
   if (defaultSignatureOptions.algorithm != null) {
     options.algorithm = defaultSignatureOptions.algorithm;
   }
+  if (defaultSignatureOptions.async != null) {
+    options.async = defaultSignatureOptions.async;
+  }
 
   this.server.auth.signToken(data, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {

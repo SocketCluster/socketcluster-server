@@ -70,9 +70,7 @@ describe('integration tests', function () {
     it('should be authenticated on connect if pervious JWT token is present', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
-        client.emit('login', {username: 'bob'}, function (err) {
-          assert.equal(err == null, true);
-        });
+        client.emit('login', {username: 'bob'});
         client.once('authenticate', function (state) {
           assert.equal(client.authState, 'authenticated');
 
@@ -94,7 +92,7 @@ describe('integration tests', function () {
     it('should be send back error if JWT is invalid during handshake', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
-        // Change the authToken to inalidate it.
+        // Change the setAuthKey to invalidate the current token.
         client.emit('setAuthKey', 'differentAuthKey', function (err) {
           assert.equal(err == null, true);
 

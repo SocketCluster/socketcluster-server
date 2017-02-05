@@ -10,7 +10,7 @@
     "sc-auth": "~3.1.0",
     "sc-domain": "~1.0.1",
     "sc-emitter": "~1.1.0",
-    "sc-errors": "~1.0.6",
+    "sc-errors": "~1.1.0",
     "sc-formatter": "~3.0.0",
     "sc-simple-broker": "~1.2.0",
     "uuid": "3.0.1",

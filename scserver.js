@@ -85,6 +85,12 @@ var SCServer = function (options) {
   this.appName = opts.appName || '';
   this.middlewareEmitWarnings = opts.middlewareEmitWarnings;
   this._path = opts.path;
+  this.isReady = false;
+
+  this.brokerEngine.once('ready', function () {
+    self.isReady = true;
+    EventEmitter.prototype.emit.call(self, 'ready');
+  });
 
   var wsEngine = require(opts.wsEngine);
   if (!wsEngine || !wsEngine.Server) {
@@ -493,6 +499,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
 };
 
 SCServer.prototype.close = function () {
+  this.isReady = false;
   this.wsServer.close();
 };
 
@@ -502,22 +509,6 @@ SCServer.prototype.getPath = function () {
 
 SCServer.prototype.generateId = function () {
   return base64id.generateId();
-};
-
-SCServer.prototype.on = function (event, listener) {
-  if (event == 'ready') {
-    this.brokerEngine.once(event, listener);
-  } else {
-    EventEmitter.prototype.on.apply(this, arguments);
-  }
-};
-
-SCServer.prototype.removeListener = function (event, listener) {
-  if (event == 'ready') {
-    this.brokerEngine.removeListener(event, listener);
-  } else {
-    EventEmitter.prototype.removeListener.apply(this, arguments);
-  }
 };
 
 SCServer.prototype.addMiddleware = function (type, middleware) {

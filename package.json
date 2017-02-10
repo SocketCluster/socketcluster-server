@@ -3,6 +3,10 @@
   "version": "5.7.0",
   "description": "Server module for SocketCluster",
   "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/SocketCluster/socketcluster-server.git"
+  },
   "dependencies": {
     "async": "2.0.0",
     "base64id": "0.1.0",

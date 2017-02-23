@@ -283,7 +283,7 @@ SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, chann
   });
 };
 
-SCServer.prototype._processTokenError = function (socket, err) {
+SCServer.prototype._processTokenError = function (err) {
   var authError = null;
   var isBadToken = true;
 
@@ -307,10 +307,20 @@ SCServer.prototype._processTokenError = function (socket, err) {
   };
 };
 
+SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
+  scSocket.emit('badAuthToken', {
+    authError: error,
+    signedAuthToken: signedAuthToken
+  });
+  this.emit('badSocketAuthToken', {
+    socket: scSocket,
+    authError: error,
+    signedAuthToken: signedAuthToken
+  });
+};
+
 SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
   var self = this;
-
-  scSocket.unverifiedSignedAuthToken = signedAuthToken;
 
   this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
     if (authToken) {
@@ -336,18 +346,25 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
         if (middlewareError) {
           scSocket.authToken = null;
           scSocket.authState = scSocket.UNAUTHENTICATED;
+          if (isBadToken) {
+            self._emitBadAuthTokenError(scSocket, middlewareError, signedAuthToken);
+          }
         }
         // If an error is passed back from the authenticate middleware, it will be treated as a
         // server warning and not a socket error.
         callback(middlewareError, isBadToken || false);
       });
     } else {
+      var errorData = self._processTokenError(err);
+
       // If the error is related to the JWT being badly formatted, then we will
       // treat the error as a socket error.
       if (err && signedAuthToken != null) {
         scSocket.emit('error', err);
+        if (errorData.isBadToken) {
+          self._emitBadAuthTokenError(scSocket, err, signedAuthToken);
+        }
       }
-      var errorData = self._processTokenError(scSocket, err);
       callback(errorData.authError, errorData.isBadToken);
     }
   });

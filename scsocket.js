@@ -24,6 +24,7 @@ var SCSocket = function (id, server, socket) {
     'error': 1,
     'authenticate': 1,
     'deauthenticate': 1,
+    'badAuthToken': 1,
     'raw': 1
   };
 

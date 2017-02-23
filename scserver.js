@@ -310,12 +310,15 @@ SCServer.prototype._processTokenError = function (socket, err) {
 SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
   var self = this;
 
+  scSocket.unverifiedSignedAuthToken = signedAuthToken;
+
   this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
     if (authToken) {
       scSocket.signedAuthToken = signedAuthToken;
       scSocket.authToken = authToken;
       scSocket.authState = scSocket.AUTHENTICATED;
     } else {
+      scSocket.signedAuthToken = null;
       scSocket.authToken = null;
       scSocket.authState = scSocket.UNAUTHENTICATED;
     }
@@ -327,6 +330,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
     if (scSocket.authToken) {
       self._passThroughAuthenticateMiddleware({
         socket: scSocket,
+        signedAuthToken: scSocket.signedAuthToken,
         authToken: scSocket.authToken
       }, function (middlewareError, isBadToken) {
         if (middlewareError) {
@@ -459,7 +463,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
     if (!data) {
       data = {};
     }
-    var signedAuthToken = data.authToken;
+    var signedAuthToken = data.authToken || null;
     clearTimeout(scSocket._handshakeTimeoutRef);
 
     self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {

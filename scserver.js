@@ -312,6 +312,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
 
   this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
     if (authToken) {
+      scSocket.signedAuthToken = signedAuthToken;
       scSocket.authToken = authToken;
       scSocket.authState = scSocket.AUTHENTICATED;
     } else {

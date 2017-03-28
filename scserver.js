@@ -522,7 +522,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket) {
 
 SCServer.prototype.close = function () {
   this.isReady = false;
-  this.wsServer.close();
+  this.wsServer.close.apply(this.wsServer, arguments);
 };
 
 SCServer.prototype.getPath = function () {

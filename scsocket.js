@@ -39,8 +39,7 @@ var SCSocket = function (id, server, socket) {
 
   this.request = this.socket.upgradeReq || {};
 
-  // If uws module is used.
-  if (!this.request.connection) {
+  if (this.server.options.wsEngine == 'uws') {
     this.request.connection = this.socket._socket;
   }
   if (this.request.connection) {

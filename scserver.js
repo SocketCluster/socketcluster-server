@@ -48,6 +48,8 @@ var SCServer = function (options) {
     }
   }
 
+  this.options = opts;
+
   this.MIDDLEWARE_HANDSHAKE = 'handshake';
   this.MIDDLEWARE_EMIT = 'emit';
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';

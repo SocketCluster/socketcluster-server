@@ -372,8 +372,13 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
   });
 };
 
-SCServer.prototype._handleSocketConnection = function (wsSocket) {
+SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   var self = this;
+
+  if (this.options.wsEngine == 'ws') {
+    // Normalize ws module to match uws module.
+    wsSocket.upgradeReq = upgradeReq;
+  }
 
   var id = this.generateId();
 

@@ -307,7 +307,7 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
 SCSocket.prototype.setAuthToken = function (data, options, callback) {
   var self = this;
 
-  this.authToken = data;
+  var authToken = cloneDeep(data);
   this.authState = this.AUTHENTICATED;
 
   if (options == null) {
@@ -321,9 +321,11 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
     }
   }
 
+  options.mutatePayload = true;
+
   var defaultSignatureOptions = this.server.defaultSignatureOptions;
 
-  if (data && data.exp == null) {
+  if (authToken && authToken.exp == null) {
     options.expiresIn = defaultSignatureOptions.expiresIn;
   }
   if (defaultSignatureOptions.algorithm != null) {
@@ -333,7 +335,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
     options.async = defaultSignatureOptions.async;
   }
 
-  this.server.auth.signToken(data, this.server.signatureKey, options, function (err, signedToken) {
+  this.server.auth.signToken(authToken, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
       self._onSCClose(4002, err);
       self.socket.close(4002);
@@ -345,6 +347,8 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
       self.emit('#setAuthToken', tokenData, callback);
     }
   });
+
+  this.authToken = authToken;
 };
 
 SCSocket.prototype.getAuthToken = function () {

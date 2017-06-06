@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "5.13.0",
+  "version": "5.13.1",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {
@@ -14,7 +14,7 @@
     "sc-auth": "~4.0.0",
     "sc-domain": "~1.0.1",
     "sc-emitter": "~1.1.0",
-    "sc-errors": "~1.2.0",
+    "sc-errors": "~1.2.1",
     "sc-formatter": "~3.0.0",
     "sc-simple-broker": "~2.0.0",
     "uuid": "3.0.1",

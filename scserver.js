@@ -295,7 +295,7 @@ SCServer.prototype._processTokenError = function (err) {
     } else if (err.name == 'JsonWebTokenError') {
       authError = new AuthTokenInvalidError(err.message);
     } else if (err.name == 'NotBeforeError') {
-      authError = new AuthTokenNotBeforeError(err.message);
+      authError = new AuthTokenNotBeforeError(err.message, err.date);
       // In this case, the token is good; it's just not active yet.
       isBadToken = false;
     } else {
@@ -362,9 +362,9 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
       // If the error is related to the JWT being badly formatted, then we will
       // treat the error as a socket error.
       if (err && signedAuthToken != null) {
-        scSocket.emit('error', err);
+        scSocket.emit('error', errorData.authError);
         if (errorData.isBadToken) {
-          self._emitBadAuthTokenError(scSocket, err, signedAuthToken);
+          self._emitBadAuthTokenError(scSocket, errorData.authError, signedAuthToken);
         }
       }
       callback(errorData.authError, errorData.isBadToken);

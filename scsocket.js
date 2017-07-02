@@ -350,6 +350,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
 
   this.authToken = authToken;
   this.emit('authenticate', this.authToken);
+  this.server.emit('authentication', this, this.authToken);
 };
 
 SCSocket.prototype.getAuthToken = function () {
@@ -362,6 +363,7 @@ SCSocket.prototype.deauthenticate = function (callback) {
   this.authState = this.UNAUTHENTICATED;
   this.emit('#removeAuthToken', null, callback);
   this.emit('deauthenticate', oldToken);
+  this.server.emit('deauthentication', this, oldToken);
 };
 
 SCSocket.prototype.kickOut = function (channel, message, callback) {

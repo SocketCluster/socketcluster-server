@@ -236,6 +236,7 @@ SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channelOp
         socket.channelSubscriptionsCount--;
       } else {
         socket.emit('subscribe', channelName, channelOptions);
+        self.emit('subscription', socket, channelName, channelOptions);
       }
       callback && callback(err);
     });
@@ -281,6 +282,7 @@ SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, chann
 
   this.brokerEngine.unsubscribeSocket(socket, channel, function (err) {
     socket.emit('unsubscribe', channel);
+    self.emit('unsubscription', socket, channel);
     callback && callback(err);
   });
 };
@@ -403,6 +405,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         }
       } else {
         scSocket.emit('authenticate', scSocket.authToken);
+        self.emit('authentication', scSocket, scSocket.authToken);
       }
       var authStatus = {
         isAuthenticated: !!scSocket.authToken,
@@ -421,6 +424,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     scSocket.authToken = null;
     scSocket.authState = scSocket.UNAUTHENTICATED;
     scSocket.emit('deauthenticate', oldToken);
+    self.emit('deauthentication', scSocket, oldToken);
   });
 
   scSocket.on('#subscribe', function (channelOptions, res) {
@@ -520,6 +524,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
       if (status.isAuthenticated) {
         scSocket.emit('authenticate', scSocket.authToken);
+        self.emit('authentication', scSocket, scSocket.authToken);
       }
       // Treat authentication failure as a 'soft' error
       respond(null, status);

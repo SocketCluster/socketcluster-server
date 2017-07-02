@@ -312,15 +312,12 @@ SCServer.prototype._processTokenError = function (err) {
 };
 
 SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
-  scSocket.emit('badAuthToken', {
+  var badAuthStatus = {
     authError: error,
     signedAuthToken: signedAuthToken
-  });
-  this.emit('badSocketAuthToken', {
-    socket: scSocket,
-    authError: error,
-    signedAuthToken: signedAuthToken
-  });
+  };
+  scSocket.emit('badAuthToken', badAuthStatus);
+  this.emit('badSocketAuthToken', scSocket, badAuthStatus);
 };
 
 SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {

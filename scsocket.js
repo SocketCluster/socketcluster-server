@@ -105,24 +105,23 @@ var SCSocket = function (id, server, socket) {
 
         if (self._localEvents[eventName] == null) {
           var response = new Response(self, obj.cid);
-          self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newData) {
+          self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
             if (err) {
-              response.error(err);
+              response.error(err, ackData);
             } else {
-              var eventData = newData;
               if (eventName == '#disconnect') {
-                var disconnectData = eventData || {};
+                var disconnectData = newEventData || {};
                 self._onSCClose(disconnectData.code, disconnectData.data);
               } else {
                 if (self._autoAckEvents[eventName]) {
-                  if (eventData && eventData.data !== undefined) {
-                    response.end(eventData.data);
+                  if (ackData !== undefined) {
+                    response.end(ackData);
                   } else {
                     response.end();
                   }
-                  SCEmitter.prototype.emit.call(self, eventName, eventData);
+                  SCEmitter.prototype.emit.call(self, eventName, newEventData);
                 } else {
-                  SCEmitter.prototype.emit.call(self, eventName, eventData, response.callback.bind(response));
+                  SCEmitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
                 }
               }
             }

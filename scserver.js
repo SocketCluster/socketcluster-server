@@ -706,14 +706,14 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                 } else if (self.middlewareEmitWarnings) {
                   self.emit('warning', err);
                 }
-                cb(err, eventData);
+                cb(err, eventData, request.ackData);
               } else {
                 self.exchange.publish(request.channel, request.data, function (err) {
                   if (err) {
                     err = new BrokerError(err);
                     self.emit('warning', err);
                   }
-                  cb(err, eventData);
+                  cb(err, eventData, request.ackData);
                 });
               }
             }

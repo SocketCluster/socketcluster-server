@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "mocha": "3.0.2",
-    "socketcluster-client": "~5.5.0"
+    "socketcluster-client": "~6.1.1"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 3000 --slow 3000"

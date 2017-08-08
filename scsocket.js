@@ -1,5 +1,5 @@
 var cloneDeep = require('lodash.clonedeep');
-var SCEmitter = require('sc-emitter').SCEmitter;
+var Emitter = require('component-emitter');
 var Response = require('./response').Response;
 
 var scErrors = require('sc-errors');
@@ -12,7 +12,7 @@ var TimeoutError = scErrors.TimeoutError;
 var SCSocket = function (id, server, socket) {
   var self = this;
 
-  SCEmitter.call(this);
+  Emitter.call(this);
 
   this._localEvents = {
     'open': 1,
@@ -62,7 +62,7 @@ var SCSocket = function (id, server, socket) {
   this.channelSubscriptionsCount = 0;
 
   this.socket.on('error', function (err) {
-    SCEmitter.prototype.emit.call(self, 'error', err);
+    Emitter.prototype.emit.call(self, 'error', err);
   });
 
   this.socket.on('close', function (code, data) {
@@ -76,7 +76,7 @@ var SCSocket = function (id, server, socket) {
   this.socket.on('message', function (message, flags) {
     self._resetPongTimeout();
 
-    SCEmitter.prototype.emit.call(self, 'message', message);
+    Emitter.prototype.emit.call(self, 'message', message);
 
     var obj;
     try {
@@ -85,7 +85,7 @@ var SCSocket = function (id, server, socket) {
       if (err.name == 'Error') {
         err.name = 'InvalidMessageError';
       }
-      SCEmitter.prototype.emit.call(self, 'error', err);
+      Emitter.prototype.emit.call(self, 'error', err);
       return;
     }
 
@@ -98,7 +98,7 @@ var SCSocket = function (id, server, socket) {
     } else {
       if (obj == null) {
         var emptyMessageError = new InvalidMessageError('Received an empty message');
-        SCEmitter.prototype.emit.call(self, 'error', emptyMessageError);
+        Emitter.prototype.emit.call(self, 'error', emptyMessageError);
 
       } else if (obj.event) {
         var eventName = obj.event;
@@ -119,9 +119,9 @@ var SCSocket = function (id, server, socket) {
                   } else {
                     response.end();
                   }
-                  SCEmitter.prototype.emit.call(self, eventName, newEventData);
+                  Emitter.prototype.emit.call(self, eventName, newEventData);
                 } else {
-                  SCEmitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
+                  Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
                 }
               }
             }
@@ -138,13 +138,13 @@ var SCSocket = function (id, server, socket) {
         }
       } else {
         // The last remaining case is to treat the message as raw
-        SCEmitter.prototype.emit.call(self, 'raw', message);
+        Emitter.prototype.emit.call(self, 'raw', message);
       }
     }
   });
 };
 
-SCSocket.prototype = Object.create(SCEmitter.prototype);
+SCSocket.prototype = Object.create(Emitter.prototype);
 
 SCSocket.CONNECTING = SCSocket.prototype.CONNECTING = 'connecting';
 SCSocket.OPEN = SCSocket.prototype.OPEN = 'open';
@@ -192,8 +192,8 @@ SCSocket.prototype._onSCClose = function (code, data) {
     this.state = this.CLOSED;
 
     // Private disconnect event for internal use only
-    SCEmitter.prototype.emit.call(this, '_disconnect', code, data);
-    SCEmitter.prototype.emit.call(this, 'disconnect', code, data);
+    Emitter.prototype.emit.call(this, '_disconnect', code, data);
+    Emitter.prototype.emit.call(this, 'disconnect', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
       var failureMessage;
@@ -203,7 +203,7 @@ SCSocket.prototype._onSCClose = function (code, data) {
         failureMessage = 'Socket connection failed for unknown reasons';
       }
       var err = new SocketProtocolError(SCSocket.errorStatuses[code] || failureMessage, code);
-      SCEmitter.prototype.emit.call(this, 'error', err);
+      Emitter.prototype.emit.call(this, 'error', err);
     }
   }
 };
@@ -213,7 +213,7 @@ SCSocket.prototype.disconnect = function (code, data) {
 
   if (typeof code != 'number') {
     var err = new InvalidArgumentsError('If specified, the code argument must be a number');
-    SCEmitter.prototype.emit.call(this, 'error', err);
+    Emitter.prototype.emit.call(this, 'error', err);
   }
 
   if (this.state != this.CLOSED) {
@@ -254,7 +254,7 @@ SCSocket.prototype.sendObject = function (object) {
   try {
     str = this.encode(object);
   } catch (err) {
-    SCEmitter.prototype.emit.call(this, 'error', err);
+    Emitter.prototype.emit.call(this, 'error', err);
   }
   if (str != null) {
     this.send(str);
@@ -299,7 +299,7 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
       }
     });
   } else {
-    SCEmitter.prototype.emit.apply(this, arguments);
+    Emitter.prototype.emit.apply(this, arguments);
   }
 };
 
@@ -316,7 +316,7 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
     if (options.algorithm != null) {
       delete options.algorithm;
       var err = new InvalidArgumentsError('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
-      SCEmitter.prototype.emit.call(this, 'error', err);
+      Emitter.prototype.emit.call(this, 'error', err);
     }
   }
 

@@ -5,7 +5,6 @@ var EventEmitter = require('events').EventEmitter;
 var base64id = require('base64id');
 var async = require('async');
 var url = require('url');
-var domain = require('sc-domain');
 var crypto = require('crypto');
 var uuid = require('uuid');
 var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
@@ -24,6 +23,8 @@ var ServerProtocolError = scErrors.ServerProtocolError;
 
 var SCServer = function (options) {
   var self = this;
+
+  EventEmitter.call(this);
 
   var opts = {
     brokerEngine: new SCSimpleBroker(),
@@ -381,18 +382,15 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
   var id = this.generateId();
 
-  var socketDomain = domain.create();
   var scSocket = new SCSocket(id, this, wsSocket);
-  socketDomain.add(scSocket);
+  scSocket.on('error', function (err) {
+    self._handleSocketError(err);
+  });
 
   // Emit event to signal that a socket handshake has been initiated.
   // The _handshake event is for internal use (including third-party plugins)
   this.emit('_handshake', scSocket);
   this.emit('handshake', scSocket);
-
-  socketDomain.on('error', function (err) {
-    self._handleSocketError(err);
-  });
 
   scSocket.on('#authenticate', function (signedAuthToken, respond) {
     self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {

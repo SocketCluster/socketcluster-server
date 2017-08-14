@@ -324,14 +324,31 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
 
   var defaultSignatureOptions = this.server.defaultSignatureOptions;
 
-  if (authToken && authToken.exp == null) {
-    options.expiresIn = defaultSignatureOptions.expiresIn;
+  // We cannot have the exp claim on the token and the expiresIn option
+  // set at the same time or else auth.signToken will throw an error.
+  var expiresIn;
+  if (options.expiresIn == null) {
+    expiresIn = defaultSignatureOptions.expiresIn;
+  } else {
+    expiresIn = options.expiresIn;
   }
-  if (defaultSignatureOptions.algorithm != null) {
-    options.algorithm = defaultSignatureOptions.algorithm;
+  if (authToken) {
+    if (authToken.exp == null) {
+      options.expiresIn = expiresIn;
+    } else {
+      delete options.expiresIn;
+    }
+  } else {
+    options.expiresIn = expiresIn;
   }
+
+  // Always use the default sync/async signing mode since it cannot be changed at runtime.
   if (defaultSignatureOptions.async != null) {
     options.async = defaultSignatureOptions.async;
+  }
+  // Always use the default algorithm since it cannot be changed at runtime.
+  if (defaultSignatureOptions.algorithm != null) {
+    options.algorithm = defaultSignatureOptions.algorithm;
   }
 
   this.server.auth.signToken(authToken, this.server.signatureKey, options, function (err, signedToken) {

@@ -18,12 +18,50 @@ var allowedUsers = {
   alice: true
 };
 
+var TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
+
 var server, client;
 
 var connectionHandler = function (socket) {
   socket.on('login', function (userDetails, respond) {
     if (allowedUsers[userDetails.username]) {
       socket.setAuthToken(userDetails);
+      respond();
+    } else {
+      var err = new Error('Failed to login');
+      err.name = 'FailedLoginError';
+      respond(err);
+    }
+  });
+  socket.on('loginWithTenDayExpiry', function (userDetails, respond) {
+    if (allowedUsers[userDetails.username]) {
+      socket.setAuthToken(userDetails, {
+        expiresIn: TEN_DAYS_IN_SECONDS
+      });
+      respond();
+    } else {
+      var err = new Error('Failed to login');
+      err.name = 'FailedLoginError';
+      respond(err);
+    }
+  });
+  socket.on('loginWithTenDayExp', function (userDetails, respond) {
+    if (allowedUsers[userDetails.username]) {
+      userDetails.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
+      socket.setAuthToken(userDetails);
+      respond();
+    } else {
+      var err = new Error('Failed to login');
+      err.name = 'FailedLoginError';
+      respond(err);
+    }
+  });
+  socket.on('loginWithTenDayExpAndExpiry', function (userDetails, respond) {
+    if (allowedUsers[userDetails.username]) {
+      userDetails.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
+      socket.setAuthToken(userDetails, {
+        expiresIn: TEN_DAYS_IN_SECONDS * 100 // 1000 days
+      });
       respond();
     } else {
       var err = new Error('Failed to login');
@@ -233,6 +271,90 @@ describe('integration tests', function () {
             });
             client.disconnect();
           });
+        });
+      });
+    });
+
+    it('should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', function (done) {
+      var port = 8012;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey,
+        authVerifyAsync: false
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.once('authenticate', function (newSignedToken) {
+            assert.notEqual(client.authToken, null);
+            assert.notEqual(client.authToken.exp, null);
+            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+            // Expiry must be accurate within 1000 milliseconds.
+            assert.equal(dateDifference < 1000, true);
+            done();
+          });
+          client.emit('loginWithTenDayExpiry', {username: 'bob'});
+        });
+      });
+    });
+
+    it('should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', function (done) {
+      var port = 8013;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey,
+        authVerifyAsync: false
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.once('authenticate', function (newSignedToken) {
+            assert.notEqual(client.authToken, null);
+            assert.notEqual(client.authToken.exp, null);
+            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+            // Expiry must be accurate within 1000 milliseconds.
+            assert.equal(dateDifference < 1000, true);
+            done();
+          });
+          client.emit('loginWithTenDayExp', {username: 'bob'});
+        });
+      });
+    });
+
+    it('exp claim should have priority over expiresIn option when using socket.setAuthToken', function (done) {
+      var port = 8014;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey,
+        authVerifyAsync: false
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.once('authenticate', function (newSignedToken) {
+            assert.notEqual(client.authToken, null);
+            assert.notEqual(client.authToken.exp, null);
+            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+            // Expiry must be accurate within 1000 milliseconds.
+            assert.equal(dateDifference < 1000, true);
+            done();
+          });
+          client.emit('loginWithTenDayExpAndExpiry', {username: 'bob'});
         });
       });
     });

@@ -69,6 +69,19 @@ var connectionHandler = function (socket) {
       respond(err);
     }
   });
+  socket.on('loginWithIssAndIssuer', function (userDetails, respond) {
+    if (allowedUsers[userDetails.username]) {
+      userDetails.iss = 'foo';
+      socket.setAuthToken(userDetails, {
+        issuer: 'bar'
+      });
+      respond();
+    } else {
+      var err = new Error('Failed to login');
+      err.name = 'FailedLoginError';
+      respond(err);
+    }
+  });
   socket.on('setAuthKey', function (newAuthKey, respond) {
     server.signatureKey = newAuthKey;
     server.verificationKey = newAuthKey;
@@ -102,8 +115,11 @@ describe('integration tests', function () {
   });
 
   afterEach('shut down client after each test', function (done) {
-    if (client) {
+    if (client && client.state != client.CLOSED) {
       client.once('disconnect', function () {
+        done();
+      });
+      client.once('connectAbort', function () {
         done();
       });
       client.disconnect();
@@ -355,6 +371,43 @@ describe('integration tests', function () {
             done();
           });
           client.emit('loginWithTenDayExpAndExpiry', {username: 'bob'});
+        });
+      });
+    });
+
+    it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', function (done) {
+      var port = 8015;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey,
+        authVerifyAsync: false
+      });
+      var warningMap = {};
+
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.once('authenticate', function (newSignedToken) {
+            throw new Error('Should not pass authentication because the signature should fail');
+          });
+          server.on('warning', function (warning) {
+            assert.notEqual(warning, null);
+            warningMap[warning.name] = warning;
+          });
+          client.once('error', function (err) {
+            assert.notEqual(err, null);
+            assert.equal(err.name, 'SocketProtocolError');
+          });
+          client.emit('loginWithIssAndIssuer', {username: 'bob'});
+          setTimeout(function () {
+            server.removeAllListeners('warning');
+            assert.notEqual(warningMap['SocketProtocolError'], null);
+            done();
+          }, 1000);
         });
       });
     });

@@ -353,7 +353,8 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
 
   this.server.auth.signToken(authToken, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
-      self._onSCClose(4002, err);
+      Emitter.prototype.emit.call(self, 'error', err);
+      self._onSCClose(4002, err.toString());
       self.socket.close(4002);
       callback && callback(err);
     } else {

@@ -100,33 +100,13 @@ var SCSocket = function (id, server, socket) {
         var emptyMessageError = new InvalidMessageError('Received an empty message');
         Emitter.prototype.emit.call(self, 'error', emptyMessageError);
 
-      } else if (obj.event) {
-        var eventName = obj.event;
-
-        if (self._localEvents[eventName] == null) {
-          var response = new Response(self, obj.cid);
-          self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
-            if (err) {
-              response.error(err, ackData);
-            } else {
-              if (eventName == '#disconnect') {
-                var disconnectData = newEventData || {};
-                self._onSCClose(disconnectData.code, disconnectData.data);
-              } else {
-                if (self._autoAckEvents[eventName]) {
-                  if (ackData !== undefined) {
-                    response.end(ackData);
-                  } else {
-                    response.end();
-                  }
-                  Emitter.prototype.emit.call(self, eventName, newEventData);
-                } else {
-                  Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
-                }
-              }
-            }
-          });
+      } else if (Array.isArray(obj)) {
+        var len = obj.length;
+        for (var i = 0; i < len; i++) {
+          self._handleEventObject(obj[i]);
         }
+      } else if (obj.event) {
+        self._handleEventObject(obj);
       } else if (obj.rid != null) {
         // If incoming message is a response to a previously sent message
         var ret = self._callbackMap[obj.rid];
@@ -159,6 +139,37 @@ SCSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 SCSocket.prototype._sendPing = function () {
   if (this.state != this.CLOSED) {
     this.sendObject('#1');
+  }
+};
+
+SCSocket.prototype._handleEventObject = function (obj) {
+  var self = this;
+
+  var eventName = obj.event;
+
+  if (self._localEvents[eventName] == null) {
+    var response = new Response(self, obj.cid);
+    self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
+      if (err) {
+        response.error(err, ackData);
+      } else {
+        if (eventName == '#disconnect') {
+          var disconnectData = newEventData || {};
+          self._onSCClose(disconnectData.code, disconnectData.data);
+        } else {
+          if (self._autoAckEvents[eventName]) {
+            if (ackData !== undefined) {
+              response.end(ackData);
+            } else {
+              response.end();
+            }
+            Emitter.prototype.emit.call(self, eventName, newEventData);
+          } else {
+            Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
+          }
+        }
+      }
+    });
   }
 };
 

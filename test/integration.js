@@ -411,5 +411,77 @@ describe('integration tests', function () {
         });
       });
     });
+
+    it('Should support subscription batching', function (done) {
+      var port = 8016;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+      server.on('connection', function (socket) {
+        connectionHandler(socket);
+        var isFirstMessage = true;
+        socket.on('message', function (rawMessage) {
+          if (isFirstMessage) {
+            var data = JSON.parse(rawMessage);
+            // All 20 subscriptions should arrive as a single message.
+            assert.equal(data.length, 20);
+            isFirstMessage = false;
+          }
+        });
+      });
+
+      var subscribeMiddlewareCounter = 0;
+      // Each subscription should pass through the middleware individually, even
+      // though they were sent as a batch/array.
+      server.addMiddleware(server.MIDDLEWARE_SUBSCRIBE, function (req, next) {
+        subscribeMiddlewareCounter++;
+        assert.equal(req.channel.indexOf('my-channel-'), 0);
+        if (req.channel == 'my-channel-10') {
+          assert.equal(JSON.stringify(req.data), JSON.stringify({foo: 123}));
+        } else if (req.channel == 'my-channel-12') {
+          // Block my-channel-12
+          var err = new Error('You cannot subscribe to channel 12');
+          err.name = 'UnauthorizedSubscribeError';
+          next(err);
+          return;
+        }
+        next();
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        var channelList = [];
+        for (var i = 0; i < 20; i++) {
+          var subscribeOptions = {
+            batch: true
+          };
+          if (i == 10) {
+            subscribeOptions.data = {foo: 123};
+          }
+          channelList.push(
+            client.subscribe('my-channel-' + i, subscribeOptions)
+          );
+        }
+        channelList[12].on('subscribe', function (err) {
+          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
+        });
+        channelList[12].on('subscribeFail', function (err) {
+          assert.notEqual(err, null);
+          assert.equal(err.name, 'UnauthorizedSubscribeError');
+        });
+        channelList[19].watch(function (data) {
+          assert.equal(data, 'Hello!');
+          assert.equal(subscribeMiddlewareCounter, 20);
+          done();
+        });
+        channelList[0].on('subscribe', function () {
+          client.publish('my-channel-19', 'Hello!');
+        });
+      });
+    });
   });
 });

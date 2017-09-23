@@ -7,16 +7,16 @@ var Response = function (socket, id) {
   this.sent = false;
 };
 
-Response.prototype._respond = function (responseData) {
+Response.prototype._respond = function (responseData, options) {
   if (this.sent) {
     throw new InvalidActionError('Response ' + this.id + ' has already been sent');
   } else {
     this.sent = true;
-    this.socket.sendObject(responseData);
+    this.socket.sendObject(responseData, options);
   }
 };
 
-Response.prototype.end = function (data) {
+Response.prototype.end = function (data, options) {
   if (this.id) {
     var responseData = {
       rid: this.id
@@ -24,11 +24,11 @@ Response.prototype.end = function (data) {
     if (data !== undefined) {
       responseData.data = data;
     }
-    this._respond(responseData);
+    this._respond(responseData, options);
   }
 };
 
-Response.prototype.error = function (error, data) {
+Response.prototype.error = function (error, data, options) {
   if (this.id) {
     var err = scErrors.dehydrateError(error);
 
@@ -40,15 +40,15 @@ Response.prototype.error = function (error, data) {
       responseData.data = data;
     }
 
-    this._respond(responseData);
+    this._respond(responseData, options);
   }
 };
 
-Response.prototype.callback = function (error, data) {
+Response.prototype.callback = function (error, data, options) {
   if (error) {
-    this.error(error, data);
+    this.error(error, data, options);
   } else {
-    this.end(data);
+    this.end(data, options);
   }
 };
 

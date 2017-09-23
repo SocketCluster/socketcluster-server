@@ -4,7 +4,6 @@ var Response = require('./response').Response;
 
 var scErrors = require('sc-errors');
 var InvalidArgumentsError = scErrors.InvalidArgumentsError;
-var InvalidMessageError = scErrors.InvalidMessageError;
 var SocketProtocolError = scErrors.SocketProtocolError;
 var TimeoutError = scErrors.TimeoutError;
 
@@ -57,6 +56,7 @@ var SCSocket = function (id, server, socket) {
 
   this._cid = 1;
   this._callbackMap = {};
+  this._batchSendList = [];
 
   this.channelSubscriptions = {};
   this.channelSubscriptionsCount = 0;
@@ -96,29 +96,13 @@ var SCSocket = function (id, server, socket) {
         self.deauthenticate();
       }
     } else {
-      if (obj == null) {
-        var emptyMessageError = new InvalidMessageError('Received an empty message');
-        Emitter.prototype.emit.call(self, 'error', emptyMessageError);
-
-      } else if (Array.isArray(obj)) {
+      if (Array.isArray(obj)) {
         var len = obj.length;
         for (var i = 0; i < len; i++) {
-          self._handleEventObject(obj[i]);
-        }
-      } else if (obj.event) {
-        self._handleEventObject(obj);
-      } else if (obj.rid != null) {
-        // If incoming message is a response to a previously sent message
-        var ret = self._callbackMap[obj.rid];
-        if (ret) {
-          clearTimeout(ret.timeout);
-          delete self._callbackMap[obj.rid];
-          var rehydratedError = scErrors.hydrateError(obj.error);
-          ret.callback(rehydratedError, obj.data);
+          self._handleEventObject(obj[i], message);
         }
       } else {
-        // The last remaining case is to treat the message as raw
-        Emitter.prototype.emit.call(self, 'raw', message);
+        self._handleEventObject(obj, message);
       }
     }
   });
@@ -142,34 +126,48 @@ SCSocket.prototype._sendPing = function () {
   }
 };
 
-SCSocket.prototype._handleEventObject = function (obj) {
+SCSocket.prototype._handleEventObject = function (obj, message) {
   var self = this;
 
-  var eventName = obj.event;
+  if (obj && obj.event != null) {
+    var eventName = obj.event;
 
-  if (self._localEvents[eventName] == null) {
-    var response = new Response(self, obj.cid);
-    self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
-      if (err) {
-        response.error(err, ackData);
-      } else {
-        if (eventName == '#disconnect') {
-          var disconnectData = newEventData || {};
-          self._onSCClose(disconnectData.code, disconnectData.data);
+    if (self._localEvents[eventName] == null) {
+      var response = new Response(self, obj.cid);
+      self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
+        if (err) {
+          response.error(err, ackData);
         } else {
-          if (self._autoAckEvents[eventName]) {
-            if (ackData !== undefined) {
-              response.end(ackData);
-            } else {
-              response.end();
-            }
-            Emitter.prototype.emit.call(self, eventName, newEventData);
+          if (eventName == '#disconnect') {
+            var disconnectData = newEventData || {};
+            self._onSCClose(disconnectData.code, disconnectData.data);
           } else {
-            Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
+            if (self._autoAckEvents[eventName]) {
+              if (ackData !== undefined) {
+                response.end(ackData);
+              } else {
+                response.end();
+              }
+              Emitter.prototype.emit.call(self, eventName, newEventData);
+            } else {
+              Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
+            }
           }
         }
-      }
-    });
+      });
+    }
+  } else if (obj && obj.rid != null) {
+    // If incoming message is a response to a previously sent message
+    var ret = self._callbackMap[obj.rid];
+    if (ret) {
+      clearTimeout(ret.timeout);
+      delete self._callbackMap[obj.rid];
+      var rehydratedError = scErrors.hydrateError(obj.error);
+      ret.callback(rehydratedError, obj.data);
+    }
+  } else {
+    // The last remaining case is to treat the message as raw
+    Emitter.prototype.emit.call(self, 'raw', message);
   }
 };
 
@@ -260,7 +258,32 @@ SCSocket.prototype.encode = function (object) {
   return this.server.codec.encode(object);
 };
 
-SCSocket.prototype.sendObject = function (object) {
+SCSocket.prototype.sendObjectBatch = function (object) {
+  var self = this;
+
+  this._batchSendList.push(object);
+  if (this._batchTimeout) {
+    return;
+  }
+
+  this._batchTimeout = setTimeout(function () {
+    delete self._batchTimeout;
+    if (self._batchSendList.length) {
+      var str;
+      try {
+        str = self.encode(self._batchSendList);
+      } catch (err) {
+        Emitter.prototype.emit.call(self, 'error', err);
+      }
+      if (str != null) {
+        self.send(str);
+      }
+      self._batchSendList = [];
+    }
+  }, this.server.options.pubSubBatchDuration || 0);
+};
+
+SCSocket.prototype.sendObjectSingle = function (object) {
   var str;
   try {
     str = this.encode(object);
@@ -269,6 +292,14 @@ SCSocket.prototype.sendObject = function (object) {
   }
   if (str != null) {
     this.send(str);
+  }
+};
+
+SCSocket.prototype.sendObject = function (object, options) {
+  if (options && options.batch) {
+    this.sendObjectBatch(object);
+  } else {
+    this.sendObjectSingle(object);
   }
 };
 

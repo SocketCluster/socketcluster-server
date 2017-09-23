@@ -40,6 +40,7 @@ var SCServer = function (options) {
     authDefaultExpiry: 86400,
     authSignAsync: false,
     authVerifyAsync: true,
+    pubSubBatchDuration: null,
     middlewareEmitWarnings: true
   };
 
@@ -60,9 +61,6 @@ var SCServer = function (options) {
 
   // Deprecated
   this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
-
-  this._subscribeEvent = '#subscribe';
-  this._publishEvent = '#publish';
 
   this._middleware = {};
   this._middleware[this.MIDDLEWARE_HANDSHAKE] = [];
@@ -432,11 +430,15 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     }
     self._subscribeSocket(scSocket, channelOptions, function (err) {
       if (err) {
-        var error = new BrokerError('Failed to subscribe socket to channel - ' + err);
+        var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
         res(error);
         scSocket.emit('error', error);
       } else {
-        res();
+        if (channelOptions.batch) {
+          res(undefined, undefined, {batch: true});
+        } else {
+          res();
+        }
       }
     });
   });
@@ -444,7 +446,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   scSocket.on('#unsubscribe', function (channel, res) {
     self._unsubscribeSocket(scSocket, channel, function (err) {
       if (err) {
-        var error = new BrokerError('Failed to unsubscribe socket from channel - ' + err);
+        var error = new BrokerError('Failed to unsubscribe socket from the ' + channel + ' channel - ' + err);
         res(error);
         scSocket.emit('error', error);
       } else {
@@ -651,7 +653,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
   var event = options.event;
 
   if (this._isPrivateTransmittedEvent(event)) {
-    if (event == this._subscribeEvent) {
+    if (event == '#subscribe') {
       var eventData = options.data || {};
       request.channel = eventData.channel;
       request.waitForAuth = eventData.waitForAuth;
@@ -683,7 +685,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
           }
         );
       }
-    } else if (event == this._publishEvent) {
+    } else if (event == '#publish') {
       if (this.allowClientPublish) {
         var eventData = options.data || {};
         request.channel = eventData.channel;
@@ -787,7 +789,7 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
 
   var callbackInvoked = false;
 
-  if (eventName == this._publishEvent) {
+  if (eventName == '#publish') {
     var request = {
       socket: socket,
       channel: eventData.channel,

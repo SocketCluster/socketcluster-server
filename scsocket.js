@@ -1,5 +1,5 @@
 var cloneDeep = require('lodash.clonedeep');
-var Emitter = require('component-emitter');
+var Emitter = require('events').EventEmitter;
 var Response = require('./response').Response;
 
 var scErrors = require('sc-errors');
@@ -12,6 +12,7 @@ var SCSocket = function (id, server, socket) {
   var self = this;
 
   Emitter.call(this);
+  this.off = this.removeAllListeners;
 
   this._localEvents = {
     'open': 1,

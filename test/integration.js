@@ -483,5 +483,37 @@ describe('integration tests', function () {
         });
       });
     });
+
+    it('should remove client data from server when client disconnect before authentication process finished', function (done) {
+      var port = 8017;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+          setTimeout(function () {
+            callback(null, {})
+          }, 500)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+        setTimeout(function () {
+          assert.equal(Object.keys( server.clients ).length, 1);
+          assert.equal(server.clientsCount, 1);
+          client.disconnect();
+        }, 100);
+        setTimeout(function () {
+          assert.equal(Object.keys( server.clients ).length, 0);
+          assert.equal(server.clientsCount, 0);
+          done();
+        }, 1000);
+      });
+    });
   });
 });

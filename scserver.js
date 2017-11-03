@@ -491,6 +491,9 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     var signedAuthToken = data.authToken || null;
     clearTimeout(scSocket._handshakeTimeoutRef);
 
+    self.clients[id] = scSocket;
+    self.clientsCount++;
+
     self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
       var status = {
         id: scSocket.id,
@@ -509,9 +512,6 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         }
       }
       status.isAuthenticated = !!scSocket.authToken;
-
-      self.clients[id] = scSocket;
-      self.clientsCount++;
 
       scSocket.state = scSocket.OPEN;
       scSocket.exchange = scSocket.global = self.exchange;

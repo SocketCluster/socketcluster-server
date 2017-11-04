@@ -149,7 +149,10 @@ var SCServer = function (options) {
   this.clients = {};
   this.clientsCount = 0;
 
-  this.exchange = this.global = this.brokerEngine.exchange();
+  this.pendingClients = {};
+  this.pendingClientsCount = 0;
+
+  this.exchange = this.brokerEngine.exchange();
 
   this.wsServer = new WSServer({
     server: this.httpServer,
@@ -381,9 +384,14 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   var id = this.generateId();
 
   var scSocket = new SCSocket(id, this, wsSocket);
+  scSocket.exchange = self.exchange;
+
   scSocket.on('error', function (err) {
     self._handleSocketError(err);
   });
+
+  self.pendingClients[id] = scSocket;
+  self.pendingClientsCount++;
 
   // Emit event to signal that a socket handshake has been initiated.
   // The _handshake event is for internal use (including third-party plugins)
@@ -428,19 +436,27 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         channel: channelOptions
       };
     }
-    self._subscribeSocket(scSocket, channelOptions, function (err) {
-      if (err) {
-        var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
-        res(error);
-        scSocket.emit('error', error);
-      } else {
-        if (channelOptions.batch) {
-          res(undefined, undefined, {batch: true});
+    // This is an invalid state; it means the client tried to subscribe before
+    // having completed the handshake.
+    if (scSocket.state == scSocket.OPEN) {
+      self._subscribeSocket(scSocket, channelOptions, function (err) {
+        if (err) {
+          var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
+          res(error);
+          scSocket.emit('error', error);
         } else {
-          res();
+          if (channelOptions.batch) {
+            res(undefined, undefined, {batch: true});
+          } else {
+            res();
+          }
         }
-      }
-    });
+      });
+    } else {
+      var error = new InvalidActionError('Cannot subscribe socket to a channel before it has completed the handshake');
+      res(error);
+      self.emit('warning', error);
+    }
   });
 
   scSocket.on('#unsubscribe', function (channel, res) {
@@ -455,7 +471,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     });
   });
 
-  scSocket.once('_disconnect', function () {
+  var cleanupSocket = function (type) {
     clearTimeout(scSocket._handshakeTimeoutRef);
 
     scSocket.off('#handshake');
@@ -465,6 +481,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     scSocket.off('#unsubscribe');
     scSocket.off('authenticate');
     scSocket.off('deauthenticate');
+    scSocket.off('_disconnect');
+    scSocket.off('_connectAbort');
 
     var isClientFullyConnected = !!self.clients[id];
 
@@ -473,15 +491,27 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       self.clientsCount--;
     }
 
+    var isClientPending = !!self.pendingClients[id];
+    if (isClientPending) {
+      delete self.pendingClients[id];
+      self.pendingClientsCount--;
+    }
+
     self._unsubscribeSocket(scSocket, null, function (err) {
       if (err) {
         scSocket.emit('error', new BrokerError('Failed to unsubscribe socket from all channels - ' + err));
-      } else if (isClientFullyConnected) {
+      } else if (type == 'disconnect') {
         self.emit('_disconnection', scSocket);
         self.emit('disconnection', scSocket);
+      } else if (type == 'abort') {
+        self.emit('_connectionAbort', scSocket);
+        self.emit('connectionAbort', scSocket);
       }
     });
-  });
+  };
+
+  scSocket.once('_disconnect', cleanupSocket.bind(scSocket, 'disconnect'));
+  scSocket.once('_connectAbort', cleanupSocket.bind(scSocket, 'abort'));
 
   scSocket._handshakeTimeoutRef = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.handshakeTimeout);
   scSocket.once('#handshake', function (data, respond) {
@@ -491,11 +521,16 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     var signedAuthToken = data.authToken || null;
     clearTimeout(scSocket._handshakeTimeoutRef);
 
-    self.clients[id] = scSocket;
-    self.clientsCount++;
-
     self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
-      var status = {
+      if (scSocket.state == scSocket.CLOSED) {
+        return;
+      }
+
+      var clientSocketStatus = {
+        id: scSocket.id,
+        pingTimeout: self.pingTimeout
+      };
+      var serverSocketStatus = {
         id: scSocket.id,
         pingTimeout: self.pingTimeout
       };
@@ -504,27 +539,38 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         if (signedAuthToken != null) {
           // Because the token is optional as part of the handshake, we don't count
           // it as an error if the token wasn't provided.
-          status.authError = scErrors.dehydrateError(err);
+          clientSocketStatus.authError = scErrors.dehydrateError(err);
+          serverSocketStatus.authError = err;
 
           if (isBadToken) {
             scSocket.deauthenticate();
           }
         }
       }
-      status.isAuthenticated = !!scSocket.authToken;
+      clientSocketStatus.isAuthenticated = !!scSocket.authToken;
+      serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
+
+      if (self.pendingClients[id]) {
+        delete self.pendingClients[id];
+        self.pendingClientsCount--;
+      }
+      self.clients[id] = scSocket;
+      self.clientsCount++;
 
       scSocket.state = scSocket.OPEN;
-      scSocket.exchange = scSocket.global = self.exchange;
 
-      self.emit('_connection', scSocket);
-      self.emit('connection', scSocket);
+      scSocket.emit('connect', serverSocketStatus);
+      scSocket.emit('_connect', serverSocketStatus);
 
-      if (status.isAuthenticated) {
+      self.emit('_connection', scSocket, serverSocketStatus);
+      self.emit('connection', scSocket, serverSocketStatus);
+
+      if (clientSocketStatus.isAuthenticated) {
         scSocket.emit('authenticate', scSocket.authToken);
         self.emit('authentication', scSocket, scSocket.authToken);
       }
       // Treat authentication failure as a 'soft' error
-      respond(null, status);
+      respond(null, clientSocketStatus);
     });
   });
 };

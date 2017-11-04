@@ -14,11 +14,14 @@ var SCSocket = function (id, server, socket) {
   Emitter.call(this);
 
   this._localEvents = {
-    'open': 1,
     'subscribe': 1,
     'unsubscribe': 1,
+    'connect': 1,
+    '_connect': 1,
     'disconnect': 1,
     '_disconnect': 1,
+    'connectAbort': 1,
+    '_connectAbort': 1,
     'message': 1,
     'error': 1,
     'authenticate': 1,
@@ -198,11 +201,18 @@ SCSocket.prototype._onSCClose = function (code, data) {
   clearTimeout(this._pingTimeoutTicker);
 
   if (this.state != this.CLOSED) {
+    var prevState = this.state;
     this.state = this.CLOSED;
 
-    // Private disconnect event for internal use only
-    Emitter.prototype.emit.call(this, '_disconnect', code, data);
-    Emitter.prototype.emit.call(this, 'disconnect', code, data);
+    if (prevState == this.CONNECTING) {
+      // Private connectAbort event for internal use only
+      Emitter.prototype.emit.call(this, '_connectAbort', code, data);
+      Emitter.prototype.emit.call(this, 'connectAbort', code, data);
+    } else {
+      // Private disconnect event for internal use only
+      Emitter.prototype.emit.call(this, '_disconnect', code, data);
+      Emitter.prototype.emit.call(this, 'disconnect', code, data);
+    }
 
     if (!SCSocket.ignoreStatuses[code]) {
       var failureMessage;

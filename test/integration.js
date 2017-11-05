@@ -411,7 +411,9 @@ describe('integration tests', function () {
         });
       });
     });
+  });
 
+  describe('Event flow', function () {
     it('Should support subscription batching', function (done) {
       var port = 8016;
       server = socketClusterServer.listen(port, {
@@ -793,8 +795,110 @@ describe('integration tests', function () {
       });
     });
 
-    it('Exchange is attached to socket before the handshake event is triggered', function (done) {
+    it('The close event should trigger when the socket loses the connection before the handshake', function (done) {
       var port = 8022;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+          setTimeout(function () {
+            callback(null, {})
+          }, 500)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+
+        var serverSocketClosed = false;
+        var serverSocketAborted = false;
+        var serverClosure = false;
+
+        server.on('handshake', function (socket) {
+          socket.once('close', function () {
+            serverSocketClosed = true;
+          });
+        });
+
+        server.once('connectionAbort', function () {
+          serverSocketAborted = true;
+        });
+
+        server.on('closure', function (socket) {
+          assert.equal(socket.state, socket.CLOSED);
+          serverClosure = true;
+        });
+
+        setTimeout(function () {
+          client.disconnect();
+        }, 100);
+        setTimeout(function () {
+          assert.equal(serverSocketClosed, true);
+          assert.equal(serverSocketAborted, true);
+          assert.equal(serverClosure, true);
+          done();
+        }, 1000);
+      });
+    });
+
+    it('The close event should trigger when the socket loses the connection after the handshake', function (done) {
+      var port = 8023;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+          setTimeout(function () {
+            callback(null, {})
+          }, 0)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+
+        var serverSocketClosed = false;
+        var serverSocketDisconnected = false;
+        var serverClosure = false;
+
+        server.on('handshake', function (socket) {
+          socket.once('close', function () {
+            serverSocketClosed = true;
+          });
+        });
+
+        server.once('disconnection', function () {
+          serverSocketDisconnected = true;
+        });
+
+        server.on('closure', function (socket) {
+          assert.equal(socket.state, socket.CLOSED);
+          serverClosure = true;
+        });
+
+        setTimeout(function () {
+          client.disconnect();
+        }, 100);
+        setTimeout(function () {
+          assert.equal(serverSocketClosed, true);
+          assert.equal(serverSocketDisconnected, true);
+          assert.equal(serverClosure, true);
+          done();
+        }, 300);
+      });
+    });
+
+    it('Exchange is attached to socket before the handshake event is triggered', function (done) {
+      var port = 8024;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey
       });

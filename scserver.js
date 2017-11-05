@@ -471,7 +471,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     });
   });
 
-  var cleanupSocket = function (type) {
+  var cleanupSocket = function (type, code, data) {
     clearTimeout(scSocket._handshakeTimeoutRef);
 
     scSocket.off('#handshake');
@@ -500,12 +500,16 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     self._unsubscribeSocket(scSocket, null, function (err) {
       if (err) {
         scSocket.emit('error', new BrokerError('Failed to unsubscribe socket from all channels - ' + err));
-      } else if (type == 'disconnect') {
-        self.emit('_disconnection', scSocket);
-        self.emit('disconnection', scSocket);
-      } else if (type == 'abort') {
-        self.emit('_connectionAbort', scSocket);
-        self.emit('connectionAbort', scSocket);
+      } else {
+        if (type == 'disconnect') {
+          self.emit('_disconnection', scSocket, code, data);
+          self.emit('disconnection', scSocket, code, data);
+        } else if (type == 'abort') {
+          self.emit('_connectionAbort', scSocket, code, data);
+          self.emit('connectionAbort', scSocket, code, data);
+        }
+        self.emit('_closure', scSocket, code, data);
+        self.emit('closure', scSocket, code, data);
       }
     });
   };

@@ -22,6 +22,8 @@ var SCSocket = function (id, server, socket) {
     '_disconnect': 1,
     'connectAbort': 1,
     '_connectAbort': 1,
+    'close': 1,
+    '_close': 1,
     'message': 1,
     'error': 1,
     'authenticate': 1,
@@ -213,6 +215,9 @@ SCSocket.prototype._onSCClose = function (code, data) {
       Emitter.prototype.emit.call(this, '_disconnect', code, data);
       Emitter.prototype.emit.call(this, 'disconnect', code, data);
     }
+    // Private close event for internal use only
+    Emitter.prototype.emit.call(this, '_close', code, data);
+    Emitter.prototype.emit.call(this, 'close', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
       var failureMessage;

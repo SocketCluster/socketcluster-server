@@ -921,5 +921,112 @@ describe('integration tests', function () {
         }, 300);
       });
     });
+
+    it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish packets without crashing', function (done) {
+      var port = 8025;
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+
+      server.on('connection', connectionHandler);
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+
+        var nullInChannelArrayError;
+        var objectAsChannelNameError;
+        var nullChannelNameError;
+        var nullUnsubscribeError;
+
+        var undefinedPublishError;
+        var objectAsChannelNamePublishError;
+        var nullPublishError;
+
+        // Hacks to capture the errors without relying on the standard client flow.
+        client.transport._callbackMap[2] = {
+          event: '#subscribe',
+          data: [null],
+          callback: function (err) {
+            nullInChannelArrayError = err;
+          }
+        };
+        client.transport._callbackMap[3] = {
+          event: '#subscribe',
+          data: {"channel": {"hello": 123}},
+          callback: function (err) {
+            objectAsChannelNameError = err;
+          }
+        };
+        client.transport._callbackMap[4] = {
+          event: '#subscribe',
+          data: null,
+          callback: function (err) {
+            nullChannelNameError = err;
+          }
+        };
+        client.transport._callbackMap[5] = {
+          event: '#unsubscribe',
+          data: [null],
+          callback: function (err) {
+            nullUnsubscribeError = err;
+          }
+        };
+        client.transport._callbackMap[6] = {
+          event: '#publish',
+          data: null,
+          callback: function (err) {
+            undefinedPublishError = err;
+          }
+        };
+        client.transport._callbackMap[7] = {
+          event: '#publish',
+          data: {"channel": {"hello": 123}},
+          callback: function (err) {
+            objectAsChannelNamePublishError = err;
+          }
+        };
+        client.transport._callbackMap[8] = {
+          event: '#publish',
+          data: {"channel": null},
+          callback: function (err) {
+            nullPublishError = err;
+          }
+        };
+
+        // Trick the server by sending a fake subscribe before the handshake is done.
+        client.on('connect', function () {
+          client.send('{"event":"#subscribe","data":[null],"cid":2}');
+          client.send('{"event":"#subscribe","data":{"channel":{"hello":123}},"cid":3}');
+          client.send('{"event":"#subscribe","data":null,"cid":4}');
+          client.send('{"event":"#unsubscribe","data":[null],"cid":5}');
+          client.send('{"event":"#publish","data":null,"cid":6}');
+          client.send('{"event":"#publish","data":{"channel":{"hello":123}},"cid":7}');
+          client.send('{"event":"#publish","data":{"channel":null},"cid":8}');
+        });
+
+        setTimeout(function () {
+          assert.notEqual(nullInChannelArrayError, null);
+          // console.log('nullInChannelArrayError:', nullInChannelArrayError);
+          assert.notEqual(objectAsChannelNameError, null);
+          // console.log('objectAsChannelNameError:', objectAsChannelNameError);
+          assert.notEqual(nullChannelNameError, null);
+          // console.log('nullChannelNameError:', nullChannelNameError);
+          assert.notEqual(nullUnsubscribeError, null);
+          // console.log('nullUnsubscribeError:', nullUnsubscribeError);
+          assert.notEqual(undefinedPublishError, null);
+          // console.log('undefinedPublishError:', undefinedPublishError);
+          assert.notEqual(objectAsChannelNamePublishError, null);
+          // console.log('objectAsChannelNamePublishError:', objectAsChannelNamePublishError);
+          assert.notEqual(nullPublishError, null);
+          // console.log('nullPublishError:', nullPublishError);
+
+          done();
+        }, 300);
+      });
+    });
   });
 });

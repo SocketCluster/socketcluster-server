@@ -197,7 +197,7 @@ SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
 SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback) {
   var self = this;
 
-  if (channelOptions instanceof Array) {
+  if (Array.isArray(channelOptions)) {
     var tasks = [];
     for (var i in channelOptions) {
       if (channelOptions.hasOwnProperty(i)) {
@@ -218,31 +218,43 @@ SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback
 
 SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channelOptions, callback) {
   var self = this;
-  var channelName = channelOptions.channel;
+
+  if (!channelOptions) {
+    callback && callback('Socket ' + socket.id + ' provided a malformated channel payload');
+    return;
+  }
 
   if (this.socketChannelLimit && socket.channelSubscriptionsCount >= this.socketChannelLimit) {
     callback && callback('Socket ' + socket.id + ' tried to exceed the channel subscription limit of ' +
       this.socketChannelLimit);
-  } else {
-    if (socket.channelSubscriptionsCount == null) {
-      socket.channelSubscriptionsCount = 0;
-    }
-    if (socket.channelSubscriptions[channelName] == null) {
-      socket.channelSubscriptions[channelName] = true;
-      socket.channelSubscriptionsCount++;
-    }
-
-    this.brokerEngine.subscribeSocket(socket, channelName, function (err) {
-      if (err) {
-        delete socket.channelSubscriptions[channelName];
-        socket.channelSubscriptionsCount--;
-      } else {
-        socket.emit('subscribe', channelName, channelOptions);
-        self.emit('subscription', socket, channelName, channelOptions);
-      }
-      callback && callback(err);
-    });
+    return;
   }
+
+  var channelName = channelOptions.channel;
+
+  if (typeof channelName != 'string') {
+    callback && callback('Socket ' + socket.id + ' provided an invalid channel name');
+    return;
+  }
+
+  if (socket.channelSubscriptionsCount == null) {
+    socket.channelSubscriptionsCount = 0;
+  }
+  if (socket.channelSubscriptions[channelName] == null) {
+    socket.channelSubscriptions[channelName] = true;
+    socket.channelSubscriptionsCount++;
+  }
+
+  this.brokerEngine.subscribeSocket(socket, channelName, function (err) {
+    if (err) {
+      delete socket.channelSubscriptions[channelName];
+      socket.channelSubscriptionsCount--;
+    } else {
+      socket.emit('subscribe', channelName, channelOptions);
+      self.emit('subscription', socket, channelName, channelOptions);
+    }
+    callback && callback(err);
+  });
 };
 
 SCServer.prototype._unsubscribeSocket = function (socket, channels, callback) {
@@ -256,7 +268,7 @@ SCServer.prototype._unsubscribeSocket = function (socket, channels, callback) {
       }
     }
   }
-  if (channels instanceof Array) {
+  if (Array.isArray(channels)) {
     var tasks = [];
     var len = channels.length;
     for (var i = 0; i < len; i++) {
@@ -276,6 +288,11 @@ SCServer.prototype._unsubscribeSocket = function (socket, channels, callback) {
 
 SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, channel, callback) {
   var self = this;
+
+  if (typeof channel != 'string') {
+    callback && callback('Socket ' + socket.id + ' provided an invalid channel name');
+    return;
+  }
 
   delete socket.channelSubscriptions[channel];
   if (socket.channelSubscriptionsCount != null) {
@@ -758,6 +775,12 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                 }
                 cb(err, eventData, request.ackData);
               } else {
+                if (typeof request.channel !== 'string') {
+                  err = new BrokerError('Socket ' + request.socket.id + ' tried to publish to an invalid ' + request.channel + ' channel');
+                  self.emit('warning', err);
+                  cb(err, eventData, request.ackData);
+                  return;
+                }
                 self.exchange.publish(request.channel, request.data, function (err) {
                   if (err) {
                     err = new BrokerError(err);

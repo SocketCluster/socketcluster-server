@@ -29,6 +29,8 @@ var SCServer = function (options) {
   var opts = {
     brokerEngine: new SCSimpleBroker(),
     wsEngine: 'uws',
+    wsEngineServerOptions: {},
+    maxPayload: null,
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,
@@ -154,14 +156,27 @@ var SCServer = function (options) {
 
   this.exchange = this.brokerEngine.exchange();
 
-  this.wsServer = new WSServer({
-    server: this.httpServer,
-    path: this._path,
-    clientTracking: false,
-    perMessageDeflate: this.perMessageDeflate,
-    handleProtocols: opts.handleProtocols,
-    verifyClient: this.verifyHandshake.bind(this)
-  });
+  var wsServerOptions = opts.wsEngineServerOptions || {};
+  wsServerOptions.server = this.httpServer;
+  wsServerOptions.verifyClient = this.verifyHandshake.bind(this);
+
+  if (wsServerOptions.path == null && this._path != null) {
+    wsServerOptions.path = this._path;
+  }
+  if (wsServerOptions.perMessageDeflate == null && this.perMessageDeflate != null) {
+    wsServerOptions.perMessageDeflate = this.perMessageDeflate;
+  }
+  if (wsServerOptions.handleProtocols == null && opts.handleProtocols != null) {
+    wsServerOptions.handleProtocols = opts.handleProtocols;
+  }
+  if (wsServerOptions.maxPayload == null && opts.maxPayload != null) {
+    wsServerOptions.maxPayload = opts.maxPayload;
+  }
+  if (wsServerOptions.clientTracking == null) {
+    wsServerOptions.clientTracking = false;
+  }
+
+  this.wsServer = new WSServer(wsServerOptions);
 
   this.wsServer.on('error', this._handleServerError.bind(this));
   this.wsServer.on('connection', this._handleSocketConnection.bind(this));

@@ -133,7 +133,7 @@ describe('integration tests', function () {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (status) {
         assert.equal(status.authError === undefined, true);
-        done()
+        done();
       });
     });
 

@@ -18,7 +18,7 @@
     "sc-simple-broker": "~2.1.0",
     "uuid": "3.1.0",
     "uws": "9.14.0",
-    "ws": "3.3.1"
+    "ws": "3.3.3"
   },
   "devDependencies": {
     "mocha": "3.0.2",

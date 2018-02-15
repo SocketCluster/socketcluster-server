@@ -1,6 +1,10 @@
 var assert = require('assert');
 var socketClusterServer = require('../');
 var socketCluster = require('socketcluster-client');
+var localStorage = require('localStorage');
+
+// Add to the global scope like in browser.
+global.localStorage = localStorage;
 
 var PORT = 8008;
 
@@ -19,6 +23,10 @@ var allowedUsers = {
 };
 
 var TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
+
+var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MTU5NjE0NzQ3NzQ3LCJpYXQiOjE1MDI3NDc3NDZ9.hjR769TX0vpDzZPl7a1UgudYtuUj8KikJ105IV3UHsc';
+var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjE1MTg4MTQ2NTl9.PUkz5_OvfVO9fMJo_2-rJtcDsEFHJCz6yDaMMb9R8Ls';
+var invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZSI6ImJvYiIsImlhdCI6MTUwMjYyNTIxMywiZXhwIjoxNTAyNzExNjEzfQ.fakemYcOOjM9bzmS4UYRvlWSk_lm3WGHvclmFjLbyOk';
 
 var server, client;
 
@@ -89,8 +97,24 @@ var connectionHandler = function (socket) {
   });
 };
 
-describe('integration tests', function () {
-  before('run the server before start', function (done) {
+var destroyTestCase = function (next) {
+  if (client && client.state != client.CLOSED) {
+    client.once('disconnect', function () {
+      client.removeAllListeners('connectAbort');
+      next();
+    });
+    client.once('connectAbort', function () {
+      client.removeAllListeners('disconnect');
+      next();
+    });
+    client.disconnect();
+  } else {
+    next();
+  }
+};
+
+describe('Integration tests', function () {
+  before('Run the server before start', function (done) {
     server = socketClusterServer.listen(PORT, serverOptions);
     server.on('connection', connectionHandler);
 
@@ -109,27 +133,20 @@ describe('integration tests', function () {
     });
   });
 
-  after('shut down server afterwards', function (done) {
+  after('Shut down server afterwards', function (done) {
     server.close();
     done();
   });
 
-  afterEach('shut down client after each test', function (done) {
-    if (client && client.state != client.CLOSED) {
-      client.once('disconnect', function () {
-        done();
-      });
-      client.once('connectAbort', function () {
-        done();
-      });
-      client.disconnect();
-    } else {
+  afterEach('Shut down client after each test', function (done) {
+    destroyTestCase(function () {
+      global.localStorage.removeItem('socketCluster.authToken');
       done();
-    }
+    });
   });
 
-  describe('authentication', function () {
-    it('should not send back error if JWT is not provided in handshake', function (done) {
+  describe('Authentication', function () {
+    it('Should not send back error if JWT is not provided in handshake', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (status) {
         assert.equal(status.authError === undefined, true);
@@ -137,7 +154,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('should be authenticated on connect if previous JWT token is present', function (done) {
+    it('Should be authenticated on connect if previous JWT token is present', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
         client.emit('login', {username: 'bob'});
@@ -159,7 +176,9 @@ describe('integration tests', function () {
       });
     });
 
-    it('should send back error if JWT is invalid during handshake', function (done) {
+    it('Should send back error if JWT is invalid during handshake', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
         // Change the setAuthKey to invalidate the current token.
@@ -182,7 +201,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('should allow switching between users', function (done) {
+    it('Should allow switching between users', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
         client.emit('login', {username: 'alice'});
@@ -197,7 +216,9 @@ describe('integration tests', function () {
       });
     });
 
-    it('should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', function (done) {
+    it('Should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenAlice);
+
       client = socketCluster.connect(clientOptions);
       // The previous test authenticated us as 'alice', so that token will be passed to the server as
       // part of the handshake.
@@ -211,7 +232,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('token should be available inside login callback if token engine signing is synchronous', function (done) {
+    it('Token should be available inside login callback if token engine signing is synchronous', function (done) {
       var port = 8009;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -235,7 +256,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('if token engine signing is asynchronous, authentication can be captured using the authenticate event', function (done) {
+    it('If token engine signing is asynchronous, authentication can be captured using the authenticate event', function (done) {
       var port = 8010;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -260,7 +281,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('should still work if token verification is asynchronous', function (done) {
+    it('Should still work if token verification is asynchronous', function (done) {
       var port = 8011;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -291,7 +312,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', function (done) {
+    it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', function (done) {
       var port = 8012;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -319,7 +340,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', function (done) {
+    it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', function (done) {
       var port = 8013;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -347,7 +368,7 @@ describe('integration tests', function () {
       });
     });
 
-    it('exp claim should have priority over expiresIn option when using socket.setAuthToken', function (done) {
+    it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', function (done) {
       var port = 8014;
       server = socketClusterServer.listen(port, {
         authKey: serverOptions.authKey,
@@ -1026,6 +1047,73 @@ describe('integration tests', function () {
 
           done();
         }, 300);
+      });
+    });
+  });
+  describe('Middleware', function () {
+    var middlewareFunction;
+    var port = 8026;
+    var middlewareWasExecuted = false;
+
+    beforeEach('Launch server without middleware before start', function (done) {
+      server = socketClusterServer.listen(port, {
+        authKey: serverOptions.authKey
+      });
+      server.on('ready', function () {
+        done();
+      });
+    });
+
+    afterEach('Shut down server afterwards', function (done) {
+      destroyTestCase(function () {
+        server.close();
+        port++;
+        done();
+      });
+    });
+
+
+    describe('MIDDLEWARE_AUTHENTICATE', function () {
+
+      it('Should not run authenticate middleware if JWT token does not exist', function (done) {
+        middlewareFunction = function (req, next) {
+          middlewareWasExecuted = true;
+          next();
+        };
+        server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+
+        client.once('connect', function () {
+          assert.notEqual(middlewareWasExecuted, true);
+          done();
+        });
+      });
+
+      it('Should run authenticate middleware if JWT token exists', function (done) {
+        global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+        middlewareFunction = function (req, next) {
+          middlewareWasExecuted = true;
+          next();
+        };
+        server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: port,
+          multiplex: false
+        });
+
+        client.emit('login', {username: 'bob'});
+        client.once('authenticate', function (state) {
+          assert.equal(middlewareWasExecuted, true);
+          done();
+        });
       });
     });
   });

@@ -54,7 +54,8 @@ var SCServer = function (options) {
 
   this.options = opts;
 
-  this.MIDDLEWARE_HANDSHAKE = 'handshake';
+  this.MIDDLEWARE_HANDSHAKE_WS = 'handshakeWS';
+  this.MIDDLEWARE_HANDSHAKE_SC = 'handshakeSC';
   this.MIDDLEWARE_EMIT = 'emit';
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
   this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
@@ -65,7 +66,8 @@ var SCServer = function (options) {
   this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
 
   this._middleware = {};
-  this._middleware[this.MIDDLEWARE_HANDSHAKE] = [];
+  this._middleware[this.MIDDLEWARE_HANDSHAKE_WS] = [];
+  this._middleware[this.MIDDLEWARE_HANDSHAKE_SC] = [];
   this._middleware[this.MIDDLEWARE_EMIT] = [];
   this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_IN] = [];
@@ -557,56 +559,64 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     var signedAuthToken = data.authToken || null;
     clearTimeout(scSocket._handshakeTimeoutRef);
 
-    self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
-      if (scSocket.state == scSocket.CLOSED) {
+    self._passThroughHandshakeSCMiddleware({
+      socket: scSocket
+    }, function (err) {
+      if (err) {
+        respond(err);
         return;
       }
+      self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
+        if (scSocket.state == scSocket.CLOSED) {
+          return;
+        }
 
-      var clientSocketStatus = {
-        id: scSocket.id,
-        pingTimeout: self.pingTimeout
-      };
-      var serverSocketStatus = {
-        id: scSocket.id,
-        pingTimeout: self.pingTimeout
-      };
+        var clientSocketStatus = {
+          id: scSocket.id,
+          pingTimeout: self.pingTimeout
+        };
+        var serverSocketStatus = {
+          id: scSocket.id,
+          pingTimeout: self.pingTimeout
+        };
 
-      if (err) {
-        if (signedAuthToken != null) {
-          // Because the token is optional as part of the handshake, we don't count
-          // it as an error if the token wasn't provided.
-          clientSocketStatus.authError = scErrors.dehydrateError(err);
-          serverSocketStatus.authError = err;
+        if (err) {
+          if (signedAuthToken != null) {
+            // Because the token is optional as part of the handshake, we don't count
+            // it as an error if the token wasn't provided.
+            clientSocketStatus.authError = scErrors.dehydrateError(err);
+            serverSocketStatus.authError = err;
 
-          if (isBadToken) {
-            scSocket.deauthenticate();
+            if (isBadToken) {
+              scSocket.deauthenticate();
+            }
           }
         }
-      }
-      clientSocketStatus.isAuthenticated = !!scSocket.authToken;
-      serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
+        clientSocketStatus.isAuthenticated = !!scSocket.authToken;
+        serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
 
-      if (self.pendingClients[id]) {
-        delete self.pendingClients[id];
-        self.pendingClientsCount--;
-      }
-      self.clients[id] = scSocket;
-      self.clientsCount++;
+        if (self.pendingClients[id]) {
+          delete self.pendingClients[id];
+          self.pendingClientsCount--;
+        }
+        self.clients[id] = scSocket;
+        self.clientsCount++;
 
-      scSocket.state = scSocket.OPEN;
+        scSocket.state = scSocket.OPEN;
 
-      scSocket.emit('connect', serverSocketStatus);
-      scSocket.emit('_connect', serverSocketStatus);
+        scSocket.emit('connect', serverSocketStatus);
+        scSocket.emit('_connect', serverSocketStatus);
 
-      self.emit('_connection', scSocket, serverSocketStatus);
-      self.emit('connection', scSocket, serverSocketStatus);
+        self.emit('_connection', scSocket, serverSocketStatus);
+        self.emit('connection', scSocket, serverSocketStatus);
 
-      if (clientSocketStatus.isAuthenticated) {
-        scSocket.emit('authenticate', scSocket.authToken);
-        self.emit('authentication', scSocket, scSocket.authToken);
-      }
-      // Treat authentication failure as a 'soft' error
-      respond(null, clientSocketStatus);
+        if (clientSocketStatus.isAuthenticated) {
+          scSocket.emit('authenticate', scSocket.authToken);
+          self.emit('authentication', scSocket, scSocket.authToken);
+        }
+        // Treat authentication failure as a 'soft' error
+        respond(null, clientSocketStatus);
+      });
     });
   });
 };
@@ -659,17 +669,17 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
   }
 
   if (ok) {
-    var handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE];
+    var handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE_WS];
     if (handshakeMiddleware.length) {
       var callbackInvoked = false;
       async.applyEachSeries(handshakeMiddleware, req, function (err) {
         if (callbackInvoked) {
-          self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE + ' middleware was already invoked'));
+          self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_WS + ' middleware was already invoked'));
         } else {
           callbackInvoked = true;
           if (err) {
             if (err === true) {
-              err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE + ' middleware', self.MIDDLEWARE_HANDSHAKE);
+              err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_WS + ' middleware', self.MIDDLEWARE_HANDSHAKE_WS);
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);
             }
@@ -867,6 +877,33 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
           }
         }
         cb(err, isBadToken);
+      }
+    }
+  );
+};
+
+SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
+  var self = this;
+  var callbackInvoked = false;
+
+  var request = {
+    socket: options.socket
+  };
+
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
+    function (err) {
+      if (callbackInvoked) {
+        self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware was already invoked'));
+      } else {
+        callbackInvoked = true;
+        if (err) {
+          if (err === true) {
+            err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware', self.MIDDLEWARE_HANDSHAKE_SC);
+          } else if (self.middlewareEmitWarnings) {
+            self.emit('warning', err);
+          }
+        }
+        cb(err);
       }
     }
   );

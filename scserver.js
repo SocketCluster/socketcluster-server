@@ -864,11 +864,11 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
       } else {
+        callbackInvoked = true;
         var isBadToken = false;
         if (results.length) {
           isBadToken = results[results.length - 1] || false;
         }
-        callbackInvoked = true;
         if (err) {
           if (err === true) {
             err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware', self.MIDDLEWARE_AUTHENTICATE);

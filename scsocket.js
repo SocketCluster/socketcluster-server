@@ -222,7 +222,17 @@ SCSocket.prototype._onSCClose = function (code, data) {
     if (!SCSocket.ignoreStatuses[code]) {
       var failureMessage;
       if (data) {
-        failureMessage = 'Socket connection failed: ' + data;
+        var reasonString;
+        if (typeof data == 'object') {
+          try {
+            reasonString = JSON.stringify(data);
+          } catch(error) {
+            reasonString = data.toString();
+          }
+        } else {
+          reasonString = data;
+        }
+        failureMessage = 'Socket connection failed: ' + reasonString;
       } else {
         failureMessage = 'Socket connection failed for unknown reasons';
       }

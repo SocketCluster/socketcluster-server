@@ -6,16 +6,10 @@ var localStorage = require('localStorage');
 // Add to the global scope like in browser.
 global.localStorage = localStorage;
 
-var PORT = 8008;
+var portNumber = 8008;
 
-var clientOptions = {
-  hostname: '127.0.0.1',
-  port: PORT
-};
-
-var serverOptions = {
-  authKey: 'testkey'
-};
+var clientOptions;
+var serverOptions;
 
 var allowedUsers = {
   bob: true,
@@ -24,8 +18,8 @@ var allowedUsers = {
 
 var TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
 
-var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MTU5NjE0NzQ3NzQ3LCJpYXQiOjE1MDI3NDc3NDZ9.hjR769TX0vpDzZPl7a1UgudYtuUj8KikJ105IV3UHsc';
-var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjE1MTg4MTQ2NTl9.PUkz5_OvfVO9fMJo_2-rJtcDsEFHJCz6yDaMMb9R8Ls';
+var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MzE2Mzc1ODk3OTA4MDMxMCwiaWF0IjoxNTAyNzQ3NzQ2fQ.dSZOfsImq4AvCu-Or3Fcmo7JNv1hrV3WqxaiSKkTtAo';
+var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjMxNjM3NTg5NzkwODAzMTB9.XxbzPPnnXrJfZrS0FJwb_EAhIu2VY5i7rGyUThtNLh4';
 var invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZSI6ImJvYiIsImlhdCI6MTUwMjYyNTIxMywiZXhwIjoxNTAyNzExNjEzfQ.fakemYcOOjM9bzmS4UYRvlWSk_lm3WGHvclmFjLbyOk';
 
 var server, client;
@@ -114,8 +108,16 @@ var destroyTestCase = function (next) {
 };
 
 describe('Integration tests', function () {
-  before('Run the server before start', function (done) {
-    server = socketClusterServer.listen(PORT, serverOptions);
+  beforeEach('Run the server before start', function (done) {
+    clientOptions = {
+      hostname: '127.0.0.1',
+      port: portNumber
+    };
+    serverOptions = {
+      authKey: 'testkey'
+    };
+
+    server = socketClusterServer.listen(portNumber, serverOptions);
     server.on('connection', connectionHandler);
 
     server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, function (req, next) {
@@ -133,8 +135,9 @@ describe('Integration tests', function () {
     });
   });
 
-  after('Shut down server afterwards', function (done) {
+  afterEach('Shut down server afterwards', function (done) {
     server.close();
+    portNumber++;
     done();
   });
 
@@ -233,8 +236,8 @@ describe('Integration tests', function () {
     });
 
     it('Token should be available inside login callback if token engine signing is synchronous', function (done) {
-      var port = 8009;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authSignAsync: false
       });
@@ -242,7 +245,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -257,8 +260,8 @@ describe('Integration tests', function () {
     });
 
     it('If token engine signing is asynchronous, authentication can be captured using the authenticate event', function (done) {
-      var port = 8010;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authSignAsync: true
       });
@@ -266,7 +269,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -282,8 +285,8 @@ describe('Integration tests', function () {
     });
 
     it('Should still work if token verification is asynchronous', function (done) {
-      var port = 8011;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authVerifyAsync: false
       });
@@ -291,7 +294,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -313,8 +316,8 @@ describe('Integration tests', function () {
     });
 
     it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', function (done) {
-      var port = 8012;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authVerifyAsync: false
       });
@@ -322,7 +325,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -341,8 +344,8 @@ describe('Integration tests', function () {
     });
 
     it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', function (done) {
-      var port = 8013;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authVerifyAsync: false
       });
@@ -350,7 +353,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -369,8 +372,8 @@ describe('Integration tests', function () {
     });
 
     it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', function (done) {
-      var port = 8014;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authVerifyAsync: false
       });
@@ -378,7 +381,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -397,8 +400,8 @@ describe('Integration tests', function () {
     });
 
     it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', function (done) {
-      var port = 8015;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         authVerifyAsync: false
       });
@@ -408,7 +411,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         client.once('connect', function (statusA) {
@@ -436,8 +439,8 @@ describe('Integration tests', function () {
 
   describe('Event flow', function () {
     it('Should support subscription batching', function (done) {
-      var port = 8016;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.on('connection', function (socket) {
@@ -474,7 +477,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         var channelList = [];
@@ -508,8 +511,8 @@ describe('Integration tests', function () {
     });
 
     it('should remove client data from the server when client disconnects before authentication process finished', function (done) {
-      var port = 8017;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -523,7 +526,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
         var serverSocket;
@@ -548,8 +551,8 @@ describe('Integration tests', function () {
     });
 
     it('Client should not be able to subscribe to a channel before the handshake has completed', function (done) {
-      var port = 8018;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -563,7 +566,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -598,8 +601,8 @@ describe('Integration tests', function () {
     });
 
     it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', function (done) {
-      var port = 8019;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -613,7 +616,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -667,8 +670,8 @@ describe('Integration tests', function () {
     });
 
     it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', function (done) {
-      var port = 8020;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -682,7 +685,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -736,8 +739,8 @@ describe('Integration tests', function () {
     });
 
     it('Server-side socket connect event and server connection event should trigger', function (done) {
-      var port = 8021;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
 
@@ -755,7 +758,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -817,8 +820,8 @@ describe('Integration tests', function () {
     });
 
     it('The close event should trigger when the socket loses the connection before the handshake', function (done) {
-      var port = 8022;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -832,7 +835,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -868,8 +871,8 @@ describe('Integration tests', function () {
     });
 
     it('The close event should trigger when the socket loses the connection after the handshake', function (done) {
-      var port = 8023;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.setAuthEngine({
@@ -883,7 +886,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -919,8 +922,8 @@ describe('Integration tests', function () {
     });
 
     it('Exchange is attached to socket before the handshake event is triggered', function (done) {
-      var port = 8024;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
 
@@ -929,7 +932,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -944,8 +947,8 @@ describe('Integration tests', function () {
     });
 
     it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish packets without crashing', function (done) {
-      var port = 8025;
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
 
@@ -954,7 +957,7 @@ describe('Integration tests', function () {
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -1052,11 +1055,11 @@ describe('Integration tests', function () {
   });
   describe('Middleware', function () {
     var middlewareFunction;
-    var port = 8026;
     var middlewareWasExecuted = false;
 
     beforeEach('Launch server without middleware before start', function (done) {
-      server = socketClusterServer.listen(port, {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
       });
       server.on('ready', function () {
@@ -1067,7 +1070,6 @@ describe('Integration tests', function () {
     afterEach('Shut down server afterwards', function (done) {
       destroyTestCase(function () {
         server.close();
-        port++;
         done();
       });
     });
@@ -1084,7 +1086,7 @@ describe('Integration tests', function () {
 
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 
@@ -1105,7 +1107,7 @@ describe('Integration tests', function () {
 
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
-          port: port,
+          port: portNumber,
           multiplex: false
         });
 

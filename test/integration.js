@@ -135,13 +135,9 @@ describe('Integration tests', function () {
     });
   });
 
-  afterEach('Shut down server afterwards', function (done) {
+  afterEach('Shut down client after each test', function (done) {
     server.close();
     portNumber++;
-    done();
-  });
-
-  afterEach('Shut down client after each test', function (done) {
     destroyTestCase(function () {
       global.localStorage.removeItem('socketCluster.authToken');
       done();
@@ -1076,7 +1072,6 @@ describe('Integration tests', function () {
 
 
     describe('MIDDLEWARE_AUTHENTICATE', function () {
-
       it('Should not run authenticate middleware if JWT token does not exist', function (done) {
         middlewareFunction = function (req, next) {
           middlewareWasExecuted = true;
@@ -1116,6 +1111,57 @@ describe('Integration tests', function () {
           assert.equal(middlewareWasExecuted, true);
           done();
         });
+      });
+    });
+
+    describe('MIDDLEWARE_HANDSHAKE_SC', function () {
+      it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_SC blocks with an error', function (done) {
+        var middlewareWasExecuted = false;
+        var serverWarnings = [];
+        var clientErrors = [];
+        var abortStatus;
+        var abortReason;
+
+        middlewareFunction = function (req, next) {
+          setTimeout(function () {
+            middlewareWasExecuted = true;
+            var err = new Error('SC handshake failed because of invalid query auth parameters');
+            err.name = 'InvalidAuthQueryHandshakeError';
+            next(err);
+          }, 100);
+        };
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+
+        server.on('warning', function (err) {
+          serverWarnings.push(err);
+        });
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.on('error', function (err) {
+          clientErrors.push(err);
+        });
+
+        client.once('connectAbort', function (status, reason) {
+          abortStatus = status;
+          abortReason = reason;
+        });
+
+        setTimeout(function () {
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(clientErrors[0], null);
+          assert.equal(clientErrors[0].name, 'InvalidAuthQueryHandshakeError');
+          assert.notEqual(clientErrors[1], null);
+          assert.equal(clientErrors[1].name, 'SocketProtocolError');
+          assert.notEqual(serverWarnings[0], null);
+          assert.equal(serverWarnings[0].name, 'InvalidAuthQueryHandshakeError');
+          assert.equal(abortStatus, 4003);
+          done();
+        }, 200);
       });
     });
   });

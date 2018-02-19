@@ -220,7 +220,7 @@ SCSocket.prototype._onSCClose = function (code, data) {
     Emitter.prototype.emit.call(this, 'close', code, data);
 
     if (!SCSocket.ignoreStatuses[code]) {
-      var failureMessage;
+      var closeMessage;
       if (data) {
         var reasonString;
         if (typeof data == 'object') {
@@ -232,11 +232,11 @@ SCSocket.prototype._onSCClose = function (code, data) {
         } else {
           reasonString = data;
         }
-        failureMessage = 'Socket connection failed: ' + reasonString;
+        closeMessage = 'Socket connection closed with status code ' + code + ' and reason: ' + reasonString;
       } else {
-        failureMessage = 'Socket connection failed for unknown reasons';
+        closeMessage = 'Socket connection closed with status code ' + code;
       }
-      var err = new SocketProtocolError(SCSocket.errorStatuses[code] || failureMessage, code);
+      var err = new SocketProtocolError(SCSocket.errorStatuses[code] || closeMessage, code);
       Emitter.prototype.emit.call(this, 'error', err);
     }
   }

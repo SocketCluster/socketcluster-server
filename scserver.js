@@ -563,11 +563,11 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       socket: scSocket
     }, function (err, statusCode) {
       if (err) {
-        var handshakeError = scErrors.dehydrateError(err);
         var clientSocketErrorStatus = {
           code: statusCode
         };
         respond(err, clientSocketErrorStatus);
+        scSocket.disconnect(statusCode);
         return;
       }
       self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {

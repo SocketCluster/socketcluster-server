@@ -561,9 +561,13 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
     self._passThroughHandshakeSCMiddleware({
       socket: scSocket
-    }, function (err) {
+    }, function (err, statusCode) {
       if (err) {
-        respond(err);
+        var handshakeError = scErrors.dehydrateError(err);
+        var clientSocketErrorStatus = {
+          code: statusCode
+        };
+        respond(err, clientSocketErrorStatus);
         return;
       }
       self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
@@ -891,11 +895,17 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
   };
 
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
-    function (err) {
+    function (err, results) {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware was already invoked'));
       } else {
         callbackInvoked = true;
+        var statusCode;
+        if (results.length) {
+          statusCode = results[results.length - 1] || 4008;
+        } else {
+          statusCode = 4008;
+        }
         if (err) {
           if (err === true) {
             err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware', self.MIDDLEWARE_HANDSHAKE_SC);
@@ -903,7 +913,7 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
             self.emit('warning', err);
           }
         }
-        cb(err);
+        cb(err, statusCode);
       }
     }
   );

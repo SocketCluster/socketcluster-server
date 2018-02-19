@@ -1120,13 +1120,12 @@ describe('Integration tests', function () {
         var serverWarnings = [];
         var clientErrors = [];
         var abortStatus;
-        var abortReason;
 
         middlewareFunction = function (req, next) {
           setTimeout(function () {
             middlewareWasExecuted = true;
-            var err = new Error('SC handshake failed because of invalid query auth parameters');
-            err.name = 'InvalidAuthQueryHandshakeError';
+            var err = new Error('SC handshake failed because the server was too lazy');
+            err.name = 'TooLazyHandshakeError';
             next(err);
           }, 100);
         };
@@ -1148,20 +1147,125 @@ describe('Integration tests', function () {
 
         client.once('connectAbort', function (status, reason) {
           abortStatus = status;
-          abortReason = reason;
         });
 
         setTimeout(function () {
           assert.equal(middlewareWasExecuted, true);
           assert.notEqual(clientErrors[0], null);
-          assert.equal(clientErrors[0].name, 'InvalidAuthQueryHandshakeError');
+          assert.equal(clientErrors[0].name, 'TooLazyHandshakeError');
           assert.notEqual(clientErrors[1], null);
           assert.equal(clientErrors[1].name, 'SocketProtocolError');
           assert.notEqual(serverWarnings[0], null);
-          assert.equal(serverWarnings[0].name, 'InvalidAuthQueryHandshakeError');
-          assert.equal(abortStatus, 4003);
+          assert.equal(serverWarnings[0].name, 'TooLazyHandshakeError');
+          assert.notEqual(abortStatus, null);
           done();
         }, 200);
+      });
+
+      it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_SC blocks without providing a status code', function (done) {
+        var middlewareWasExecuted = false;
+        var abortStatus;
+        var abortReason;
+
+        middlewareFunction = function (req, next) {
+          setTimeout(function () {
+            middlewareWasExecuted = true;
+            var err = new Error('SC handshake failed because the server was too lazy');
+            err.name = 'TooLazyHandshakeError';
+            next(err);
+          }, 100);
+        };
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.once('connectAbort', function (status, reason) {
+          abortStatus = status;
+          abortReason = reason;
+        });
+        client.on('error', function (err) {});
+
+        setTimeout(function () {
+          assert.equal(middlewareWasExecuted, true);
+          assert.equal(abortStatus, 4008);
+          assert.equal(abortReason, 'TooLazyHandshakeError: SC handshake failed because the server was too lazy');
+          done();
+        }, 200);
+      });
+
+      it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_SC blocks by providing a status code', function (done) {
+        var middlewareWasExecuted = false;
+        var abortStatus;
+        var abortReason;
+
+        middlewareFunction = function (req, next) {
+          setTimeout(function () {
+            middlewareWasExecuted = true;
+            var err = new Error('SC handshake failed because of invalid query auth parameters');
+            err.name = 'InvalidAuthQueryHandshakeError';
+
+            // Pass custom 4501 status code as the second argument to the next() function.
+            // We will treat this code as a fatal authentication failure on the front end.
+            // A status code of 4500 or higher means that the client shouldn't try to reconnect.
+            next(err, 4501);
+          }, 100);
+        };
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.once('connectAbort', function (status, reason) {
+          abortStatus = status;
+          abortReason = reason;
+        });
+        client.on('error', function (err) {});
+
+        setTimeout(function () {
+          assert.equal(middlewareWasExecuted, true);
+          assert.equal(abortStatus, 4501);
+          assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: SC handshake failed because of invalid query auth parameters');
+          done();
+        }, 200);
+      });
+
+      it('Should connect with a delay if next() is called after a timeout inside the middleware function', function (done) {
+        var createConnectionTime = null;
+        var connectEventTime = null;
+        var abortStatus;
+        var abortReason;
+
+        middlewareFunction = function (req, next) {
+          setTimeout(function () {
+            next();
+          }, 500);
+        };
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+
+        createConnectionTime = Date.now();
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.once('connectAbort', function (status, reason) {
+          abortStatus = status;
+          abortReason = reason;
+        });
+        client.once('connect', function () {
+          connectEventTime = Date.now();
+          assert.equal(connectEventTime - createConnectionTime > 400, true);
+          done();
+        });
+        client.on('error', function (err) {});
       });
     });
   });

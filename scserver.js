@@ -15,6 +15,7 @@ var AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
 var AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
 var AuthTokenError = scErrors.AuthTokenError;
 var SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
+var InvalidArgumentsError = scErrors.InvalidArgumentsError;
 var InvalidOptionsError = scErrors.InvalidOptionsError;
 var InvalidActionError = scErrors.InvalidActionError;
 var BrokerError = scErrors.BrokerError;

@@ -639,6 +639,9 @@ SCServer.prototype.generateId = function () {
 };
 
 SCServer.prototype.addMiddleware = function (type, middleware) {
+  if (!this._middleware[type]) {
+    throw new InvalidArgumentsError(`Middleware type "${type}" is not supported. \nRead more: https://socketcluster.io/#!/docs/middleware-and-authorization`)
+  }
   this._middleware[type].push(middleware);
 };
 

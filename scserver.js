@@ -15,6 +15,7 @@ var AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
 var AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
 var AuthTokenError = scErrors.AuthTokenError;
 var SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
+var InvalidArgumentsError = scErrors.InvalidArgumentsError;
 var InvalidOptionsError = scErrors.InvalidOptionsError;
 var InvalidActionError = scErrors.InvalidActionError;
 var BrokerError = scErrors.BrokerError;
@@ -639,6 +640,10 @@ SCServer.prototype.generateId = function () {
 };
 
 SCServer.prototype.addMiddleware = function (type, middleware) {
+  if (!this._middleware[type]) {
+    throw new InvalidArgumentsError(`Middleware type "${type}" is not supported`);
+    // Read more: https://socketcluster.io/#!/docs/middleware-and-authorization
+  }
   this._middleware[type].push(middleware);
 };
 

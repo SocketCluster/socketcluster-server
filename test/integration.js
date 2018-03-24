@@ -2,6 +2,7 @@ var assert = require('assert');
 var socketClusterServer = require('../');
 var socketCluster = require('socketcluster-client');
 var localStorage = require('localStorage');
+var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
 
 // Add to the global scope like in browser.
 global.localStorage = localStorage;
@@ -92,16 +93,20 @@ var connectionHandler = function (socket) {
 };
 
 var destroyTestCase = function (next) {
-  if (client && client.state != client.CLOSED) {
-    client.once('disconnect', function () {
-      client.removeAllListeners('connectAbort');
+  if (client) {
+    client.on('error', function (err) {});
+
+    if (client.state != client.CLOSED) {
+      client.once('close', function () {
+        client.removeAllListeners('close');
+        client.removeAllListeners('connectAbort');
+        client.removeAllListeners('disconnect');
+        next();
+      });
+      client.disconnect();
+    } else {
       next();
-    });
-    client.once('connectAbort', function () {
-      client.removeAllListeners('disconnect');
-      next();
-    });
-    client.disconnect();
+    }
   } else {
     next();
   }
@@ -111,6 +116,7 @@ describe('Integration tests', function () {
   beforeEach('Run the server before start', function (done) {
     clientOptions = {
       hostname: '127.0.0.1',
+      multiplex: false,
       port: portNumber
     };
     serverOptions = {
@@ -1049,7 +1055,7 @@ describe('Integration tests', function () {
       });
     });
 
-    it('Unsubscribe event should trigger before private _disconnect event', function (done) {
+    it('When default SCSimpleBroker broker engine is used, unsubscribe event should trigger before disconnect event', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey
@@ -1064,15 +1070,15 @@ describe('Integration tests', function () {
             channel: channel
           });
         });
-        socket.on('_disconnect', function (code, reason) {
+        socket.on('disconnect', function (code, reason) {
           eventList.push({
-            type: '_disconnect',
+            type: 'disconnect',
             code: code,
             reason: reason
           });
           assert.equal(eventList[0].type, 'unsubscribe');
           assert.equal(eventList[0].channel, 'foo');
-          assert.equal(eventList[1].type, '_disconnect');
+          assert.equal(eventList[1].type, 'disconnect');
 
           done();
         });
@@ -1088,8 +1094,96 @@ describe('Integration tests', function () {
         client.subscribe('foo').on('subscribe', function () {
           setTimeout(function () {
             client.disconnect();
-          }, 50);
+          }, 200);
         });
+      });
+    });
+
+    it('When custom broker engine is used (with async unsubscribe), unsubscribe event should trigger before disconnect event', function (done) {
+      portNumber++;
+      var customBrokerEngine = new SCSimpleBroker();
+      var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
+      customBrokerEngine.unsubscribeSocket = function (socket, channel, callback) {
+        defaultUnsubscribeSocket.call(this, socket, channel, function () {
+          setTimeout(function () {
+            callback && callback();
+          }, 100);
+        });
+      };
+
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        brokerEngine: customBrokerEngine
+      });
+
+      var eventList = [];
+
+      server.on('connection', function (socket) {
+        socket.on('unsubscribe', function (channel) {
+          eventList.push({
+            type: 'unsubscribe',
+            channel: channel
+          });
+        });
+        socket.on('disconnect', function (code, reason) {
+          eventList.push({
+            type: 'disconnect',
+            code: code,
+            reason: reason
+          });
+
+          assert.equal(eventList[0].type, 'unsubscribe');
+          assert.equal(eventList[0].channel, 'foo');
+          assert.equal(eventList[1].type, 'disconnect');
+
+          done();
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.subscribe('foo').on('subscribe', function () {
+          setTimeout(function () {
+            client.disconnect();
+          }, 200);
+        });
+      });
+    });
+
+    it('Socket should emit an error when trying to unsubscribe to a channel which it is not subscribed to', function (done) {
+      portNumber++;
+
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey
+      });
+
+      var errorList = [];
+
+      server.on('connection', function (socket) {
+        socket.on('error', function (err) {
+          errorList.push(err);
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.emit('#unsubscribe', 'bar');
+
+        setTimeout(function () {
+          assert.equal(errorList.length, 1);
+          assert.equal(errorList[0].name, 'BrokerError');
+          done();
+        }, 100);
       });
     });
   });
@@ -1226,12 +1320,12 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         client.once('connectAbort', function (status, reason) {
           abortStatus = status;
           abortReason = reason;
         });
-        client.on('error', function (err) {});
 
         setTimeout(function () {
           assert.equal(middlewareWasExecuted, true);
@@ -1265,12 +1359,12 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         client.once('connectAbort', function (status, reason) {
           abortStatus = status;
           abortReason = reason;
         });
-        client.on('error', function (err) {});
 
         setTimeout(function () {
           assert.equal(middlewareWasExecuted, true);
@@ -1309,7 +1403,6 @@ describe('Integration tests', function () {
           assert.equal(connectEventTime - createConnectionTime > 400, true);
           done();
         });
-        client.on('error', function (err) {});
       });
     });
   });

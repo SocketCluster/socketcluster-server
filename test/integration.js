@@ -1048,7 +1048,52 @@ describe('Integration tests', function () {
         }, 300);
       });
     });
+
+    it('Unsubscribe event should trigger before private _disconnect event', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey
+      });
+
+      var eventList = [];
+
+      server.on('connection', function (socket) {
+        socket.on('unsubscribe', function (channel) {
+          eventList.push({
+            type: 'unsubscribe',
+            channel: channel
+          });
+        });
+        socket.on('_disconnect', function (code, reason) {
+          eventList.push({
+            type: '_disconnect',
+            code: code,
+            reason: reason
+          });
+          assert.equal(eventList[0].type, 'unsubscribe');
+          assert.equal(eventList[0].channel, 'foo');
+          assert.equal(eventList[1].type, '_disconnect');
+
+          done();
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.subscribe('foo').on('subscribe', function () {
+          setTimeout(function () {
+            client.disconnect();
+          }, 50);
+        });
+      });
+    });
   });
+
   describe('Middleware', function () {
     var middlewareFunction;
     var middlewareWasExecuted = false;
@@ -1069,7 +1114,6 @@ describe('Integration tests', function () {
         done();
       });
     });
-
 
     describe('MIDDLEWARE_AUTHENTICATE', function () {
       it('Should not run authenticate middleware if JWT token does not exist', function (done) {

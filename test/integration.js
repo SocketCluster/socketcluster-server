@@ -1099,7 +1099,7 @@ describe('Integration tests', function () {
       });
     });
 
-    it('When custom broker engine is used (with async unsubscribe), unsubscribe event should trigger before disconnect event', function (done) {
+    it('When disconnecting a socket, the unsubscribe event should trigger before disconnect event (accounting for delayed unsubscribe by brokerEngine)', function (done) {
       portNumber++;
       var customBrokerEngine = new SCSimpleBroker();
       var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
@@ -1146,6 +1146,7 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         client.subscribe('foo').on('subscribe', function () {
           setTimeout(function () {
@@ -1184,6 +1185,61 @@ describe('Integration tests', function () {
           assert.equal(errorList[0].name, 'BrokerError');
           done();
         }, 100);
+      });
+    });
+
+    it('Socket should not receive messages from a channel which it has only just unsubscribed from (accounting for delayed unsubscribe by brokerEngine)', function (done) {
+      portNumber++;
+      var customBrokerEngine = new SCSimpleBroker();
+      var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
+      customBrokerEngine.unsubscribeSocket = function (socket, channel, callback) {
+        defaultUnsubscribeSocket.call(this, socket, channel, function () {
+          setTimeout(function () {
+            callback && callback();
+          }, 300);
+        });
+      };
+
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        brokerEngine: customBrokerEngine
+      });
+
+      server.on('connection', function (socket) {
+        socket.on('unsubscribe', function (channelName) {
+          if (channelName === 'foo') {
+            server.exchange.publish('foo', 'hello');
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        // Stub the isSubscribed method so that it always returns true.
+        // That way the client will always invoke watchers whenever
+        // it receives a #publish event.
+        client.isSubscribed = function () { return true; };
+
+        var messageList = [];
+
+        var fooChannel = client.subscribe('foo');
+
+        client.watch('foo', function (data) {
+          messageList.push(data);
+        });
+
+        fooChannel.on('subscribe', function () {
+          client.emit('#unsubscribe', 'foo');
+        });
+
+        setTimeout(function () {
+          assert.equal(messageList.length, 0);
+          done();
+        }, 200);
       });
     });
   });

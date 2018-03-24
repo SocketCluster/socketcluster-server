@@ -215,28 +215,6 @@ SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
 SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback) {
   var self = this;
 
-  if (Array.isArray(channelOptions)) {
-    var tasks = [];
-    for (var i in channelOptions) {
-      if (channelOptions.hasOwnProperty(i)) {
-        (function (singleChannelOptions) {
-          tasks.push(function (cb) {
-            self._subscribeSocketToSingleChannel(socket, singleChannelOptions, cb);
-          });
-        })(channelOptions[i]);
-      }
-    }
-    async.waterfall(tasks, function (err) {
-      callback && callback(err);
-    });
-  } else {
-    this._subscribeSocketToSingleChannel(socket, channelOptions, callback);
-  }
-};
-
-SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channelOptions, callback) {
-  var self = this;
-
   if (!channelOptions) {
     callback && callback('Socket ' + socket.id + ' provided a malformated channel payload');
     return;
@@ -275,41 +253,25 @@ SCServer.prototype._subscribeSocketToSingleChannel = function (socket, channelOp
   });
 };
 
-SCServer.prototype._unsubscribeSocket = function (socket, channels, callback) {
-  var self = this;
-
-  if (channels == null) {
-    channels = [];
-    for (var channel in socket.channelSubscriptions) {
-      if (socket.channelSubscriptions.hasOwnProperty(channel)) {
-        channels.push(channel);
-      }
+SCServer.prototype._unsubscribeSocketFromAllChannels = function (socket) {
+  var channels = [];
+  for (var channel in socket.channelSubscriptions) {
+    if (socket.channelSubscriptions.hasOwnProperty(channel)) {
+      channels.push(channel);
     }
   }
-  if (Array.isArray(channels)) {
-    var tasks = [];
-    var len = channels.length;
-    for (var i = 0; i < len; i++) {
-      (function (channel) {
-        tasks.push(function (cb) {
-          self._unsubscribeSocketFromSingleChannel(socket, channel, cb);
-        });
-      })(channels[i]);
-    }
-    async.waterfall(tasks, function (err) {
-      callback && callback(err);
-    });
-  } else {
-    this._unsubscribeSocketFromSingleChannel(socket, channels, callback);
+  var len = channels.length;
+  for (var i = 0; i < len; i++) {
+    this._unsubscribeSocket(socket, channels[i]);
   }
 };
 
-SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, channel, callback) {
-  var self = this;
-
+SCServer.prototype._unsubscribeSocket = function (socket, channel) {
   if (typeof channel != 'string') {
-    callback && callback('Socket ' + socket.id + ' provided an invalid channel name');
-    return;
+    throw new InvalidActionError('Socket ' + socket.id + ' tried to unsubscribe from an invalid channel name');
+  }
+  if (!socket.channelSubscriptions[channel]) {
+    throw new InvalidActionError('Socket ' + socket.id + ' tried to unsubscribe from a channel which it is not subscribed to');
   }
 
   delete socket.channelSubscriptions[channel];
@@ -317,11 +279,10 @@ SCServer.prototype._unsubscribeSocketFromSingleChannel = function (socket, chann
     socket.channelSubscriptionsCount--;
   }
 
-  this.brokerEngine.unsubscribeSocket(socket, channel, function (err) {
-    socket.emit('unsubscribe', channel);
-    self.emit('unsubscription', socket, channel);
-    callback && callback(err);
-  });
+  this.brokerEngine.unsubscribeSocket(socket, channel);
+
+  socket.emit('unsubscribe', channel);
+  this.emit('unsubscription', socket, channel);
 };
 
 SCServer.prototype._processTokenError = function (err) {
@@ -495,15 +456,18 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   });
 
   scSocket.on('#unsubscribe', function (channel, res) {
-    self._unsubscribeSocket(scSocket, channel, function (err) {
-      if (err) {
-        var error = new BrokerError('Failed to unsubscribe socket from the ' + channel + ' channel - ' + err);
-        res(error);
-        scSocket.emit('error', error);
-      } else {
-        res();
-      }
-    });
+    var error;
+    try {
+      self._unsubscribeSocket(scSocket, channel);
+    } catch (err) {
+      error = new BrokerError('Failed to unsubscribe socket from the ' + channel + ' channel - ' + err.message);
+    }
+    if (error) {
+      res(error);
+      scSocket.emit('error', error);
+    } else {
+      res();
+    }
   });
 
   var cleanupSocket = function (type, code, data) {
@@ -532,21 +496,17 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       self.pendingClientsCount--;
     }
 
-    self._unsubscribeSocket(scSocket, null, function (err) {
-      if (err) {
-        scSocket.emit('error', new BrokerError('Failed to unsubscribe socket from all channels - ' + err));
-      } else {
-        if (type == 'disconnect') {
-          self.emit('_disconnection', scSocket, code, data);
-          self.emit('disconnection', scSocket, code, data);
-        } else if (type == 'abort') {
-          self.emit('_connectionAbort', scSocket, code, data);
-          self.emit('connectionAbort', scSocket, code, data);
-        }
-        self.emit('_closure', scSocket, code, data);
-        self.emit('closure', scSocket, code, data);
-      }
-    });
+    self._unsubscribeSocketFromAllChannels(scSocket);
+
+    if (type == 'disconnect') {
+      self.emit('_disconnection', scSocket, code, data);
+      self.emit('disconnection', scSocket, code, data);
+    } else if (type == 'abort') {
+      self.emit('_connectionAbort', scSocket, code, data);
+      self.emit('connectionAbort', scSocket, code, data);
+    }
+    self.emit('_closure', scSocket, code, data);
+    self.emit('closure', scSocket, code, data);
   };
 
   scSocket.once('_disconnect', cleanupSocket.bind(scSocket, 'disconnect'));

@@ -29,7 +29,7 @@ var SCServer = function (options) {
 
   var opts = {
     brokerEngine: new SCSimpleBroker(),
-    wsEngine: 'uws',
+    wsEngine: 'sc-uws',
     wsEngineServerOptions: {},
     maxPayload: null,
     allowClientPublish: true,
@@ -373,7 +373,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   var self = this;
 
   if (this.options.wsEngine == 'ws') {
-    // Normalize ws module to match uws module.
+    // Normalize ws module to match sc-uws module.
     wsSocket.upgradeReq = upgradeReq;
   }
 

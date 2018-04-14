@@ -43,7 +43,8 @@ var SCSocket = function (id, server, socket) {
 
   this.request = this.socket.upgradeReq || {};
 
-  if (this.server.options.wsEngine == 'uws') {
+  var wsEngine = this.server.options.wsEngine;
+  if (wsEngine == 'sc-uws' || wsEngine == 'uws') {
     this.request.connection = this.socket._socket;
   }
   if (this.request.connection) {

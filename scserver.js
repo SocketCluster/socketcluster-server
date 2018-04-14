@@ -29,7 +29,7 @@ var SCServer = function (options) {
 
   var opts = {
     brokerEngine: new SCSimpleBroker(),
-    wsEngine: 'sc-uws',
+    wsEngine: 'ws',
     wsEngineServerOptions: {},
     maxPayload: null,
     allowClientPublish: true,

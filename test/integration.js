@@ -18,6 +18,7 @@ var allowedUsers = {
 };
 
 var TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
+var WS_ENGINE = 'ws';
 
 var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MzE2Mzc1ODk3OTA4MDMxMCwiaWF0IjoxNTAyNzQ3NzQ2fQ.dSZOfsImq4AvCu-Or3Fcmo7JNv1hrV3WqxaiSKkTtAo';
 var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjMxNjM3NTg5NzkwODAzMTB9.XxbzPPnnXrJfZrS0FJwb_EAhIu2VY5i7rGyUThtNLh4';
@@ -120,7 +121,8 @@ describe('Integration tests', function () {
       port: portNumber
     };
     serverOptions = {
-      authKey: 'testkey'
+      authKey: 'testkey',
+      wsEngine: WS_ENGINE
     };
 
     server = socketClusterServer.listen(portNumber, serverOptions);
@@ -241,6 +243,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authSignAsync: false
       });
       server.on('connection', connectionHandler);
@@ -265,6 +268,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authSignAsync: true
       });
       server.on('connection', connectionHandler);
@@ -290,6 +294,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authVerifyAsync: false
       });
       server.on('connection', connectionHandler);
@@ -321,6 +326,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authVerifyAsync: false
       });
       server.on('connection', connectionHandler);
@@ -349,6 +355,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authVerifyAsync: false
       });
       server.on('connection', connectionHandler);
@@ -377,6 +384,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authVerifyAsync: false
       });
       server.on('connection', connectionHandler);
@@ -405,6 +413,7 @@ describe('Integration tests', function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         authVerifyAsync: false
       });
       var warningMap = {};
@@ -443,7 +452,8 @@ describe('Integration tests', function () {
     it('Should support subscription batching', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.on('connection', function (socket) {
         connectionHandler(socket);
@@ -515,7 +525,8 @@ describe('Integration tests', function () {
     it('should remove client data from the server when client disconnects before authentication process finished', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -555,7 +566,8 @@ describe('Integration tests', function () {
     it('Client should not be able to subscribe to a channel before the handshake has completed', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -605,7 +617,8 @@ describe('Integration tests', function () {
     it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -674,7 +687,8 @@ describe('Integration tests', function () {
     it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -743,7 +757,8 @@ describe('Integration tests', function () {
     it('Server-side socket connect event and server connection event should trigger', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
 
       var connectionEmitted = false;
@@ -824,7 +839,8 @@ describe('Integration tests', function () {
     it('The close event should trigger when the socket loses the connection before the handshake', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -875,7 +891,8 @@ describe('Integration tests', function () {
     it('The close event should trigger when the socket loses the connection after the handshake', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
@@ -926,7 +943,8 @@ describe('Integration tests', function () {
     it('Exchange is attached to socket before the handshake event is triggered', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
 
       server.on('connection', connectionHandler);
@@ -951,7 +969,8 @@ describe('Integration tests', function () {
     it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish packets without crashing', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
 
       server.on('connection', connectionHandler);
@@ -1058,7 +1077,8 @@ describe('Integration tests', function () {
     it('When default SCSimpleBroker broker engine is used, unsubscribe event should trigger before disconnect event', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
 
       var eventList = [];
@@ -1113,6 +1133,7 @@ describe('Integration tests', function () {
 
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
       });
 
@@ -1160,7 +1181,8 @@ describe('Integration tests', function () {
       portNumber++;
 
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
 
       var errorList = [];
@@ -1202,6 +1224,7 @@ describe('Integration tests', function () {
 
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
       });
 
@@ -1251,7 +1274,8 @@ describe('Integration tests', function () {
     beforeEach('Launch server without middleware before start', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
       });
       server.on('ready', function () {
         done();

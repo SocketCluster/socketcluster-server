@@ -743,7 +743,13 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
               }
               cb(err, eventData);
             }
-          }
+          },
+          // If this callback function isn't provided, async.applyEachSeries
+          // will treat the previous argument (meant to be the next function
+          // passed to the middleware) as if it were the callback, and the
+          // middleware will be unfairly deprived of its next function
+          // (causing exceptions on calls to next() because next is undefined).
+          () => {}
         );
       }
     } else if (event == '#publish') {
@@ -784,7 +790,13 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                 });
               }
             }
-          }
+          },
+          // If this callback function isn't provided, async.applyEachSeries
+          // will treat the previous argument (meant to be the next function
+          // passed to the middleware) as if it were the callback, and the
+          // middleware will be unfairly deprived of its next function
+          // (causing exceptions on calls to next() because next is undefined).
+          () => {}
         );
       } else {
         var noPublishError = new InvalidActionError('Client publish feature is disabled');
@@ -814,7 +826,13 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
           }
           cb(err, request.data);
         }
-      }
+      },
+      // If this callback function isn't provided, async.applyEachSeries
+      // will treat the previous argument (meant to be the next function
+      // passed to the middleware) as if it were the callback, and the
+      // middleware will be unfairly deprived of its next function
+      // (causing exceptions on calls to next() because next is undefined).
+      () => {}
     );
   }
 };
@@ -847,7 +865,13 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
         }
         cb(err, isBadToken);
       }
-    }
+    },
+    // If this callback function isn't provided, async.applyEachSeries
+    // will treat the previous argument (meant to be the next function
+    // passed to the middleware) as if it were the callback, and the
+    // middleware will be unfairly deprived of its next function
+    // (causing exceptions on calls to next() because next is undefined).
+    () => {}
   );
 };
 
@@ -880,7 +904,13 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
         }
         cb(err, statusCode);
       }
-    }
+    },
+    // If this callback function isn't provided, async.applyEachSeries
+    // will treat the previous argument (meant to be the next function
+    // passed to the middleware) as if it were the callback, and the
+    // middleware will be unfairly deprived of its next function
+    // (causing exceptions on calls to next() because next is undefined).
+    () => {}
   );
 };
 
@@ -918,7 +948,13 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
             cb(null, eventData);
           }
         }
-      }
+      },
+      // If this callback function isn't provided, async.applyEachSeries
+      // will treat the previous argument (meant to be the next function
+      // passed to the middleware) as if it were the callback, and the
+      // middleware will be unfairly deprived of its next function
+      // (causing exceptions on calls to next() because next is undefined).
+      () => {}
     );
   } else {
     cb(null, eventData);

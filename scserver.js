@@ -36,6 +36,7 @@ var SCServer = function (options) {
     ackTimeout: 10000,
     handshakeTimeout: 10000,
     pingTimeout: 20000,
+    pingTimeoutDisabled: false,
     pingInterval: 8000,
     origins: '*:*',
     appName: uuid.v4(),
@@ -82,6 +83,7 @@ var SCServer = function (options) {
   this.handshakeTimeout = opts.handshakeTimeout;
   this.pingInterval = opts.pingInterval;
   this.pingTimeout = opts.pingTimeout;
+  this.pingTimeoutDisabled = opts.pingTimeoutDisabled;
   this.allowClientPublish = opts.allowClientPublish;
   this.perMessageDeflate = opts.perMessageDeflate;
   this.httpServer = opts.httpServer;

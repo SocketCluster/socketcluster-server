@@ -1486,4 +1486,132 @@ describe('Integration tests', function () {
       });
     });
   });
+
+  describe('Ping/pong', function () {
+    describe('When when pingTimeoutDisabled is not set (false)', function () {
+      beforeEach('Launch server with ping options before start', function (done) {
+        portNumber++;
+        // Intentionally make pingInterval higher than pingTimeout, that
+        // way the client will never receive a ping or send back a pong.
+        server = socketClusterServer.listen(portNumber, {
+          authKey: serverOptions.authKey,
+          wsEngine: WS_ENGINE,
+          pingInterval: 2000,
+          pingTimeout: 500
+        });
+        server.on('ready', function () {
+          done();
+        });
+      });
+
+      afterEach('Shut down server afterwards', function (done) {
+        destroyTestCase(function () {
+          server.close();
+          done();
+        });
+      });
+
+      it('Should disconnect socket if server does not receive a pong from client before timeout', function (done) {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        var serverWarning = null;
+        server.on('warning', function (err) {
+          serverWarning = err;
+        });
+
+        var serverDisconnectionCode = null;
+        server.on('disconnection', function (socket, code) {
+          serverDisconnectionCode = code;
+        });
+
+        var clientError = null;
+        client.on('error', function (err) {
+          clientError = err;
+        });
+
+        var clientDisconnectCode = null;
+        client.on('disconnect', function (code) {
+          clientDisconnectCode = code;
+        });
+
+        setTimeout(function () {
+          assert.notEqual(clientError, null);
+          assert.equal(clientError.name, 'SocketProtocolError');
+          assert.equal(clientDisconnectCode, 4000);
+
+          assert.notEqual(serverWarning, null);
+          assert.equal(serverWarning.name, 'SocketProtocolError');
+          assert.equal(serverDisconnectionCode, 4001);
+          done();
+        }, 1000);
+      });
+    });
+
+    describe('When when pingTimeoutDisabled is true', function () {
+      beforeEach('Launch server with ping options before start', function (done) {
+        portNumber++;
+        // Intentionally make pingInterval higher than pingTimeout, that
+        // way the client will never receive a ping or send back a pong.
+        server = socketClusterServer.listen(portNumber, {
+          authKey: serverOptions.authKey,
+          wsEngine: WS_ENGINE,
+          pingInterval: 2000,
+          pingTimeout: 500,
+          pingTimeoutDisabled: true
+        });
+        server.on('ready', function () {
+          done();
+        });
+      });
+
+      afterEach('Shut down server afterwards', function (done) {
+        destroyTestCase(function () {
+          server.close();
+          done();
+        });
+      });
+
+      it('Should not disconnect socket if server does not receive a pong from client before timeout', function (done) {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false,
+          pingTimeoutDisabled: true
+        });
+
+        var serverWarning = null;
+        server.on('warning', function (err) {
+          serverWarning = err;
+        });
+
+        var serverDisconnectionCode = null;
+        server.on('disconnection', function (socket, code) {
+          serverDisconnectionCode = code;
+        });
+
+        var clientError = null;
+        client.on('error', function (err) {
+          clientError = err;
+        });
+
+        var clientDisconnectCode = null;
+        client.on('disconnect', function (code) {
+          clientDisconnectCode = code;
+        });
+
+        setTimeout(function () {
+          assert.equal(clientError, null);
+          assert.equal(clientDisconnectCode, null);
+
+          assert.equal(serverWarning, null);
+          assert.equal(serverDisconnectionCode, null);
+          done();
+        }, 1000);
+      });
+    });
+  });
 });

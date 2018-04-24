@@ -178,6 +178,9 @@ SCSocket.prototype._handleEventObject = function (obj, message) {
 };
 
 SCSocket.prototype._resetPongTimeout = function () {
+  if (this.server.pingTimeoutDisabled) {
+    return;
+  }
   var self = this;
 
   clearTimeout(this._pingTimeoutTicker);

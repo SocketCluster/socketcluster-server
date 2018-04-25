@@ -75,7 +75,9 @@ var SCSocket = function (id, server, socket) {
     self._onSCClose(code, data);
   });
 
-  this._pingIntervalTicker = setInterval(this._sendPing.bind(this), this.server.pingInterval);
+  if (!this.server.pingTimeoutDisabled) {
+    this._pingIntervalTicker = setInterval(this._sendPing.bind(this), this.server.pingInterval);
+  }
   this._resetPongTimeout();
 
   // Receive incoming raw messages

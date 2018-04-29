@@ -324,6 +324,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
   var self = this;
 
   this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
+    var oldState = scSocket.authState;
     if (authToken) {
       scSocket.signedAuthToken = signedAuthToken;
       scSocket.authToken = authToken;
@@ -353,7 +354,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
         }
         // If an error is passed back from the authenticate middleware, it will be treated as a
         // server warning and not a socket error.
-        callback(middlewareError, isBadToken || false);
+        callback(middlewareError, isBadToken || false, oldState);
       });
     } else {
       var errorData = self._processTokenError(err);
@@ -366,7 +367,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
           self._emitBadAuthTokenError(scSocket, errorData.authError, signedAuthToken);
         }
       }
-      callback(errorData.authError, errorData.isBadToken);
+      callback(errorData.authError, errorData.isBadToken, oldState);
     }
   });
 };
@@ -397,14 +398,13 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   this.emit('handshake', scSocket);
 
   scSocket.on('#authenticate', function (signedAuthToken, respond) {
-    self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
+    self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken, oldState) {
       if (err) {
         if (isBadToken) {
           scSocket.deauthenticate();
         }
       } else {
-        scSocket.emit('authenticate', scSocket.authToken);
-        self.emit('authentication', scSocket, scSocket.authToken);
+        scSocket.triggerAuthenticationEvents(oldState);
       }
       var authStatus = {
         isAuthenticated: !!scSocket.authToken,
@@ -419,11 +419,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   });
 
   scSocket.on('#removeAuthToken', function () {
-    var oldToken = scSocket.authToken;
-    scSocket.authToken = null;
-    scSocket.authState = scSocket.UNAUTHENTICATED;
-    scSocket.emit('deauthenticate', oldToken);
-    self.emit('deauthentication', scSocket, oldToken);
+    scSocket.deauthenticateSelf();
   });
 
   scSocket.on('#subscribe', function (channelOptions, res) {
@@ -481,6 +477,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     scSocket.off('#subscribe');
     scSocket.off('#unsubscribe');
     scSocket.off('authenticate');
+    scSocket.off('authStateChange');
     scSocket.off('deauthenticate');
     scSocket.off('_disconnect');
     scSocket.off('_connectAbort');
@@ -533,7 +530,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         scSocket.disconnect(statusCode);
         return;
       }
-      self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken) {
+      self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken, oldState) {
         if (scSocket.state == scSocket.CLOSED) {
           return;
         }
@@ -578,8 +575,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         self.emit('connection', scSocket, serverSocketStatus);
 
         if (clientSocketStatus.isAuthenticated) {
-          scSocket.emit('authenticate', scSocket.authToken);
-          self.emit('authentication', scSocket, scSocket.authToken);
+          scSocket.triggerAuthenticationEvents(oldState);
         }
         // Treat authentication failure as a 'soft' error
         respond(null, clientSocketStatus);

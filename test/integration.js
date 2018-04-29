@@ -209,15 +209,110 @@ describe('Integration tests', function () {
     });
 
     it('Should allow switching between users', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+      var authenticateEvents = [];
+      var deauthenticateEvents = [];
+      var authenticationStateChangeEvents = [];
+      var authStateChangeEvents = [];
+
+      server.on('authenticationStateChange', function (socket, stateChangeData) {
+        authenticationStateChangeEvents.push({
+          socket: socket,
+          stateChangeData: stateChangeData
+        });
+      });
+
+      server.on('connection', function (socket) {
+        socket.on('authenticate', function (authToken) {
+          authenticateEvents.push(authToken);
+        });
+        socket.on('deauthenticate', function (oldAuthToken) {
+          deauthenticateEvents.push(oldAuthToken);
+        });
+        socket.on('authStateChange', function (stateChangeData) {
+          authStateChangeEvents.push(stateChangeData);
+        });
+      });
+
+      var clientSocketId;
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
+        clientSocketId = client.id;
         client.emit('login', {username: 'alice'});
+      });
 
-        client.once('authTokenChange', function (signedToken) {
-          assert.equal(client.authState, 'authenticated');
-          assert.notEqual(client.authToken, null);
-          assert.equal(client.authToken.username, 'alice');
+      setTimeout(function () {
+        assert.equal(deauthenticateEvents.length, 0);
+        assert.equal(authenticateEvents.length, 2);
+        assert.equal(authenticateEvents[0].username, 'bob');
+        assert.equal(authenticateEvents[1].username, 'alice');
 
+        assert.equal(authenticationStateChangeEvents.length, 1);
+        assert.notEqual(authenticationStateChangeEvents[0].socket, null);
+        assert.equal(authenticationStateChangeEvents[0].socket.id, clientSocketId);
+        assert.equal(authenticationStateChangeEvents[0].stateChangeData.oldState, 'unauthenticated');
+        assert.equal(authenticationStateChangeEvents[0].stateChangeData.newState, 'authenticated');
+        assert.notEqual(authenticationStateChangeEvents[0].stateChangeData.authToken, null);
+        assert.equal(authenticationStateChangeEvents[0].stateChangeData.authToken.username, 'bob');
+
+        assert.equal(authStateChangeEvents.length, 1);
+        assert.equal(authStateChangeEvents[0].oldState, 'unauthenticated');
+        assert.equal(authStateChangeEvents[0].newState, 'authenticated');
+        assert.notEqual(authStateChangeEvents[0].authToken, null);
+        assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
+
+        done();
+      }, 100);
+    });
+
+    it('Should emit correct events/data when socket is deauthenticated', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+      var authenticationStateChangeEvents = [];
+      var authStateChangeEvents = [];
+
+      server.on('authenticationStateChange', function (socket, stateChangeData) {
+        authenticationStateChangeEvents.push({
+          socket: socket,
+          stateChangeData: stateChangeData
+        });
+      });
+
+      client = socketCluster.connect(clientOptions);
+      client.once('connect', function (statusA) {
+        client.deauthenticate();
+      });
+
+      server.on('connection', function (socket) {
+        var initialAuthToken = socket.authToken;
+
+        socket.on('authStateChange', function (stateChangeData) {
+          authStateChangeEvents.push(stateChangeData);
+        });
+
+        socket.on('deauthenticate', function (oldToken) {
+          assert.equal(oldToken, initialAuthToken);
+
+          assert.equal(authStateChangeEvents.length, 2);
+          assert.equal(authStateChangeEvents[0].oldState, 'unauthenticated');
+          assert.equal(authStateChangeEvents[0].newState, 'authenticated');
+          assert.notEqual(authStateChangeEvents[0].authToken, null);
+          assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
+          assert.equal(authStateChangeEvents[1].oldState, 'authenticated');
+          assert.equal(authStateChangeEvents[1].newState, 'unauthenticated');
+          assert.equal(authStateChangeEvents[1].authToken, null);
+
+          assert.equal(authenticationStateChangeEvents.length, 2);
+          assert.notEqual(authenticationStateChangeEvents[0].stateChangeData, null);
+          assert.equal(authenticationStateChangeEvents[0].stateChangeData.oldState, 'unauthenticated');
+          assert.equal(authenticationStateChangeEvents[0].stateChangeData.newState, 'authenticated');
+          assert.notEqual(authenticationStateChangeEvents[0].stateChangeData.authToken, null);
+          assert.equal(authenticationStateChangeEvents[0].stateChangeData.authToken.username, 'bob');
+          assert.notEqual(authenticationStateChangeEvents[1].stateChangeData, null);
+          assert.equal(authenticationStateChangeEvents[1].stateChangeData.oldState, 'authenticated');
+          assert.equal(authenticationStateChangeEvents[1].stateChangeData.newState, 'unauthenticated');
+          assert.equal(authenticationStateChangeEvents[1].stateChangeData.authToken, null);
           done();
         });
       });

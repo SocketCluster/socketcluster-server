@@ -26,6 +26,7 @@ var SCSocket = function (id, server, socket) {
     '_close': 1,
     'message': 1,
     'error': 1,
+    'authStateChange': 1,
     'authenticate': 1,
     'deauthenticate': 1,
     'badAuthToken': 1,
@@ -40,6 +41,7 @@ var SCSocket = function (id, server, socket) {
   this.server = server;
   this.socket = socket;
   this.state = this.CONNECTING;
+  this.authState = this.UNAUTHENTICATED;
 
   this.request = this.socket.upgradeReq || {};
 
@@ -376,10 +378,25 @@ SCSocket.prototype.emit = function (event, data, callback, options) {
   }
 };
 
+SCSocket.prototype.triggerAuthenticationEvents = function (oldState) {
+  if (oldState != this.AUTHENTICATED) {
+    var stateChangeData = {
+      oldState: oldState,
+      newState: this.authState,
+      authToken: this.authToken
+    };
+    this.emit('authStateChange', stateChangeData);
+    this.server.emit('authenticationStateChange', this, stateChangeData);
+  }
+  this.emit('authenticate', this.authToken);
+  this.server.emit('authentication', this, this.authToken);
+};
+
 SCSocket.prototype.setAuthToken = function (data, options, callback) {
   var self = this;
 
   var authToken = cloneDeep(data);
+  var oldState = this.authState;
   this.authState = this.AUTHENTICATED;
 
   if (options == null) {
@@ -439,21 +456,33 @@ SCSocket.prototype.setAuthToken = function (data, options, callback) {
   });
 
   this.authToken = authToken;
-  this.emit('authenticate', this.authToken);
-  this.server.emit('authentication', this, this.authToken);
+  this.triggerAuthenticationEvents(oldState);
 };
 
 SCSocket.prototype.getAuthToken = function () {
   return this.authToken;
 };
 
-SCSocket.prototype.deauthenticate = function (callback) {
+SCSocket.prototype.deauthenticateSelf = function () {
+  var oldState = this.authState;
   var oldToken = this.authToken;
   this.authToken = null;
   this.authState = this.UNAUTHENTICATED;
-  this.emit('#removeAuthToken', null, callback);
+  if (oldState != this.UNAUTHENTICATED) {
+    var stateChangeData = {
+      oldState: oldState,
+      newState: this.authState
+    };
+    this.emit('authStateChange', stateChangeData);
+    this.server.emit('authenticationStateChange', this, stateChangeData);
+  }
   this.emit('deauthenticate', oldToken);
   this.server.emit('deauthentication', this, oldToken);
+};
+
+SCSocket.prototype.deauthenticate = function (callback) {
+  this.deauthenticateSelf();
+  this.emit('#removeAuthToken', null, callback);
 };
 
 SCSocket.prototype.kickOut = function (channel, message, callback) {

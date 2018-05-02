@@ -1,4 +1,4 @@
-var SCSocket = require('./scsocket');
+var SCServerSocket = require('./scserversocket');
 var AuthEngine = require('sc-auth').AuthEngine;
 var formatter = require('sc-formatter');
 var EventEmitter = require('events').EventEmitter;
@@ -382,7 +382,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
   var id = this.generateId();
 
-  var scSocket = new SCSocket(id, this, wsSocket);
+  var scSocket = new SCServerSocket(id, this, wsSocket);
   scSocket.exchange = self.exchange;
 
   scSocket.on('error', function (err) {

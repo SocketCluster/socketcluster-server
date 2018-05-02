@@ -13,12 +13,12 @@ var http = require('http');
 module.exports.SCServer = require('./scserver');
 
 /**
- * Expose SCSocket constructor.
+ * Expose SCServerSocket constructor.
  *
  * @api public
  */
 
-module.exports.SCSocket = require('./scsocket');
+module.exports.SCServerSocket = require('./scserversocket');
 
 /**
  * Creates an http.Server exclusively used for WS upgrades.

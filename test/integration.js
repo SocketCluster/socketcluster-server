@@ -1709,4 +1709,42 @@ describe('Integration tests', function () {
       });
     });
   });
+
+  describe('Errors', function () {
+    it('Should throw an error if reserved event is emitted on socket', function (done) {
+      server.on('connection', function (socket) {
+        var error;
+        socket.on('error', function (err) {
+          error = err;
+        });
+        socket.emit('message', 123);
+        setTimeout(function () {
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'InvalidActionError');
+          done();
+        }, 100);
+      });
+
+      client = socketCluster.connect(clientOptions);
+    });
+
+    it('Should allow emitting error event on socket', function (done) {
+      server.on('connection', function (socket) {
+        var error;
+        socket.on('error', function (err) {
+          error = err;
+        });
+        var customError = new Error('This is a custom error');
+        customError.name = 'CustomError';
+        socket.emit('error', customError);
+        setTimeout(function () {
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'CustomError');
+          done();
+        }, 100);
+      });
+
+      client = socketCluster.connect(clientOptions);
+    });
+  });
 });

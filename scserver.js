@@ -2,6 +2,7 @@ var SCServerSocket = require('./scserversocket');
 var AuthEngine = require('sc-auth').AuthEngine;
 var formatter = require('sc-formatter');
 var EventEmitter = require('events').EventEmitter;
+var Emitter = require('component-emitter');
 var base64id = require('base64id');
 var async = require('async');
 var url = require('url');
@@ -248,7 +249,7 @@ SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback
       delete socket.channelSubscriptions[channelName];
       socket.channelSubscriptionsCount--;
     } else {
-      socket.emit('subscribe', channelName, channelOptions);
+      Emitter.prototype.emit.call(socket, 'subscribe', channelName, channelOptions);
       self.emit('subscription', socket, channelName, channelOptions);
     }
     callback && callback(err);
@@ -283,7 +284,7 @@ SCServer.prototype._unsubscribeSocket = function (socket, channel) {
 
   this.brokerEngine.unsubscribeSocket(socket, channel);
 
-  socket.emit('unsubscribe', channel);
+  Emitter.prototype.emit.call(socket, 'unsubscribe', channel);
   this.emit('unsubscription', socket, channel);
 };
 
@@ -316,7 +317,7 @@ SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAut
     authError: error,
     signedAuthToken: signedAuthToken
   };
-  scSocket.emit('badAuthToken', badAuthStatus);
+  Emitter.prototype.emit.call(scSocket, 'badAuthToken', badAuthStatus);
   this.emit('badSocketAuthToken', scSocket, badAuthStatus);
 };
 
@@ -362,7 +363,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
       // If the error is related to the JWT being badly formatted, then we will
       // treat the error as a socket error.
       if (err && signedAuthToken != null) {
-        scSocket.emit('error', errorData.authError);
+        Emitter.prototype.emit.call(scSocket, 'error', errorData.authError);
         if (errorData.isBadToken) {
           self._emitBadAuthTokenError(scSocket, errorData.authError, signedAuthToken);
         }
@@ -437,7 +438,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         if (err) {
           var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
           res(error);
-          scSocket.emit('error', error);
+          Emitter.prototype.emit.call(scSocket, 'error', error);
         } else {
           if (channelOptions.batch) {
             res(undefined, undefined, {batch: true});
@@ -462,7 +463,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     }
     if (error) {
       res(error);
-      scSocket.emit('error', error);
+      Emitter.prototype.emit.call(scSocket, 'error', error);
     } else {
       res();
     }
@@ -568,8 +569,8 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
         scSocket.state = scSocket.OPEN;
 
-        scSocket.emit('connect', serverSocketStatus);
-        scSocket.emit('_connect', serverSocketStatus);
+        Emitter.prototype.emit.call(scSocket, 'connect', serverSocketStatus);
+        Emitter.prototype.emit.call(scSocket, '_connect', serverSocketStatus);
 
         self.emit('_connection', scSocket, serverSocketStatus);
         self.emit('connection', scSocket, serverSocketStatus);

@@ -6,6 +6,7 @@ var scErrors = require('sc-errors');
 var InvalidArgumentsError = scErrors.InvalidArgumentsError;
 var SocketProtocolError = scErrors.SocketProtocolError;
 var TimeoutError = scErrors.TimeoutError;
+var InvalidActionError = scErrors.InvalidActionError;
 
 
 var SCServerSocket = function (id, server, socket) {
@@ -373,8 +374,11 @@ SCServerSocket.prototype.emit = function (event, data, callback, options) {
         }
       }
     });
+  } else if (event == 'error') {
+    Emitter.prototype.emit.call(this, event, data);
   } else {
-    Emitter.prototype.emit.apply(this, arguments);
+    var error = new InvalidActionError('The "' + event + '" event is reserved and cannot be emitted on a server socket');
+    Emitter.prototype.emit.call(this, 'error', error);
   }
 };
 
@@ -385,10 +389,10 @@ SCServerSocket.prototype.triggerAuthenticationEvents = function (oldState) {
       newState: this.authState,
       authToken: this.authToken
     };
-    this.emit('authStateChange', stateChangeData);
+    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
     this.server.emit('authenticationStateChange', this, stateChangeData);
   }
-  this.emit('authenticate', this.authToken);
+  Emitter.prototype.emit.call(this, 'authenticate', this.authToken);
   this.server.emit('authentication', this, this.authToken);
 };
 
@@ -473,10 +477,10 @@ SCServerSocket.prototype.deauthenticateSelf = function () {
       oldState: oldState,
       newState: this.authState
     };
-    this.emit('authStateChange', stateChangeData);
+    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
     this.server.emit('authenticationStateChange', this, stateChangeData);
   }
-  this.emit('deauthenticate', oldToken);
+  Emitter.prototype.emit.call(this, 'deauthenticate', oldToken);
   this.server.emit('deauthentication', this, oldToken);
 };
 

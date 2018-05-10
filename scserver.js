@@ -130,13 +130,17 @@ var SCServer = function (options) {
   this.defaultVerificationOptions = {
     async: this.authVerifyAsync
   };
+  if (opts.authVerifyAlgorithms != null) {
+    this.defaultVerificationOptions.algorithms = opts.authVerifyAlgorithms;
+  } else if (opts.authAlgorithm != null) {
+    this.defaultVerificationOptions.algorithms = [opts.authAlgorithm];
+  }
+
   this.defaultSignatureOptions = {
     expiresIn: opts.authDefaultExpiry,
     async: this.authSignAsync
   };
-
   if (opts.authAlgorithm != null) {
-    this.defaultVerificationOptions.algorithms = [opts.authAlgorithm];
     this.defaultSignatureOptions.algorithm = opts.authAlgorithm;
   }
 

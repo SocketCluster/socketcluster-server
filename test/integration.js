@@ -541,6 +541,37 @@ describe('Integration tests', function () {
         });
       });
     });
+
+    it('The verifyToken method of the authEngine receives correct params', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
+          setTimeout(function () {
+            assert.equal(signedAuthToken, validSignedAuthTokenBob);
+            assert.equal(verificationKey, serverOptions.authKey);
+            assert.notEqual(verificationOptions, null);
+            assert.notEqual(verificationOptions.socket, null);
+            assert.equal(typeof callback, 'function');
+            callback(null, {});
+            done();
+          }, 500)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+      });
+    });
   });
 
   describe('Event flow', function () {
@@ -1037,37 +1068,6 @@ describe('Integration tests', function () {
           assert.equal(serverClosure, true);
           done();
         }, 1000);
-      });
-    });
-
-    it('The verifyToken method of the authEngine receives correct params', function (done) {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
-
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-      server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            assert.equal(signedAuthToken, validSignedAuthTokenBob);
-            assert.equal(verificationKey, serverOptions.authKey);
-            assert.notEqual(verificationOptions, null);
-            assert.notEqual(verificationOptions.socket, null);
-            assert.equal(typeof callback, 'function');
-            callback(null, {});
-            done();
-          }, 500)
-        }
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
       });
     });
 

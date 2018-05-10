@@ -624,9 +624,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 500)
         }
       });
@@ -722,9 +722,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 500)
         }
       });
@@ -773,9 +773,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 500)
         }
       });
@@ -843,9 +843,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 10)
         }
       });
@@ -995,9 +995,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 500)
         }
       });
@@ -1040,6 +1040,37 @@ describe('Integration tests', function () {
       });
     });
 
+    it('The verifyToken method of the authEngine receives correct params', function (done) {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
+          setTimeout(function () {
+            assert.equal(signedAuthToken, validSignedAuthTokenBob);
+            assert.equal(verificationKey, serverOptions.authKey);
+            assert.notEqual(verificationOptions, null);
+            assert.notEqual(verificationOptions.socket, null);
+            assert.equal(typeof callback, 'function');
+            callback(null, {});
+            done();
+          }, 500)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+      });
+    });
+
     it('The close event should trigger when the socket loses the connection after the handshake', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
@@ -1047,9 +1078,9 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, defaultVerificationOptions, callback) {
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
           setTimeout(function () {
-            callback(null, {})
+            callback(null, {});
           }, 0)
         }
       });

@@ -328,7 +328,8 @@ SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAut
 SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
   var self = this;
 
-  this.auth.verifyToken(signedAuthToken, this.verificationKey, this.defaultVerificationOptions, function (err, authToken) {
+  var verificationOptions = Object.assign({socket: scSocket}, this.defaultVerificationOptions);
+  this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions, function (err, authToken) {
     var oldState = scSocket.authState;
     if (authToken) {
       scSocket.signedAuthToken = signedAuthToken;

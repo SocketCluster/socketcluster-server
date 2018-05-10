@@ -43,6 +43,7 @@ var SCServerSocket = function (id, server, socket) {
   this.socket = socket;
   this.state = this.CONNECTING;
   this.authState = this.UNAUTHENTICATED;
+  this.active = true;
 
   this.request = this.socket.upgradeReq || {};
 
@@ -268,6 +269,11 @@ SCServerSocket.prototype.disconnect = function (code, data) {
     this._onSCClose(code, data);
     this.socket.close(code);
   }
+};
+
+SCServerSocket.prototype.destroy = function (code, data) {
+  this.active = false;
+  this.disconnect(code, data);
 };
 
 SCServerSocket.prototype.terminate = function () {

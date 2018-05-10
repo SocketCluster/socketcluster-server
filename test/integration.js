@@ -617,7 +617,7 @@ describe('Integration tests', function () {
       });
     });
 
-    it('should remove client data from the server when client disconnects before authentication process finished', function (done) {
+    it('Should remove client data from the server when client disconnects before authentication process finished', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -655,6 +655,63 @@ describe('Integration tests', function () {
           assert.equal(JSON.stringify(server.pendingClients), '{}');
           done();
         }, 1000);
+      });
+    });
+
+    it('Server socket destroy should disconnect the socket', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      server.on('connection', function (socket) {
+        setTimeout(function () {
+          socket.destroy(1000, 'Custom reason');
+        }, 100);
+      });
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('disconnect', function (code, reason) {
+          assert.equal(code, 1000);
+          assert.equal(reason, 'Custom reason');
+          assert.equal(server.clientsCount, 0);
+          assert.equal(server.pendingClientsCount, 0);
+          done();
+        });
+      });
+    });
+
+    it('Server socket destroy should set the active property on the socket to false', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      var serverSocket;
+
+      server.on('connection', function (socket) {
+        serverSocket = socket;
+        assert.equal(socket.active, true);
+        setTimeout(function () {
+          socket.destroy();
+        }, 100);
+      });
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('disconnect', function (code, reason) {
+          assert.equal(serverSocket.active, false);
+          done();
+        });
       });
     });
 

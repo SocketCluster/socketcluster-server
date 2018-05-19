@@ -15,7 +15,7 @@
     "sc-auth": "^5.0.1",
     "sc-errors": "^1.4.0",
     "sc-formatter": "^3.0.2",
-    "sc-simple-broker": "^2.1.1",
+    "sc-simple-broker": "^2.1.2",
     "uuid": "3.2.1",
     "sc-uws": "~10.148.0",
     "ws": "5.1.1"

@@ -17,12 +17,12 @@
     "sc-formatter": "^3.0.2",
     "sc-simple-broker": "^2.1.2",
     "uuid": "3.2.1",
-    "sc-uws": "~10.148.0",
+    "sc-uws": "~10.148.1",
     "ws": "5.1.1"
   },
   "devDependencies": {
     "localStorage": "^1.0.3",
-    "mocha": "3.0.2",
+    "mocha": "5.2.0",
     "socketcluster-client": "^11.2.0"
   },
   "scripts": {

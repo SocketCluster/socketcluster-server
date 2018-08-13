@@ -398,11 +398,6 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   self.pendingClients[id] = scSocket;
   self.pendingClientsCount++;
 
-  // Emit event to signal that a socket handshake has been initiated.
-  // The _handshake event is for internal use (including third-party plugins)
-  this.emit('_handshake', scSocket);
-  this.emit('handshake', scSocket);
-
   scSocket.on('#authenticate', function (signedAuthToken, respond) {
     self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken, oldState) {
       if (err) {
@@ -588,6 +583,11 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       });
     });
   });
+
+  // Emit event to signal that a socket handshake has been initiated.
+  // The _handshake event is for internal use (including third-party plugins)
+  this.emit('_handshake', scSocket);
+  this.emit('handshake', scSocket);
 };
 
 SCServer.prototype.close = function () {

@@ -236,7 +236,7 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
         if (typeof data == 'object') {
           try {
             reasonString = JSON.stringify(data);
-          } catch(error) {
+          } catch (error) {
             reasonString = data.toString();
           }
         } else {

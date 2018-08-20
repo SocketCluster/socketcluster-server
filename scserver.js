@@ -93,7 +93,9 @@ var SCServer = function (options) {
   this.brokerEngine = opts.brokerEngine;
   this.appName = opts.appName || '';
   this.middlewareEmitWarnings = opts.middlewareEmitWarnings;
-  this._path = opts.path;
+
+  // Make sure there is always a leading and a trailing slash in the WS path.
+  this._path = opts.path.replace(/\/?$/, '/').replace(/^\/?/, '/');
   this.isReady = false;
 
   this.brokerEngine.once('ready', function () {

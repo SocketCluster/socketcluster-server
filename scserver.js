@@ -205,7 +205,7 @@ SCServer.prototype.setCodecEngine = function (codecEngine) {
 };
 
 SCServer.prototype._handleServerError = function (error) {
-  if (typeof error == 'string') {
+  if (typeof error === 'string') {
     error = new ServerProtocolError(error);
   }
   this.emit('error', error);
@@ -237,7 +237,7 @@ SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback
 
   var channelName = channelOptions.channel;
 
-  if (typeof channelName != 'string') {
+  if (typeof channelName !== 'string') {
     callback && callback('Socket ' + socket.id + ' provided an invalid channel name');
     return;
   }
@@ -276,7 +276,7 @@ SCServer.prototype._unsubscribeSocketFromAllChannels = function (socket) {
 };
 
 SCServer.prototype._unsubscribeSocket = function (socket, channel) {
-  if (typeof channel != 'string') {
+  if (typeof channel !== 'string') {
     throw new InvalidActionError('Socket ' + socket.id + ' tried to unsubscribe from an invalid channel name');
   }
   if (!socket.channelSubscriptions[channel]) {
@@ -428,7 +428,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   scSocket.on('#subscribe', function (channelOptions, res) {
     if (!channelOptions) {
       channelOptions = {};
-    } else if (typeof channelOptions == 'string') {
+    } else if (typeof channelOptions === 'string') {
       channelOptions = {
         channel: channelOptions
       };
@@ -675,7 +675,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
 };
 
 SCServer.prototype._isPrivateTransmittedEvent = function (event) {
-  return typeof event == 'string' && event.indexOf('#') == 0;
+  return typeof event === 'string' && event.indexOf('#') === 0;
 };
 
 SCServer.prototype.verifyInboundEvent = function (socket, eventName, eventData, cb) {
@@ -783,7 +783,6 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                 }
                 self.exchange.publish(request.channel, request.data, function (err) {
                   if (err) {
-                    err = new BrokerError(err);
                     self.emit('warning', err);
                   }
                   cb(err, eventData, request.ackData);

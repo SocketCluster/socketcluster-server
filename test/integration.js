@@ -542,6 +542,50 @@ describe('Integration tests', function () {
       });
     });
 
+    it('Should trigger an authTokenSigned event and socket.signedAuthToken should be set after calling the socket.setAuthToken method', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authSignAsync: true
+      });
+
+      var authTokenSignedEventEmitted = false;
+
+      server.on('connection', function (socket) {
+        socket.on('authTokenSigned', function (signedAuthToken) {
+          authTokenSignedEventEmitted = true;
+          assert.notEqual(signedAuthToken, null);
+          assert.equal(signedAuthToken, socket.signedAuthToken);
+        });
+        socket.on('login', function (userDetails, respond) {
+          if (allowedUsers[userDetails.username]) {
+            socket.setAuthToken(userDetails, {async: true});
+            respond();
+          } else {
+            var err = new Error('Failed to login');
+            err.name = 'FailedLoginError';
+            respond(err);
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.emit('login', {username: 'bob'});
+        });
+        setTimeout(function () {
+          assert.equal(authTokenSignedEventEmitted, true);
+          done();
+        }, 100);
+      });
+    });
+
     it('The verifyToken method of the authEngine receives correct params', function (done) {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 

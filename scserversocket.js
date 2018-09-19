@@ -28,6 +28,7 @@ var SCServerSocket = function (id, server, socket) {
     'message': 1,
     'error': 1,
     'authStateChange': 1,
+    'authTokenSigned': 1,
     'authenticate': 1,
     'deauthenticate': 1,
     'badAuthToken': 1,
@@ -451,6 +452,8 @@ SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
     options.algorithm = defaultSignatureOptions.algorithm;
   }
 
+  this.authToken = authToken;
+
   this.server.auth.signToken(authToken, this.server.signatureKey, options, function (err, signedToken) {
     if (err) {
       Emitter.prototype.emit.call(self, 'error', err);
@@ -461,11 +464,14 @@ SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
       var tokenData = {
         token: signedToken
       };
+      if (self.authToken === authToken) {
+        self.signedAuthToken = signedToken;
+        Emitter.prototype.emit.call(self, 'authTokenSigned', signedToken);
+      }
       self.emit('#setAuthToken', tokenData, callback);
     }
   });
 
-  this.authToken = authToken;
   this.triggerAuthenticationEvents(oldState);
 };
 
@@ -476,6 +482,7 @@ SCServerSocket.prototype.getAuthToken = function () {
 SCServerSocket.prototype.deauthenticateSelf = function () {
   var oldState = this.authState;
   var oldToken = this.authToken;
+  this.signedAuthToken = null;
   this.authToken = null;
   this.authState = this.UNAUTHENTICATED;
   if (oldState != this.UNAUTHENTICATED) {

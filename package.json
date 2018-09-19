@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "14.0.1",
+  "version": "14.1.0",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {

@@ -461,6 +461,7 @@ SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
       var tokenData = {
         token: signedToken
       };
+      self.signedAuthToken = signedToken
       self.emit('#setAuthToken', tokenData, callback);
     }
   });

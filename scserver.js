@@ -103,7 +103,7 @@ var SCServer = function (options) {
     EventEmitter.prototype.emit.call(self, 'ready');
   });
 
-  var wsEngine = require(opts.wsEngine);
+  var wsEngine = typeof opts.wsEngine === 'string' ? require(opts.wsEngine) : opts.wsEngine;
   if (!wsEngine || !wsEngine.Server) {
     throw new InvalidOptionsError('The wsEngine option must be a path or module name which points ' +
       'to a valid WebSocket engine module with a compatible interface');

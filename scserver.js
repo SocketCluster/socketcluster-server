@@ -103,27 +103,7 @@ var SCServer = function (options) {
     EventEmitter.prototype.emit.call(self, 'ready');
   });
 
-  // Provide explicit strings in order to make dynamic `require` compatible with Webpack.
-  var wsEngine = undefined;
-  try {
-    switch(opts.wsEngine) {
-      case('ws'): {
-        wsEngine = require('ws');
-        break;
-      }
-      case('uws'): {
-        wsEngine = require('uws');
-        break;
-      }
-      default: {
-        // This won't work in Webpack, but will work elsewhere.
-        wsEngine = require(opts.wsEngine);
-        break;
-      }
-    }
-  } catch(e) {
-    if(!e instanceof InvalidOptionsError) throw new InvalidOptionsError('wsEngine is not installed.')
-  }
+  var wsEngine = typeof opts.wsEngine === 'string' ? require(opts.wsEngine) : opts.wsEngine;
   if (!wsEngine || !wsEngine.Server) {
     throw new InvalidOptionsError('The wsEngine option must be a path or module name which points ' +
       'to a valid WebSocket engine module with a compatible interface');

@@ -503,13 +503,17 @@ SCServerSocket.prototype.deauthenticate = function (callback) {
 };
 
 SCServerSocket.prototype.kickOut = function (channel, message, callback) {
+  var self = this;
+
   if (channel == null) {
-    for (var i in this.channelSubscriptions) {
-      if (this.channelSubscriptions.hasOwnProperty(i)) {
-        this.emit('#kickOut', {message: message, channel: i});
-      }
-    }
+    Object.keys(this.channelSubscriptions).forEach(function (channelName) {
+      delete self.channelSubscriptions[channelName];
+      self.channelSubscriptionsCount--;
+      self.emit('#kickOut', {message: message, channel: channelName});
+    });
   } else {
+    delete this.channelSubscriptions[channel];
+    this.channelSubscriptionsCount--;
     this.emit('#kickOut', {message: message, channel: channel});
   }
   this.server.brokerEngine.unsubscribeSocket(this, channel, callback);

@@ -1492,6 +1492,99 @@ describe('Integration tests', function () {
         }, 200);
       });
     });
+
+    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut(channel) is called', function (done) {
+      portNumber++;
+
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      var errorList = [];
+      var serverSocket;
+      var wasKickOutCalled = false;
+
+      server.on('connection', function (socket) {
+        serverSocket = socket;
+        socket.on('error', function (err) {
+          errorList.push(err);
+        });
+        socket.on('subscribe', function (channelName) {
+          if (channelName === 'foo') {
+            setTimeout(function () {
+              wasKickOutCalled = true;
+              socket.kickOut('foo', 'Socket was kicked out of the channel');
+            }, 50);
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.subscribe('foo');
+
+        setTimeout(function () {
+          assert.equal(errorList.length, 0);
+          assert.equal(wasKickOutCalled, true);
+          assert.equal(serverSocket.channelSubscriptionsCount, 0);
+          assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
+          done();
+        }, 100);
+      });
+    });
+
+    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut() is called without arguments', function (done) {
+      portNumber++;
+
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      var errorList = [];
+      var serverSocket;
+      var wasKickOutCalled = false;
+
+      server.on('connection', function (socket) {
+        serverSocket = socket;
+        socket.on('error', function (err) {
+          errorList.push(err);
+        });
+        socket.on('subscribe', function (channelName) {
+          if (socket.channelSubscriptionsCount === 2) {
+            setTimeout(function () {
+              wasKickOutCalled = true;
+              socket.kickOut();
+            }, 50);
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.subscribe('foo');
+        client.subscribe('bar');
+
+        setTimeout(function () {
+          assert.equal(errorList.length, 0);
+          assert.equal(wasKickOutCalled, true);
+          assert.equal(serverSocket.channelSubscriptionsCount, 0);
+          assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
+          done();
+        }, 100);
+      });
+    });
   });
 
   describe('Middleware', function () {

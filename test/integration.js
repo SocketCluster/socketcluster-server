@@ -152,7 +152,7 @@ describe('Integration tests', function () {
     });
   });
 
-  describe('Authentication', function () {
+  describe('Socket authentication', function () {
     it('Should not send back error if JWT is not provided in handshake', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (status) {
@@ -616,81 +616,6 @@ describe('Integration tests', function () {
         });
       });
     });
-  });
-
-  describe('Event flow', function () {
-    it('Should support subscription batching', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-      server.on('connection', function (socket) {
-        connectionHandler(socket);
-        var isFirstMessage = true;
-        socket.on('message', function (rawMessage) {
-          if (isFirstMessage) {
-            var data = JSON.parse(rawMessage);
-            // All 20 subscriptions should arrive as a single message.
-            assert.equal(data.length, 20);
-            isFirstMessage = false;
-          }
-        });
-      });
-
-      var subscribeMiddlewareCounter = 0;
-      // Each subscription should pass through the middleware individually, even
-      // though they were sent as a batch/array.
-      server.addMiddleware(server.MIDDLEWARE_SUBSCRIBE, function (req, next) {
-        subscribeMiddlewareCounter++;
-        assert.equal(req.channel.indexOf('my-channel-'), 0);
-        if (req.channel == 'my-channel-10') {
-          assert.equal(JSON.stringify(req.data), JSON.stringify({foo: 123}));
-        } else if (req.channel == 'my-channel-12') {
-          // Block my-channel-12
-          var err = new Error('You cannot subscribe to channel 12');
-          err.name = 'UnauthorizedSubscribeError';
-          next(err);
-          return;
-        }
-        next();
-      });
-
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        var channelList = [];
-        for (var i = 0; i < 20; i++) {
-          var subscribeOptions = {
-            batch: true
-          };
-          if (i == 10) {
-            subscribeOptions.data = {foo: 123};
-          }
-          channelList.push(
-            client.subscribe('my-channel-' + i, subscribeOptions)
-          );
-        }
-        channelList[12].on('subscribe', function (err) {
-          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
-        });
-        channelList[12].on('subscribeFail', function (err) {
-          assert.notEqual(err, null);
-          assert.equal(err.name, 'UnauthorizedSubscribeError');
-        });
-        channelList[19].watch(function (data) {
-          assert.equal(data, 'Hello!');
-          assert.equal(subscribeMiddlewareCounter, 20);
-          done();
-        });
-        channelList[0].on('subscribe', function () {
-          client.publish('my-channel-19', 'Hello!');
-        });
-      });
-    });
 
     it('Should remove client data from the server when client disconnects before authentication process finished', function (done) {
       portNumber++;
@@ -732,78 +657,18 @@ describe('Integration tests', function () {
         }, 1000);
       });
     });
+  });
 
-    it('Server socket destroy should disconnect the socket', function (done) {
+  describe('Socket handshake', function () {
+    it('Exchange is attached to socket before the handshake event is triggered', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      server.on('connection', function (socket) {
-        setTimeout(function () {
-          socket.destroy(1000, 'Custom reason');
-        }, 100);
-      });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('disconnect', function (code, reason) {
-          assert.equal(code, 1000);
-          assert.equal(reason, 'Custom reason');
-          assert.equal(server.clientsCount, 0);
-          assert.equal(server.pendingClientsCount, 0);
-          done();
-        });
-      });
-    });
-
-    it('Server socket destroy should set the active property on the socket to false', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-
-      var serverSocket;
-
-      server.on('connection', function (socket) {
-        serverSocket = socket;
-        assert.equal(socket.active, true);
-        setTimeout(function () {
-          socket.destroy();
-        }, 100);
-      });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('disconnect', function (code, reason) {
-          assert.equal(serverSocket.active, false);
-          done();
-        });
-      });
-    });
-
-    it('Client should not be able to subscribe to a channel before the handshake has completed', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-      server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 500)
-        }
-      });
       server.on('connection', connectionHandler);
+
       server.on('ready', function () {
         client = socketCluster.connect({
           hostname: clientOptions.hostname,
@@ -811,36 +676,102 @@ describe('Integration tests', function () {
           multiplex: false
         });
 
-        var isSubscribed = false;
-        var error;
-
-        server.on('subscription', function (socket, channel) {
-          isSubscribed = true;
-        });
-
-        // Hack to capture the error without relying on the standard client flow.
-        client.transport._callbackMap[2] = {
-          event: '#subscribe',
-          data: {"channel":"someChannel"},
-          callback: function (err) {
-            error = err;
-          }
-        };
-
-        // Trick the server by sending a fake subscribe before the handshake is done.
-        client.transport.socket.on('open', function () {
-          client.send('{"event":"#subscribe","data":{"channel":"someChannel"},"cid":2}');
+        server.once('handshake', function (socket) {
+          assert.notEqual(socket.exchange, null);
         });
 
         setTimeout(function () {
-          assert.equal(isSubscribed, false);
-          assert.notEqual(error, null);
-          assert.equal(error.name, 'InvalidActionError');
           done();
-        }, 1000);
+        }, 300);
       });
     });
+  });
 
+  describe('Socket connection', function () {
+    it('Server-side socket connect event and server connection event should trigger', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      var connectionEmitted = false;
+      var connectionStatus;
+
+      server.on('connection', connectionHandler);
+      server.once('connection', function (socket, status) {
+        connectionEmitted = true;
+        connectionStatus = status;
+        // Modify the status object and make sure that it doesn't get modified
+        // on the client.
+        status.foo = 123;
+      });
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        var connectEmitted = false;
+        var _connectEmitted = false;
+        var connectStatus;
+        var socketId;
+
+        server.once('handshake', function (socket) {
+          socket.once('connect', function (status) {
+            socketId = socket.id;
+            connectEmitted = true;
+            connectStatus = status;
+          });
+          socket.once('_connect', function () {
+            _connectEmitted = true;
+          });
+        });
+
+        var clientConnectEmitted = false;
+        var clientConnectStatus = false;
+
+        client.once('connect', function (status) {
+          clientConnectEmitted = true;
+          clientConnectStatus = status;
+        });
+
+        setTimeout(function () {
+          assert.equal(connectEmitted, true);
+          assert.equal(_connectEmitted, true);
+          assert.equal(connectionEmitted, true);
+          assert.equal(clientConnectEmitted, true);
+
+          assert.notEqual(connectionStatus, null);
+          assert.equal(connectionStatus.id, socketId);
+          assert.equal(connectionStatus.pingTimeout, server.pingTimeout);
+          assert.equal(connectionStatus.authError, null);
+          assert.equal(connectionStatus.isAuthenticated, false);
+
+          assert.notEqual(connectStatus, null);
+          assert.equal(connectStatus.id, socketId);
+          assert.equal(connectStatus.pingTimeout, server.pingTimeout);
+          assert.equal(connectStatus.authError, null);
+          assert.equal(connectStatus.isAuthenticated, false);
+
+          assert.notEqual(clientConnectStatus, null);
+          assert.equal(clientConnectStatus.id, socketId);
+          assert.equal(clientConnectStatus.pingTimeout, server.pingTimeout);
+          assert.equal(clientConnectStatus.authError, null);
+          assert.equal(clientConnectStatus.isAuthenticated, false);
+          assert.equal(clientConnectStatus.foo, null);
+          // Client socket status should be a clone of server socket status; not
+          // a reference to the same object.
+          assert.notEqual(clientConnectStatus.foo, connectStatus.foo);
+
+          done();
+        }, 300);
+      });
+    });
+  });
+
+  describe('Socket disconnection', function () {
     it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
@@ -981,88 +912,6 @@ describe('Integration tests', function () {
       });
     });
 
-    it('Server-side socket connect event and server connection event should trigger', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-
-      var connectionEmitted = false;
-      var connectionStatus;
-
-      server.on('connection', connectionHandler);
-      server.once('connection', function (socket, status) {
-        connectionEmitted = true;
-        connectionStatus = status;
-        // Modify the status object and make sure that it doesn't get modified
-        // on the client.
-        status.foo = 123;
-      });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-
-        var connectEmitted = false;
-        var _connectEmitted = false;
-        var connectStatus;
-        var socketId;
-
-        server.once('handshake', function (socket) {
-          socket.once('connect', function (status) {
-            socketId = socket.id;
-            connectEmitted = true;
-            connectStatus = status;
-          });
-          socket.once('_connect', function () {
-            _connectEmitted = true;
-          });
-        });
-
-        var clientConnectEmitted = false;
-        var clientConnectStatus = false;
-
-        client.once('connect', function (status) {
-          clientConnectEmitted = true;
-          clientConnectStatus = status;
-        });
-
-        setTimeout(function () {
-          assert.equal(connectEmitted, true);
-          assert.equal(_connectEmitted, true);
-          assert.equal(connectionEmitted, true);
-          assert.equal(clientConnectEmitted, true);
-
-          assert.notEqual(connectionStatus, null);
-          assert.equal(connectionStatus.id, socketId);
-          assert.equal(connectionStatus.pingTimeout, server.pingTimeout);
-          assert.equal(connectionStatus.authError, null);
-          assert.equal(connectionStatus.isAuthenticated, false);
-
-          assert.notEqual(connectStatus, null);
-          assert.equal(connectStatus.id, socketId);
-          assert.equal(connectStatus.pingTimeout, server.pingTimeout);
-          assert.equal(connectStatus.authError, null);
-          assert.equal(connectStatus.isAuthenticated, false);
-
-          assert.notEqual(clientConnectStatus, null);
-          assert.equal(clientConnectStatus.id, socketId);
-          assert.equal(clientConnectStatus.pingTimeout, server.pingTimeout);
-          assert.equal(clientConnectStatus.authError, null);
-          assert.equal(clientConnectStatus.isAuthenticated, false);
-          assert.equal(clientConnectStatus.foo, null);
-          // Client socket status should be a clone of server socket status; not
-          // a reference to the same object.
-          assert.notEqual(clientConnectStatus.foo, connectStatus.foo);
-
-          done();
-        }, 300);
-      });
-    });
-
     it('The close event should trigger when the socket loses the connection before the handshake', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
@@ -1166,15 +1015,45 @@ describe('Integration tests', function () {
         }, 300);
       });
     });
+  });
 
-    it('Exchange is attached to socket before the handshake event is triggered', function (done) {
+  describe('Socket pub/sub', function () {
+    it('Should support subscription batching', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
+      server.on('connection', function (socket) {
+        connectionHandler(socket);
+        var isFirstMessage = true;
+        socket.on('message', function (rawMessage) {
+          if (isFirstMessage) {
+            var data = JSON.parse(rawMessage);
+            // All 20 subscriptions should arrive as a single message.
+            assert.equal(data.length, 20);
+            isFirstMessage = false;
+          }
+        });
+      });
 
-      server.on('connection', connectionHandler);
+      var subscribeMiddlewareCounter = 0;
+      // Each subscription should pass through the middleware individually, even
+      // though they were sent as a batch/array.
+      server.addMiddleware(server.MIDDLEWARE_SUBSCRIBE, function (req, next) {
+        subscribeMiddlewareCounter++;
+        assert.equal(req.channel.indexOf('my-channel-'), 0);
+        if (req.channel == 'my-channel-10') {
+          assert.equal(JSON.stringify(req.data), JSON.stringify({foo: 123}));
+        } else if (req.channel == 'my-channel-12') {
+          // Block my-channel-12
+          var err = new Error('You cannot subscribe to channel 12');
+          err.name = 'UnauthorizedSubscribeError';
+          next(err);
+          return;
+        }
+        next();
+      });
 
       server.on('ready', function () {
         client = socketCluster.connect({
@@ -1182,14 +1061,84 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        var channelList = [];
+        for (var i = 0; i < 20; i++) {
+          var subscribeOptions = {
+            batch: true
+          };
+          if (i == 10) {
+            subscribeOptions.data = {foo: 123};
+          }
+          channelList.push(
+            client.subscribe('my-channel-' + i, subscribeOptions)
+          );
+        }
+        channelList[12].on('subscribe', function (err) {
+          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
+        });
+        channelList[12].on('subscribeFail', function (err) {
+          assert.notEqual(err, null);
+          assert.equal(err.name, 'UnauthorizedSubscribeError');
+        });
+        channelList[19].watch(function (data) {
+          assert.equal(data, 'Hello!');
+          assert.equal(subscribeMiddlewareCounter, 20);
+          done();
+        });
+        channelList[0].on('subscribe', function () {
+          client.publish('my-channel-19', 'Hello!');
+        });
+      });
+    });
 
-        server.once('handshake', function (socket) {
-          assert.notEqual(socket.exchange, null);
+    it('Client should not be able to subscribe to a channel before the handshake has completed', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      server.setAuthEngine({
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
+          setTimeout(function () {
+            callback(null, {});
+          }, 500)
+        }
+      });
+      server.on('connection', connectionHandler);
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        var isSubscribed = false;
+        var error;
+
+        server.on('subscription', function (socket, channel) {
+          isSubscribed = true;
+        });
+
+        // Hack to capture the error without relying on the standard client flow.
+        client.transport._callbackMap[2] = {
+          event: '#subscribe',
+          data: {"channel":"someChannel"},
+          callback: function (err) {
+            error = err;
+          }
+        };
+
+        // Trick the server by sending a fake subscribe before the handshake is done.
+        client.transport.socket.on('open', function () {
+          client.send('{"event":"#subscribe","data":{"channel":"someChannel"},"cid":2}');
         });
 
         setTimeout(function () {
+          assert.equal(isSubscribed, false);
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'InvalidActionError');
           done();
-        }, 300);
+        }, 1000);
       });
     });
 
@@ -1587,6 +1536,193 @@ describe('Integration tests', function () {
     });
   });
 
+  describe('Socket destruction', function () {
+    it('Server socket destroy should disconnect the socket', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      server.on('connection', function (socket) {
+        setTimeout(function () {
+          socket.destroy(1000, 'Custom reason');
+        }, 100);
+      });
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('disconnect', function (code, reason) {
+          assert.equal(code, 1000);
+          assert.equal(reason, 'Custom reason');
+          assert.equal(server.clientsCount, 0);
+          assert.equal(server.pendingClientsCount, 0);
+          done();
+        });
+      });
+    });
+
+    it('Server socket destroy should set the active property on the socket to false', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      var serverSocket;
+
+      server.on('connection', function (socket) {
+        serverSocket = socket;
+        assert.equal(socket.active, true);
+        setTimeout(function () {
+          socket.destroy();
+        }, 100);
+      });
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('disconnect', function (code, reason) {
+          assert.equal(serverSocket.active, false);
+          done();
+        });
+      });
+    });
+  });
+
+  describe('Socket Ping/pong', function () {
+    describe('When when pingTimeoutDisabled is not set (false)', function () {
+      beforeEach('Launch server with ping options before start', function (done) {
+        portNumber++;
+        // Intentionally make pingInterval higher than pingTimeout, that
+        // way the client will never receive a ping or send back a pong.
+        server = socketClusterServer.listen(portNumber, {
+          authKey: serverOptions.authKey,
+          wsEngine: WS_ENGINE,
+          pingInterval: 2000,
+          pingTimeout: 500
+        });
+        server.on('ready', function () {
+          done();
+        });
+      });
+
+      afterEach('Shut down server afterwards', function (done) {
+        destroyTestCase(function () {
+          server.close();
+          done();
+        });
+      });
+
+      it('Should disconnect socket if server does not receive a pong from client before timeout', function (done) {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        var serverWarning = null;
+        server.on('warning', function (err) {
+          serverWarning = err;
+        });
+
+        var serverDisconnectionCode = null;
+        server.on('disconnection', function (socket, code) {
+          serverDisconnectionCode = code;
+        });
+
+        var clientError = null;
+        client.on('error', function (err) {
+          clientError = err;
+        });
+
+        var clientDisconnectCode = null;
+        client.on('disconnect', function (code) {
+          clientDisconnectCode = code;
+        });
+
+        setTimeout(function () {
+          assert.notEqual(clientError, null);
+          assert.equal(clientError.name, 'SocketProtocolError');
+          assert.equal(clientDisconnectCode, 4000);
+
+          assert.notEqual(serverWarning, null);
+          assert.equal(serverWarning.name, 'SocketProtocolError');
+          assert.equal(serverDisconnectionCode, 4001);
+          done();
+        }, 1000);
+      });
+    });
+
+    describe('When when pingTimeoutDisabled is true', function () {
+      beforeEach('Launch server with ping options before start', function (done) {
+        portNumber++;
+        // Intentionally make pingInterval higher than pingTimeout, that
+        // way the client will never receive a ping or send back a pong.
+        server = socketClusterServer.listen(portNumber, {
+          authKey: serverOptions.authKey,
+          wsEngine: WS_ENGINE,
+          pingInterval: 2000,
+          pingTimeout: 500,
+          pingTimeoutDisabled: true
+        });
+        server.on('ready', function () {
+          done();
+        });
+      });
+
+      afterEach('Shut down server afterwards', function (done) {
+        destroyTestCase(function () {
+          server.close();
+          done();
+        });
+      });
+
+      it('Should not disconnect socket if server does not receive a pong from client before timeout', function (done) {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false,
+          pingTimeoutDisabled: true
+        });
+
+        var serverWarning = null;
+        server.on('warning', function (err) {
+          serverWarning = err;
+        });
+
+        var serverDisconnectionCode = null;
+        server.on('disconnection', function (socket, code) {
+          serverDisconnectionCode = code;
+        });
+
+        var clientError = null;
+        client.on('error', function (err) {
+          clientError = err;
+        });
+
+        var clientDisconnectCode = null;
+        client.on('disconnect', function (code) {
+          clientDisconnectCode = code;
+        });
+
+        setTimeout(function () {
+          assert.equal(clientError, null);
+          assert.equal(clientDisconnectCode, null);
+
+          assert.equal(serverWarning, null);
+          assert.equal(serverDisconnectionCode, null);
+          done();
+        }, 1000);
+      });
+    });
+  });
+
   describe('Middleware', function () {
     var middlewareFunction;
     var middlewareWasExecuted = false;
@@ -1803,134 +1939,6 @@ describe('Integration tests', function () {
           assert.equal(connectEventTime - createConnectionTime > 400, true);
           done();
         });
-      });
-    });
-  });
-
-  describe('Ping/pong', function () {
-    describe('When when pingTimeoutDisabled is not set (false)', function () {
-      beforeEach('Launch server with ping options before start', function (done) {
-        portNumber++;
-        // Intentionally make pingInterval higher than pingTimeout, that
-        // way the client will never receive a ping or send back a pong.
-        server = socketClusterServer.listen(portNumber, {
-          authKey: serverOptions.authKey,
-          wsEngine: WS_ENGINE,
-          pingInterval: 2000,
-          pingTimeout: 500
-        });
-        server.on('ready', function () {
-          done();
-        });
-      });
-
-      afterEach('Shut down server afterwards', function (done) {
-        destroyTestCase(function () {
-          server.close();
-          done();
-        });
-      });
-
-      it('Should disconnect socket if server does not receive a pong from client before timeout', function (done) {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-
-        var serverWarning = null;
-        server.on('warning', function (err) {
-          serverWarning = err;
-        });
-
-        var serverDisconnectionCode = null;
-        server.on('disconnection', function (socket, code) {
-          serverDisconnectionCode = code;
-        });
-
-        var clientError = null;
-        client.on('error', function (err) {
-          clientError = err;
-        });
-
-        var clientDisconnectCode = null;
-        client.on('disconnect', function (code) {
-          clientDisconnectCode = code;
-        });
-
-        setTimeout(function () {
-          assert.notEqual(clientError, null);
-          assert.equal(clientError.name, 'SocketProtocolError');
-          assert.equal(clientDisconnectCode, 4000);
-
-          assert.notEqual(serverWarning, null);
-          assert.equal(serverWarning.name, 'SocketProtocolError');
-          assert.equal(serverDisconnectionCode, 4001);
-          done();
-        }, 1000);
-      });
-    });
-
-    describe('When when pingTimeoutDisabled is true', function () {
-      beforeEach('Launch server with ping options before start', function (done) {
-        portNumber++;
-        // Intentionally make pingInterval higher than pingTimeout, that
-        // way the client will never receive a ping or send back a pong.
-        server = socketClusterServer.listen(portNumber, {
-          authKey: serverOptions.authKey,
-          wsEngine: WS_ENGINE,
-          pingInterval: 2000,
-          pingTimeout: 500,
-          pingTimeoutDisabled: true
-        });
-        server.on('ready', function () {
-          done();
-        });
-      });
-
-      afterEach('Shut down server afterwards', function (done) {
-        destroyTestCase(function () {
-          server.close();
-          done();
-        });
-      });
-
-      it('Should not disconnect socket if server does not receive a pong from client before timeout', function (done) {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false,
-          pingTimeoutDisabled: true
-        });
-
-        var serverWarning = null;
-        server.on('warning', function (err) {
-          serverWarning = err;
-        });
-
-        var serverDisconnectionCode = null;
-        server.on('disconnection', function (socket, code) {
-          serverDisconnectionCode = code;
-        });
-
-        var clientError = null;
-        client.on('error', function (err) {
-          clientError = err;
-        });
-
-        var clientDisconnectCode = null;
-        client.on('disconnect', function (code) {
-          clientDisconnectCode = code;
-        });
-
-        setTimeout(function () {
-          assert.equal(clientError, null);
-          assert.equal(clientDisconnectCode, null);
-
-          assert.equal(serverWarning, null);
-          assert.equal(serverDisconnectionCode, null);
-          done();
-        }, 1000);
       });
     });
   });

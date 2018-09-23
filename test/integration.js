@@ -97,7 +97,7 @@ var destroyTestCase = function (next) {
   if (client) {
     client.on('error', function (err) {});
 
-    if (client.state != client.CLOSED) {
+    if (client.state !== client.CLOSED) {
       client.once('close', function () {
         client.removeAllListeners('close');
         client.removeAllListeners('connectAbort');
@@ -129,7 +129,7 @@ describe('Integration tests', function () {
     server.on('connection', connectionHandler);
 
     server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, function (req, next) {
-      if (req.authToken.username == 'alice') {
+      if (req.authToken.username === 'alice') {
         var err = new Error('Blocked by MIDDLEWARE_AUTHENTICATE');
         err.name = 'AuthenticateMiddlewareError';
         next(err);
@@ -1043,9 +1043,9 @@ describe('Integration tests', function () {
       server.addMiddleware(server.MIDDLEWARE_SUBSCRIBE, function (req, next) {
         subscribeMiddlewareCounter++;
         assert.equal(req.channel.indexOf('my-channel-'), 0);
-        if (req.channel == 'my-channel-10') {
+        if (req.channel === 'my-channel-10') {
           assert.equal(JSON.stringify(req.data), JSON.stringify({foo: 123}));
-        } else if (req.channel == 'my-channel-12') {
+        } else if (req.channel === 'my-channel-12') {
           // Block my-channel-12
           var err = new Error('You cannot subscribe to channel 12');
           err.name = 'UnauthorizedSubscribeError';
@@ -1066,7 +1066,7 @@ describe('Integration tests', function () {
           var subscribeOptions = {
             batch: true
           };
-          if (i == 10) {
+          if (i === 10) {
             subscribeOptions.data = {foo: 123};
           }
           channelList.push(

@@ -49,7 +49,7 @@ var SCServerSocket = function (id, server, socket) {
   this.request = this.socket.upgradeReq || {};
 
   var wsEngine = this.server.options.wsEngine;
-  if (wsEngine == 'sc-uws' || wsEngine == 'uws') {
+  if (wsEngine === 'sc-uws' || wsEngine === 'uws') {
     this.request.connection = this.socket._socket;
   }
   if (this.request.connection) {
@@ -95,7 +95,7 @@ var SCServerSocket = function (id, server, socket) {
     try {
       obj = self.decode(message);
     } catch (err) {
-      if (err.name == 'Error') {
+      if (err.name === 'Error') {
         err.name = 'InvalidMessageError';
       }
       Emitter.prototype.emit.call(self, 'error', err);
@@ -103,7 +103,7 @@ var SCServerSocket = function (id, server, socket) {
     }
 
     // If pong
-    if (obj == '#2') {
+    if (obj === '#2') {
       var token = self.getAuthToken();
       if (self.server.isAuthTokenExpired(token)) {
         self.deauthenticate();
@@ -134,14 +134,13 @@ SCServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 SCServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
 SCServerSocket.prototype._sendPing = function () {
-  if (this.state != this.CLOSED) {
+  if (this.state !== this.CLOSED) {
     this.sendObject('#1');
   }
 };
 
 SCServerSocket.prototype._handleEventObject = function (obj, message) {
   var self = this;
-
   if (obj && obj.event != null) {
     var eventName = obj.event;
 
@@ -151,7 +150,7 @@ SCServerSocket.prototype._handleEventObject = function (obj, message) {
         if (err) {
           response.error(err, ackData);
         } else {
-          if (eventName == '#disconnect') {
+          if (eventName === '#disconnect') {
             var disconnectData = newEventData || {};
             self._onSCClose(disconnectData.code, disconnectData.data);
           } else {
@@ -213,11 +212,11 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
-  if (this.state != this.CLOSED) {
+  if (this.state !== this.CLOSED) {
     var prevState = this.state;
     this.state = this.CLOSED;
 
-    if (prevState == this.CONNECTING) {
+    if (prevState === this.CONNECTING) {
       // Private connectAbort event for internal use only
       Emitter.prototype.emit.call(this, '_connectAbort', code, data);
       Emitter.prototype.emit.call(this, 'connectAbort', code, data);
@@ -234,7 +233,7 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
       var closeMessage;
       if (data) {
         var reasonString;
-        if (typeof data == 'object') {
+        if (typeof data === 'object') {
           try {
             reasonString = JSON.stringify(data);
           } catch (error) {
@@ -256,12 +255,12 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
 SCServerSocket.prototype.disconnect = function (code, data) {
   code = code || 1000;
 
-  if (typeof code != 'number') {
+  if (typeof code !== 'number') {
     var err = new InvalidArgumentsError('If specified, the code argument must be a number');
     Emitter.prototype.emit.call(this, 'error', err);
   }
 
-  if (this.state != this.CLOSED) {
+  if (this.state !== this.CLOSED) {
     var packet = {
       code: code,
       data: data
@@ -381,7 +380,7 @@ SCServerSocket.prototype.emit = function (event, data, callback, options) {
         }
       }
     });
-  } else if (event == 'error') {
+  } else if (event === 'error') {
     Emitter.prototype.emit.call(this, event, data);
   } else {
     var error = new InvalidActionError('The "' + event + '" event is reserved and cannot be emitted on a server socket');
@@ -390,7 +389,7 @@ SCServerSocket.prototype.emit = function (event, data, callback, options) {
 };
 
 SCServerSocket.prototype.triggerAuthenticationEvents = function (oldState) {
-  if (oldState != this.AUTHENTICATED) {
+  if (oldState !== this.AUTHENTICATED) {
     var stateChangeData = {
       oldState: oldState,
       newState: this.authState,
@@ -485,7 +484,7 @@ SCServerSocket.prototype.deauthenticateSelf = function () {
   this.signedAuthToken = null;
   this.authToken = null;
   this.authState = this.UNAUTHENTICATED;
-  if (oldState != this.UNAUTHENTICATED) {
+  if (oldState !== this.UNAUTHENTICATED) {
     var stateChangeData = {
       oldState: oldState,
       newState: this.authState

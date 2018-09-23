@@ -31,7 +31,7 @@ module.exports.SCServerSocket = require('./scserversocket');
  */
 
 module.exports.listen = function (port, options, fn) {
-  if ('function' == typeof options) {
+  if (typeof options === 'function') {
     fn = options;
     options = {};
   }

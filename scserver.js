@@ -78,7 +78,7 @@ var SCServer = function (options) {
   this._middleware[this.MIDDLEWARE_AUTHENTICATE] = [];
 
   this.origins = opts.origins;
-  this._allowAllOrigins = this.origins.indexOf('*:*') != -1;
+  this._allowAllOrigins = this.origins.indexOf('*:*') !== -1;
 
   this.ackTimeout = opts.ackTimeout;
   this.handshakeTimeout = opts.handshakeTimeout;
@@ -299,11 +299,11 @@ SCServer.prototype._processTokenError = function (err) {
   var isBadToken = true;
 
   if (err) {
-    if (err.name == 'TokenExpiredError') {
+    if (err.name === 'TokenExpiredError') {
       authError = new AuthTokenExpiredError(err.message, err.expiredAt);
-    } else if (err.name == 'JsonWebTokenError') {
+    } else if (err.name === 'JsonWebTokenError') {
       authError = new AuthTokenInvalidError(err.message);
-    } else if (err.name == 'NotBeforeError') {
+    } else if (err.name === 'NotBeforeError') {
       authError = new AuthTokenNotBeforeError(err.message, err.date);
       // In this case, the token is good; it's just not active yet.
       isBadToken = false;
@@ -383,7 +383,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
 SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   var self = this;
 
-  if (this.options.wsEngine == 'ws') {
+  if (this.options.wsEngine === 'ws') {
     // Normalize ws module to match sc-uws module.
     wsSocket.upgradeReq = upgradeReq;
   }
@@ -435,7 +435,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     }
     // This is an invalid state; it means the client tried to subscribe before
     // having completed the handshake.
-    if (scSocket.state == scSocket.OPEN) {
+    if (scSocket.state === scSocket.OPEN) {
       self._subscribeSocket(scSocket, channelOptions, function (err) {
         if (err) {
           var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
@@ -500,10 +500,10 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
     self._unsubscribeSocketFromAllChannels(scSocket);
 
-    if (type == 'disconnect') {
+    if (type === 'disconnect') {
       self.emit('_disconnection', scSocket, code, data);
       self.emit('disconnection', scSocket, code, data);
-    } else if (type == 'abort') {
+    } else if (type === 'abort') {
       self.emit('_connectionAbort', scSocket, code, data);
       self.emit('connectionAbort', scSocket, code, data);
     }
@@ -534,7 +534,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         return;
       }
       self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken, oldState) {
-        if (scSocket.state == scSocket.CLOSED) {
+        if (scSocket.state === scSocket.CLOSED) {
           return;
         }
 
@@ -617,7 +617,7 @@ SCServer.prototype.removeMiddleware = function (type, middleware) {
   var middlewareFunctions = this._middleware[type];
 
   this._middleware[type] = middlewareFunctions.filter(function (fn) {
-    return fn != middleware;
+    return fn !== middleware;
   });
 };
 
@@ -626,7 +626,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
 
   var req = info.req;
   var origin = info.origin;
-  if (origin == 'null' || origin == null) {
+  if (origin === 'null' || origin == null) {
     origin = '*';
   }
   var ok = false;
@@ -720,7 +720,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
   var event = options.event;
 
   if (this._isPrivateTransmittedEvent(event)) {
-    if (event == '#subscribe') {
+    if (event === '#subscribe') {
       var eventData = options.data || {};
       request.channel = eventData.channel;
       request.waitForAuth = eventData.waitForAuth;
@@ -752,7 +752,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
           }
         );
       }
-    } else if (event == '#publish') {
+    } else if (event === '#publish') {
       if (this.allowClientPublish) {
         var eventData = options.data || {};
         request.channel = eventData.channel;
@@ -894,7 +894,7 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
 
   var callbackInvoked = false;
 
-  if (eventName == '#publish') {
+  if (eventName === '#publish') {
     var request = {
       socket: socket,
       channel: eventData.channel,

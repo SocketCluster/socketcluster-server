@@ -877,7 +877,10 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
           statusCode = 4008;
         }
         if (err) {
-          if (err === true) {
+          if (err.statusCode != null) {
+            statusCode = err.statusCode;
+          }
+          if (err === true || err.silent) {
             err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware', self.MIDDLEWARE_HANDSHAKE_SC);
           } else if (self.middlewareEmitWarnings) {
             self.emit('warning', err);

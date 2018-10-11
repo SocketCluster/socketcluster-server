@@ -653,7 +653,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
         } else {
           callbackInvoked = true;
           if (err) {
-            if (err === true) {
+            if (err === true || err.silent) {
               err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_WS + ' middleware', self.MIDDLEWARE_HANDSHAKE_WS);
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);
@@ -738,7 +738,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
             } else {
               callbackInvoked = true;
               if (err) {
-                if (err === true) {
+                if (err === true || err.silent) {
                   err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware', self.MIDDLEWARE_SUBSCRIBE);
                 } else if (self.middlewareEmitWarnings) {
                   self.emit('warning', err);
@@ -768,7 +768,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
                 eventData.data = request.data;
               }
               if (err) {
-                if (err === true) {
+                if (err === true || err.silent) {
                   err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware', self.MIDDLEWARE_PUBLISH_IN);
                 } else if (self.middlewareEmitWarnings) {
                   self.emit('warning', err);
@@ -811,7 +811,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
         } else {
           callbackInvoked = true;
           if (err) {
-            if (err === true) {
+            if (err === true || err.silent) {
               err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_EMIT + ' middleware', self.MIDDLEWARE_EMIT);
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);
@@ -844,7 +844,7 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
           isBadToken = results[results.length - 1] || false;
         }
         if (err) {
-          if (err === true) {
+          if (err === true || err.silent) {
             err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware', self.MIDDLEWARE_AUTHENTICATE);
           } else if (self.middlewareEmitWarnings) {
             self.emit('warning', err);
@@ -913,7 +913,7 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
             eventData.data = request.data;
           }
           if (err) {
-            if (err === true) {
+            if (err === true || err.silent) {
               err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware', self.MIDDLEWARE_PUBLISH_OUT);
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);

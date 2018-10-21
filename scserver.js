@@ -250,14 +250,15 @@ SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback
     socket.channelSubscriptionsCount++;
   }
 
-  this.brokerEngine.subscribeSocket(socket, channelName, function (err) {
-    if (err) {
-      delete socket.channelSubscriptions[channelName];
-      socket.channelSubscriptionsCount--;
-    } else {
-      Emitter.prototype.emit.call(socket, 'subscribe', channelName, channelOptions);
-      self.emit('subscription', socket, channelName, channelOptions);
-    }
+  this.brokerEngine.subscribeSocket(socket, channelName)
+  .then(function () {
+    Emitter.prototype.emit.call(socket, 'subscribe', channelName, channelOptions);
+    self.emit('subscription', socket, channelName, channelOptions);
+    callback && callback();
+  })
+  .catch(function (err) {
+    delete socket.channelSubscriptions[channelName];
+    socket.channelSubscriptionsCount--;
     callback && callback(err);
   });
 };

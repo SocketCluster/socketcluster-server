@@ -41,11 +41,11 @@ module.exports.listen = function (port, options, fn) {
     res.end('Not Implemented');
   });
 
-  var engine = module.exports.attach(server, options);
-  engine.httpServer = server;
+  var socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
   server.listen(port, fn);
 
-  return engine;
+  return socketClusterServer;
 };
 
 /**

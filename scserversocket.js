@@ -10,30 +10,7 @@ var InvalidActionError = scErrors.InvalidActionError;
 
 
 var SCServerSocket = function (id, server, socket) {
-  var self = this;
-
   Emitter.call(this);
-
-  this._localEvents = {
-    'subscribe': 1,
-    'unsubscribe': 1,
-    'connect': 1,
-    '_connect': 1,
-    'disconnect': 1,
-    '_disconnect': 1,
-    'connectAbort': 1,
-    '_connectAbort': 1,
-    'close': 1,
-    '_close': 1,
-    'message': 1,
-    'error': 1,
-    'authStateChange': 1,
-    'authTokenSigned': 1,
-    'authenticate': 1,
-    'deauthenticate': 1,
-    'badAuthToken': 1,
-    'raw': 1
-  };
 
   this._autoAckEvents = {
     '#publish': 1
@@ -72,12 +49,12 @@ var SCServerSocket = function (id, server, socket) {
   this.channelSubscriptions = {};
   this.channelSubscriptionsCount = 0;
 
-  this.socket.on('error', function (err) {
-    Emitter.prototype.emit.call(self, 'error', err);
+  this.socket.on('error', (err) => {
+    this.emit('error', err);
   });
 
-  this.socket.on('close', function (code, data) {
-    self._onSCClose(code, data);
+  this.socket.on('close', (code, data) => {
+    this._onSCClose(code, data);
   });
 
   if (!this.server.pingTimeoutDisabled) {
@@ -86,36 +63,36 @@ var SCServerSocket = function (id, server, socket) {
   this._resetPongTimeout();
 
   // Receive incoming raw messages
-  this.socket.on('message', function (message, flags) {
-    self._resetPongTimeout();
+  this.socket.on('message', (message, flags) => {
+    this._resetPongTimeout();
 
-    Emitter.prototype.emit.call(self, 'message', message);
+    this.emit('message', message);
 
     var obj;
     try {
-      obj = self.decode(message);
+      obj = this.decode(message);
     } catch (err) {
       if (err.name === 'Error') {
         err.name = 'InvalidMessageError';
       }
-      Emitter.prototype.emit.call(self, 'error', err);
+      this.emit('error', err);
       return;
     }
 
     // If pong
     if (obj === '#2') {
-      var token = self.getAuthToken();
-      if (self.server.isAuthTokenExpired(token)) {
-        self.deauthenticate();
+      var token = this.getAuthToken();
+      if (this.server.isAuthTokenExpired(token)) {
+        this.deauthenticate();
       }
     } else {
       if (Array.isArray(obj)) {
         var len = obj.length;
         for (var i = 0; i < len; i++) {
-          self._handleEventObject(obj[i], message);
+          this._handleEventObject(obj[i], message);
         }
       } else {
-        self._handleEventObject(obj, message);
+        this._handleEventObject(obj, message);
       }
     }
   });
@@ -140,46 +117,43 @@ SCServerSocket.prototype._sendPing = function () {
 };
 
 SCServerSocket.prototype._handleEventObject = function (obj, message) {
-  var self = this;
   if (obj && obj.event != null) {
     var eventName = obj.event;
 
-    if (self._localEvents[eventName] == null) {
-      var response = new Response(self, obj.cid);
-      self.server.verifyInboundEvent(self, eventName, obj.data, function (err, newEventData, ackData) {
-        if (err) {
-          response.error(err, ackData);
+    var response = new Response(this, obj.cid);
+    this.server.verifyInboundEvent(this, eventName, obj.data, (err, newEventData, ackData) => {
+      if (err) {
+        response.error(err, ackData);
+      } else {
+        if (eventName === '#disconnect') {
+          var disconnectData = newEventData || {};
+          this._onSCClose(disconnectData.code, disconnectData.data);
         } else {
-          if (eventName === '#disconnect') {
-            var disconnectData = newEventData || {};
-            self._onSCClose(disconnectData.code, disconnectData.data);
-          } else {
-            if (self._autoAckEvents[eventName]) {
-              if (ackData !== undefined) {
-                response.end(ackData);
-              } else {
-                response.end();
-              }
-              Emitter.prototype.emit.call(self, eventName, newEventData);
+          if (this._autoAckEvents[eventName]) {
+            if (ackData !== undefined) {
+              response.end(ackData);
             } else {
-              Emitter.prototype.emit.call(self, eventName, newEventData, response.callback.bind(response));
+              response.end();
             }
+            this.emit(eventName, newEventData);
+          } else {
+            this.emit(eventName, newEventData, response.callback.bind(response));
           }
         }
-      });
-    }
+      }
+    });
   } else if (obj && obj.rid != null) {
     // If incoming message is a response to a previously sent message
-    var ret = self._callbackMap[obj.rid];
+    var ret = this._callbackMap[obj.rid];
     if (ret) {
       clearTimeout(ret.timeout);
-      delete self._callbackMap[obj.rid];
+      delete this._callbackMap[obj.rid];
       var rehydratedError = scErrors.hydrateError(obj.error);
       ret.callback(rehydratedError, obj.data);
     }
   } else {
     // The last remaining case is to treat the message as raw
-    Emitter.prototype.emit.call(self, 'raw', message);
+    this.emit('raw', message);
   }
 };
 
@@ -187,12 +161,10 @@ SCServerSocket.prototype._resetPongTimeout = function () {
   if (this.server.pingTimeoutDisabled) {
     return;
   }
-  var self = this;
-
   clearTimeout(this._pingTimeoutTicker);
-  this._pingTimeoutTicker = setTimeout(function() {
-    self._onSCClose(4001);
-    self.socket.close(4001);
+  this._pingTimeoutTicker = setTimeout(() => {
+    this._onSCClose(4001);
+    this.socket.close(4001);
   }, this.server.pingTimeout);
 };
 
@@ -218,16 +190,16 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
 
     if (prevState === this.CONNECTING) {
       // Private connectAbort event for internal use only
-      Emitter.prototype.emit.call(this, '_connectAbort', code, data);
-      Emitter.prototype.emit.call(this, 'connectAbort', code, data);
+      this.emit('_connectAbort', code, data);
+      this.emit('connectAbort', code, data);
     } else {
       // Private disconnect event for internal use only
-      Emitter.prototype.emit.call(this, '_disconnect', code, data);
-      Emitter.prototype.emit.call(this, 'disconnect', code, data);
+      this.emit('_disconnect', code, data);
+      this.emit('disconnect', code, data);
     }
     // Private close event for internal use only
-    Emitter.prototype.emit.call(this, '_close', code, data);
-    Emitter.prototype.emit.call(this, 'close', code, data);
+    this.emit('_close', code, data);
+    this.emit('close', code, data);
 
     if (!SCServerSocket.ignoreStatuses[code]) {
       var closeMessage;
@@ -247,7 +219,7 @@ SCServerSocket.prototype._onSCClose = function (code, data) {
         closeMessage = 'Socket connection closed with status code ' + code;
       }
       var err = new SocketProtocolError(SCServerSocket.errorStatuses[code] || closeMessage, code);
-      Emitter.prototype.emit.call(this, 'error', err);
+      this.emit('error', err);
     }
   }
 };
@@ -257,7 +229,7 @@ SCServerSocket.prototype.disconnect = function (code, data) {
 
   if (typeof code !== 'number') {
     var err = new InvalidArgumentsError('If specified, the code argument must be a number');
-    Emitter.prototype.emit.call(this, 'error', err);
+    this.emit('error', err);
   }
 
   if (this.state !== this.CLOSED) {
@@ -265,7 +237,7 @@ SCServerSocket.prototype.disconnect = function (code, data) {
       code: code,
       data: data
     };
-    this.emit('#disconnect', packet);
+    this.transmit('#disconnect', packet);
     this._onSCClose(code, data);
     this.socket.close(code);
   }
@@ -281,11 +253,9 @@ SCServerSocket.prototype.terminate = function () {
 };
 
 SCServerSocket.prototype.send = function (data, options) {
-  var self = this;
-
-  this.socket.send(data, options, function (err) {
+  this.socket.send(data, options, (err) => {
     if (err) {
-      self._onSCClose(1006, err.toString());
+      this._onSCClose(1006, err.toString());
     }
   });
 };
@@ -299,26 +269,24 @@ SCServerSocket.prototype.encode = function (object) {
 };
 
 SCServerSocket.prototype.sendObjectBatch = function (object) {
-  var self = this;
-
   this._batchSendList.push(object);
   if (this._batchTimeout) {
     return;
   }
 
-  this._batchTimeout = setTimeout(function () {
-    delete self._batchTimeout;
-    if (self._batchSendList.length) {
+  this._batchTimeout = setTimeout(() => {
+    delete this._batchTimeout;
+    if (this._batchSendList.length) {
       var str;
       try {
-        str = self.encode(self._batchSendList);
+        str = this.encode(this._batchSendList);
       } catch (err) {
-        Emitter.prototype.emit.call(self, 'error', err);
+        this.emit('error', err);
       }
       if (str != null) {
-        self.send(str);
+        this.send(str);
       }
-      self._batchSendList = [];
+      this._batchSendList = [];
     }
   }, this.server.options.pubSubBatchDuration || 0);
 };
@@ -328,7 +296,7 @@ SCServerSocket.prototype.sendObjectSingle = function (object) {
   try {
     str = this.encode(object);
   } catch (err) {
-    Emitter.prototype.emit.call(this, 'error', err);
+    this.emit('error', err);
   }
   if (str != null) {
     this.send(str);
@@ -343,49 +311,66 @@ SCServerSocket.prototype.sendObject = function (object, options) {
   }
 };
 
-SCServerSocket.prototype.emit = function (event, data, callback, options) {
-  var self = this;
+SCServerSocket.prototype.transmit = function (event, data, options) {
+  this.server.verifyOutboundEvent(this, event, data, options, (err, newData) => {
+    var eventObject = {
+      event: event
+    };
+    if (newData !== undefined) {
+      eventObject.data = newData;
+    }
 
-  if (this._localEvents[event] == null) {
-    this.server.verifyOutboundEvent(this, event, data, options, function (err, newData) {
+    if (!err) {
+      if (options && options.useCache && options.stringifiedData != null) {
+        // Optimized
+        this.send(options.stringifiedData);
+      } else {
+        this.sendObject(eventObject);
+      }
+    }
+  });
+};
+
+SCServerSocket.prototype.invoke = function (event, data, options) {
+  return new Promise((resolve, reject) => {
+    this.server.verifyOutboundEvent(this, event, data, options, (err, newData) => {
+      if (err) {
+        reject(err);
+        return;
+      }
       var eventObject = {
-        event: event
+        event: event,
+        cid: this._nextCallId()
       };
       if (newData !== undefined) {
         eventObject.data = newData;
       }
 
-      if (err) {
-        if (callback) {
-          eventObject.cid = self._nextCallId();
-          callback(err, eventObject);
-        }
+      var timeout = setTimeout(() => {
+        var error = new TimeoutError("Event response for '" + event + "' timed out");
+        delete this._callbackMap[eventObject.cid];
+        reject(error);
+      }, this.server.ackTimeout);
+
+      this._callbackMap[eventObject.cid] = {
+        callback: (err, result) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(result);
+        },
+        timeout: timeout
+      };
+
+      if (options && options.useCache && options.stringifiedData != null) {
+        // Optimized
+        this.send(options.stringifiedData);
       } else {
-        if (callback) {
-          eventObject.cid = self._nextCallId();
-          var timeout = setTimeout(function () {
-            var error = new TimeoutError("Event response for '" + event + "' timed out");
-
-            delete self._callbackMap[eventObject.cid];
-            callback(error, eventObject);
-          }, self.server.ackTimeout);
-
-          self._callbackMap[eventObject.cid] = {callback: callback, timeout: timeout};
-        }
-        if (options && options.useCache && options.stringifiedData != null) {
-          // Optimized
-          self.send(options.stringifiedData);
-        } else {
-          self.sendObject(eventObject);
-        }
+        this.sendObject(eventObject);
       }
     });
-  } else if (event === 'error') {
-    Emitter.prototype.emit.call(this, event, data);
-  } else {
-    var error = new InvalidActionError('The "' + event + '" event is reserved and cannot be emitted on a server socket');
-    Emitter.prototype.emit.call(this, 'error', error);
-  }
+  });
 };
 
 SCServerSocket.prototype.triggerAuthenticationEvents = function (oldState) {
@@ -395,16 +380,14 @@ SCServerSocket.prototype.triggerAuthenticationEvents = function (oldState) {
       newState: this.authState,
       authToken: this.authToken
     };
-    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
+    this.emit('authStateChange', stateChangeData);
     this.server.emit('authenticationStateChange', this, stateChangeData);
   }
-  Emitter.prototype.emit.call(this, 'authenticate', this.authToken);
+  this.emit('authenticate', this.authToken);
   this.server.emit('authentication', this, this.authToken);
 };
 
-SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
-  var self = this;
-
+SCServerSocket.prototype.setAuthToken = function (data, options) {
   var authToken = cloneDeep(data);
   var oldState = this.authState;
   this.authState = this.AUTHENTICATED;
@@ -416,7 +399,7 @@ SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
     if (options.algorithm != null) {
       delete options.algorithm;
       var err = new InvalidArgumentsError('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
-      Emitter.prototype.emit.call(this, 'error', err);
+      this.emit('error', err);
     }
   }
 
@@ -453,25 +436,51 @@ SCServerSocket.prototype.setAuthToken = function (data, options, callback) {
 
   this.authToken = authToken;
 
-  this.server.auth.signToken(authToken, this.server.signatureKey, options, function (err, signedToken) {
-    if (err) {
-      Emitter.prototype.emit.call(self, 'error', err);
-      self._onSCClose(4002, err.toString());
-      self.socket.close(4002);
-      callback && callback(err);
-    } else {
-      var tokenData = {
-        token: signedToken
-      };
-      if (self.authToken === authToken) {
-        self.signedAuthToken = signedToken;
-        Emitter.prototype.emit.call(self, 'authTokenSigned', signedToken);
-      }
-      self.emit('#setAuthToken', tokenData, callback);
+  var handleSignTokenResult = (result) => {
+    if (result.error) {
+      this.emit('error', result.error);
+      this._onSCClose(4002, result.error.toString());
+      this.socket.close(4002);
+      throw result.error;
     }
-  });
+    var tokenData = {
+      token: result.signedToken
+    };
+    if (this.authToken === authToken) {
+      this.signedAuthToken = result.signedToken;
+      this.emit('authTokenSigned', result.signedToken);
+    }
+    return this.invoke('#setAuthToken', tokenData);
+  };
+
+  var signTokenPromise;
+
+  // TODO 2: Test
+  if (options.async) {
+    signTokenPromise = this.server.auth.signToken(authToken, this.server.signatureKey, options)
+    .then((signedToken) => {
+      return {signedToken: signedToken};
+    })
+    .catch((err) => {
+      return {error: err};
+    })
+    .then(handleSignTokenResult);
+  } else {
+    var result = {};
+    try {
+      result.signedToken = this.server.auth.signToken(authToken, this.server.signatureKey, options);
+    } catch (err) {
+      result.error = err;
+    }
+    try {
+      signTokenPromise = handleSignTokenResult(result)
+    } catch (err) {
+      signTokenPromise = Promise.reject(err);
+    }
+  }
 
   this.triggerAuthenticationEvents(oldState);
+  return signTokenPromise;
 };
 
 SCServerSocket.prototype.getAuthToken = function () {
@@ -489,43 +498,35 @@ SCServerSocket.prototype.deauthenticateSelf = function () {
       oldState: oldState,
       newState: this.authState
     };
-    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
+    this.emit('authStateChange', stateChangeData);
     this.server.emit('authenticationStateChange', this, stateChangeData);
   }
-  Emitter.prototype.emit.call(this, 'deauthenticate', oldToken);
+  this.emit('deauthenticate', oldToken);
   this.server.emit('deauthentication', this, oldToken);
 };
 
-SCServerSocket.prototype.deauthenticate = function (callback) {
+SCServerSocket.prototype.deauthenticate = function () {
   this.deauthenticateSelf();
-  this.emit('#removeAuthToken', null, callback);
+  return this.invoke('#removeAuthToken');
 };
 
-SCServerSocket.prototype.kickOut = function (channel, message, callback) {
-  var self = this;
-
+SCServerSocket.prototype.kickOut = function (channel, message) {
   if (channel == null) {
-    Object.keys(this.channelSubscriptions).forEach(function (channelName) {
-      delete self.channelSubscriptions[channelName];
-      self.channelSubscriptionsCount--;
-      self.emit('#kickOut', {message: message, channel: channelName});
+    Object.keys(this.channelSubscriptions).forEach((channelName) => {
+      delete this.channelSubscriptions[channelName];
+      this.channelSubscriptionsCount--;
+      this.emit('#kickOut', {message: message, channel: channelName});
     });
   } else {
     delete this.channelSubscriptions[channel];
     this.channelSubscriptionsCount--;
     this.emit('#kickOut', {message: message, channel: channel});
   }
-  this.server.brokerEngine.unsubscribeSocket(this, channel, callback);
+  return this.server.brokerEngine.unsubscribeSocket(this, channel);
 };
 
 SCServerSocket.prototype.subscriptions = function () {
-  var subs = [];
-  for (var i in this.channelSubscriptions) {
-    if (this.channelSubscriptions.hasOwnProperty(i)) {
-      subs.push(i);
-    }
-  }
-  return subs;
+  return Object.keys(this.channelSubscriptions);
 };
 
 SCServerSocket.prototype.isSubscribed = function (channel) {

@@ -164,7 +164,7 @@ describe('Integration tests', function () {
     it('Should be authenticated on connect if previous JWT token is present', function (done) {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
-        client.emit('login', {username: 'bob'});
+        client.transmit('login', {username: 'bob'});
         client.once('authenticate', function (state) {
           assert.equal(client.authState, 'authenticated');
 
@@ -189,9 +189,8 @@ describe('Integration tests', function () {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
         // Change the setAuthKey to invalidate the current token.
-        client.emit('setAuthKey', 'differentAuthKey', function (err) {
-          assert.equal(err == null, true);
-
+        client.transmit('setAuthKey', 'differentAuthKey')
+        .then(function () {
           client.once('disconnect', function () {
             client.once('connect', function (statusB) {
               assert.equal(statusB.isAuthenticated, false);
@@ -239,7 +238,7 @@ describe('Integration tests', function () {
       client = socketCluster.connect(clientOptions);
       client.once('connect', function (statusA) {
         clientSocketId = client.id;
-        client.emit('login', {username: 'alice'});
+        client.transmit('login', {username: 'alice'});
       });
 
       setTimeout(function () {
@@ -349,7 +348,8 @@ describe('Integration tests', function () {
           multiplex: false
         });
         client.once('connect', function (statusA) {
-          client.emit('login', {username: 'bob'}, function (err) {
+          client.invoke('login', {username: 'bob'})
+          .then(function () {
             assert.equal(client.authState, 'authenticated');
             assert.notEqual(client.authToken, null);
             assert.equal(client.authToken.username, 'bob');
@@ -374,7 +374,7 @@ describe('Integration tests', function () {
           multiplex: false
         });
         client.once('connect', function (statusA) {
-          client.emit('login', {username: 'bob'});
+          client.transmit('login', {username: 'bob'});
           client.on('authenticate', function (newSignedToken) {
             assert.equal(client.authState, 'authenticated');
             assert.notEqual(client.authToken, null);
@@ -400,7 +400,7 @@ describe('Integration tests', function () {
           multiplex: false
         });
         client.once('connect', function (statusA) {
-          client.emit('login', {username: 'bob'});
+          client.transmit('login', {username: 'bob'});
           client.once('authenticate', function (newSignedToken) {
             client.once('disconnect', function () {
               client.once('connect', function (statusB) {
@@ -441,7 +441,7 @@ describe('Integration tests', function () {
             assert.equal(dateDifference < 1000, true);
             done();
           });
-          client.emit('loginWithTenDayExpiry', {username: 'bob'});
+          client.transmit('loginWithTenDayExpiry', {username: 'bob'});
         });
       });
     });
@@ -470,7 +470,7 @@ describe('Integration tests', function () {
             assert.equal(dateDifference < 1000, true);
             done();
           });
-          client.emit('loginWithTenDayExp', {username: 'bob'});
+          client.transmit('loginWithTenDayExp', {username: 'bob'});
         });
       });
     });
@@ -499,7 +499,7 @@ describe('Integration tests', function () {
             assert.equal(dateDifference < 1000, true);
             done();
           });
-          client.emit('loginWithTenDayExpAndExpiry', {username: 'bob'});
+          client.transmit('loginWithTenDayExpAndExpiry', {username: 'bob'});
         });
       });
     });
@@ -532,7 +532,7 @@ describe('Integration tests', function () {
             assert.notEqual(err, null);
             assert.equal(err.name, 'SocketProtocolError');
           });
-          client.emit('loginWithIssAndIssuer', {username: 'bob'});
+          client.transmit('loginWithIssAndIssuer', {username: 'bob'});
           setTimeout(function () {
             server.removeAllListeners('warning');
             assert.notEqual(warningMap['SocketProtocolError'], null);
@@ -577,7 +577,7 @@ describe('Integration tests', function () {
           multiplex: false
         });
         client.once('connect', function (statusA) {
-          client.emit('login', {username: 'bob'});
+          client.transmit('login', {username: 'bob'});
         });
         setTimeout(function () {
           assert.equal(authTokenSignedEventEmitted, true);
@@ -1376,7 +1376,7 @@ describe('Integration tests', function () {
           multiplex: false
         });
 
-        client.emit('#unsubscribe', 'bar');
+        client.transmit('#unsubscribe', 'bar');
 
         setTimeout(function () {
           assert.equal(errorList.length, 1);
@@ -1432,7 +1432,7 @@ describe('Integration tests', function () {
         });
 
         fooChannel.on('subscribe', function () {
-          client.emit('#unsubscribe', 'foo');
+          client.transmit('#unsubscribe', 'foo');
         });
 
         setTimeout(function () {
@@ -1780,7 +1780,7 @@ describe('Integration tests', function () {
           multiplex: false
         });
 
-        client.emit('login', {username: 'bob'});
+        client.transmit('login', {username: 'bob'});
         client.once('authenticate', function (state) {
           assert.equal(middlewareWasExecuted, true);
           done();
@@ -1944,13 +1944,13 @@ describe('Integration tests', function () {
   });
 
   describe('Errors', function () {
-    it('Should throw an error if reserved event is emitted on socket', function (done) {
+    it('Should throw an error if reserved event is transmitted on socket', function (done) {
       server.on('connection', function (socket) {
         var error;
         socket.on('error', function (err) {
           error = err;
         });
-        socket.emit('message', 123);
+        socket.transmit('message', 123);
         setTimeout(function () {
           assert.notEqual(error, null);
           assert.equal(error.name, 'InvalidActionError');
@@ -1961,7 +1961,7 @@ describe('Integration tests', function () {
       client = socketCluster.connect(clientOptions);
     });
 
-    it('Should allow emitting error event on socket', function (done) {
+    it('Should allow transmitting error event on socket', function (done) {
       server.on('connection', function (socket) {
         var error;
         socket.on('error', function (err) {
@@ -1969,7 +1969,7 @@ describe('Integration tests', function () {
         });
         var customError = new Error('This is a custom error');
         customError.name = 'CustomError';
-        socket.emit('error', customError);
+        socket.transmit('error', customError);
         setTimeout(function () {
           assert.notEqual(error, null);
           assert.equal(error.name, 'CustomError');

@@ -329,6 +329,7 @@ SCServerSocket.prototype.transmit = function (event, data, options) {
       }
     }
   });
+  return Promise.resolve();
 };
 
 SCServerSocket.prototype.invoke = function (event, data, options) {

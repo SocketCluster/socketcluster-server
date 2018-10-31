@@ -454,11 +454,19 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
     return this.invoke('#setAuthToken', tokenData);
   };
 
+  var signTokenResult;
+  var signTokenError;
   var signTokenPromise;
 
   // TODO 2: Test
-  if (options.async) {
-    signTokenPromise = this.server.auth.signToken(authToken, this.server.signatureKey, options)
+  try {
+    signTokenResult = this.server.auth.signToken(authToken, this.server.signatureKey, options);
+  } catch (err) {
+    signTokenError = err;
+  }
+
+  if (signTokenResult instanceof Promise) {
+    signTokenPromise = signTokenResult
     .then((signedToken) => {
       return {signedToken: signedToken};
     })
@@ -467,12 +475,10 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
     })
     .then(handleSignTokenResult);
   } else {
-    var result = {};
-    try {
-      result.signedToken = this.server.auth.signToken(authToken, this.server.signatureKey, options);
-    } catch (err) {
-      result.error = err;
-    }
+    var result = {
+      signedToken: signTokenResult,
+      error: signTokenError
+    };
     try {
       signTokenPromise = handleSignTokenResult(result)
     } catch (err) {

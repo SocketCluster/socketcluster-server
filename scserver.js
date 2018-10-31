@@ -373,9 +373,18 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
     }
   };
 
-  // TODO 2 Test
-  if (verificationOptions.async) {
-    this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions)
+  var verifyTokenResult;
+  var verifyTokenError;
+
+  // TODO 2: Test
+  try {
+    verifyTokenResult = this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions);
+  } catch (err) {
+    verifyTokenError = err;
+  }
+
+  if (verifyTokenResult instanceof Promise) { // TODO 2: Check if there is a better way to check if Promise
+    verifyTokenResult
     .then((token) => {
       return {token: token};
     })
@@ -384,12 +393,10 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
     })
     .then(handleVerifyTokenResult);
   } else {
-    var result = {};
-    try {
-      result.token = this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions);
-    } catch (err) {
-      result.error = err;
-    }
+    var result = {
+      token: verifyTokenResult,
+      error: verifyTokenError
+    };
     handleVerifyTokenResult(result);
   }
 };

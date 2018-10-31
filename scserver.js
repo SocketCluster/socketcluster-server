@@ -545,11 +545,11 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       socket: scSocket
     }, (err, statusCode) => {
       if (err) {
-        var clientSocketErrorStatus = {
-          code: statusCode
-        };
-        respond(err, clientSocketErrorStatus);
-        scSocket.disconnect(statusCode);
+        if (err.statusCode == null) {
+          err.statusCode = statusCode;
+        }
+        respond(err);
+        scSocket.disconnect(err.statusCode);
         return;
       }
       this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldState) => {

@@ -26,6 +26,18 @@ var invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZ
 
 var server, client;
 
+var resolveAfterTimeout = function (duration, value) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (value === undefined) {
+        resolve();
+      } else {
+        resolve(value);
+      }
+    }, duration);
+  });
+};
+
 var connectionHandler = function (socket) {
   socket.on('login', function (userDetails, respond) {
     if (allowedUsers[userDetails.username]) {
@@ -333,7 +345,7 @@ describe('Integration tests', function () {
       });
     });
 
-    it('Token should be available inside login callback if token engine signing is synchronous', function (done) {
+    it('Token should be available after Promise resolves if token engine signing is synchronous', function (done) {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -595,16 +607,15 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
+        verifyToken: (signedAuthToken, verificationKey, verificationOptions) => {
+          setTimeout(() => {
             assert.equal(signedAuthToken, validSignedAuthTokenBob);
             assert.equal(verificationKey, serverOptions.authKey);
             assert.notEqual(verificationOptions, null);
             assert.notEqual(verificationOptions.socket, null);
-            assert.equal(typeof callback, 'function');
-            callback(null, {});
             done();
           }, 500)
+          return Promise.resolve({});
         }
       });
       server.on('connection', connectionHandler);
@@ -624,10 +635,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 500)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(500, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -779,10 +788,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 500)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(500, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -849,10 +856,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 10)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(10, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -919,10 +924,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 500)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(500, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -971,10 +974,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 0)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(0, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -1098,10 +1099,8 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       server.setAuthEngine({
-        verifyToken: function (signedAuthToken, verificationKey, verificationOptions, callback) {
-          setTimeout(function () {
-            callback(null, {});
-          }, 500)
+        verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
+          return resolveAfterTimeout(500, {});
         }
       });
       server.on('connection', connectionHandler);
@@ -1299,12 +1298,8 @@ describe('Integration tests', function () {
       portNumber++;
       var customBrokerEngine = new SCSimpleBroker();
       var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
-      customBrokerEngine.unsubscribeSocket = function (socket, channel, callback) {
-        defaultUnsubscribeSocket.call(this, socket, channel, function () {
-          setTimeout(function () {
-            callback && callback();
-          }, 100);
-        });
+      customBrokerEngine.unsubscribeSocket = function (socket, channel) {
+        return resolveAfterTimeout(100, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
       server = socketClusterServer.listen(portNumber, {
@@ -1390,12 +1385,8 @@ describe('Integration tests', function () {
       portNumber++;
       var customBrokerEngine = new SCSimpleBroker();
       var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
-      customBrokerEngine.unsubscribeSocket = function (socket, channel, callback) {
-        defaultUnsubscribeSocket.call(this, socket, channel, function () {
-          setTimeout(function () {
-            callback && callback();
-          }, 300);
-        });
+      customBrokerEngine.unsubscribeSocket = function (socket, channel) {
+        return resolveAfterTimeout(300, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
       server = socketClusterServer.listen(portNumber, {

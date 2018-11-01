@@ -480,7 +480,7 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
       error: signTokenError
     };
     try {
-      signTokenPromise = handleSignTokenResult(result)
+      signTokenPromise = handleSignTokenResult(result);
     } catch (err) {
       signTokenPromise = Promise.reject(err);
     }

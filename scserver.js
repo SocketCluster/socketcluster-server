@@ -383,7 +383,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
     verifyTokenError = err;
   }
 
-  if (verifyTokenResult instanceof Promise) { // TODO 2: Check if there is a better way to check if Promise
+  if (verifyTokenResult instanceof Promise) {
     verifyTokenResult
     .then((token) => {
       return {token: token};

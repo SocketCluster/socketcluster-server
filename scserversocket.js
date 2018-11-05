@@ -237,7 +237,9 @@ SCServerSocket.prototype.disconnect = function (code, data) {
       code: code,
       data: data
     };
-    this.transmit('#disconnect', packet);
+    if (this.socket.readyState === this.socket.OPEN) {
+      this.transmit('#disconnect', packet);
+    }
     this._onSCClose(code, data);
     this.socket.close(code);
   }

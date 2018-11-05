@@ -41,7 +41,7 @@ var resolveAfterTimeout = function (duration, value) {
 var connectionHandler = function (socket) {
   socket.on('login', function (userDetails, respond) {
     if (allowedUsers[userDetails.username]) {
-      socket.setAuthToken(userDetails);
+      socket.setAuthToken(userDetails); // TODO 2: Catch rejection?
       respond();
     } else {
       var err = new Error('Failed to login');
@@ -90,7 +90,7 @@ var connectionHandler = function (socket) {
       userDetails.iss = 'foo';
       socket.setAuthToken(userDetails, {
         issuer: 'bar'
-      });
+      }).catch((err) => {});
       respond();
     } else {
       var err = new Error('Failed to login');
@@ -1931,44 +1931,6 @@ describe('Integration tests', function () {
           done();
         });
       });
-    });
-  });
-
-  describe('Errors', function () {
-    it('Should throw an error if reserved event is transmitted on socket', function (done) {
-      server.on('connection', function (socket) {
-        var error;
-        socket.on('error', function (err) {
-          error = err;
-        });
-        socket.transmit('message', 123);
-        setTimeout(function () {
-          assert.notEqual(error, null);
-          assert.equal(error.name, 'InvalidActionError');
-          done();
-        }, 100);
-      });
-
-      client = socketCluster.connect(clientOptions);
-    });
-
-    it('Should allow transmitting error event on socket', function (done) {
-      server.on('connection', function (socket) {
-        var error;
-        socket.on('error', function (err) {
-          error = err;
-        });
-        var customError = new Error('This is a custom error');
-        customError.name = 'CustomError';
-        socket.transmit('error', customError);
-        setTimeout(function () {
-          assert.notEqual(error, null);
-          assert.equal(error.name, 'CustomError');
-          done();
-        }, 100);
-      });
-
-      client = socketCluster.connect(clientOptions);
     });
   });
 });

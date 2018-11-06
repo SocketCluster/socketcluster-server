@@ -634,7 +634,7 @@ SCServer.prototype.addMiddleware = function (type, middleware) {
 SCServer.prototype.removeMiddleware = function (type, middleware) {
   var middlewareFunctions = this._middleware[type];
 
-  this._middleware[type] = middlewareFunctions.filter(function (fn) {
+  this._middleware[type] = middlewareFunctions.filter((fn) => {
     return fn !== middleware;
   });
 };
@@ -855,7 +855,7 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
   };
 
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
-    function (err, results) {
+    (err, results) => {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
       } else {
@@ -886,7 +886,7 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
   };
 
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
-    function (err, results) {
+    (err, results) => {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware was already invoked'));
       } else {
@@ -925,7 +925,7 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
       data: eventData.data
     };
     async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
-      function (err) {
+      (err) => {
         if (callbackInvoked) {
           self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware was already invoked'));
         } else {

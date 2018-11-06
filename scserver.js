@@ -376,7 +376,6 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
   var verifyTokenResult;
   var verifyTokenError;
 
-  // TODO 2: Test
   try {
     verifyTokenResult = this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions);
   } catch (err) {

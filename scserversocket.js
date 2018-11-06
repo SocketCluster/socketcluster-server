@@ -7,6 +7,7 @@ var InvalidArgumentsError = scErrors.InvalidArgumentsError;
 var SocketProtocolError = scErrors.SocketProtocolError;
 var TimeoutError = scErrors.TimeoutError;
 var InvalidActionError = scErrors.InvalidActionError;
+var AuthError = scErrors.AuthError;
 
 
 var SCServerSocket = function (id, server, socket) {
@@ -407,7 +408,8 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
   }
 
   options.mutatePayload = true;
-
+  var rejectOnFailedDelivery = options.rejectOnFailedDelivery;
+  delete options.rejectOnFailedDelivery;
   var defaultSignatureOptions = this.server.defaultSignatureOptions;
 
   // We cannot have the exp claim on the token and the expiresIn option
@@ -453,14 +455,20 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
       this.signedAuthToken = result.signedToken;
       this.emit('authTokenSigned', result.signedToken);
     }
-    return this.invoke('#setAuthToken', tokenData);
+    return this.invoke('#setAuthToken', tokenData)
+    .catch((err) => {
+      var authError = new AuthError('Failed to deliver auth token to client - ' + err.message);
+      this.emit('error', authError);
+      if (rejectOnFailedDelivery) {
+        throw authError;
+      }
+    });
   };
 
   var signTokenResult;
   var signTokenError;
   var signTokenPromise;
 
-  // TODO 2: Test
   try {
     signTokenResult = this.server.auth.signToken(authToken, this.server.signatureKey, options);
   } catch (err) {

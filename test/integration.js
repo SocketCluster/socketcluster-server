@@ -41,7 +41,7 @@ var resolveAfterTimeout = function (duration, value) {
 var connectionHandler = function (socket) {
   socket.on('login', function (userDetails, respond) {
     if (allowedUsers[userDetails.username]) {
-      socket.setAuthToken(userDetails); // TODO 2: Catch rejection?
+      socket.setAuthToken(userDetails);
       respond();
     } else {
       var err = new Error('Failed to login');
@@ -595,6 +595,102 @@ describe('Integration tests', function () {
           assert.equal(authTokenSignedEventEmitted, true);
           done();
         }, 100);
+      });
+    });
+
+    it('Should reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is true', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authSignAsync: true,
+        ackTimeout: 1000
+      });
+
+      var socketErrors = [];
+
+      server.on('connection', function (socket) {
+        socket.on('error', function (err) {
+          socketErrors.push(err);
+        });
+        socket.on('login', function (userDetails, respond) {
+          if (allowedUsers[userDetails.username]) {
+            client.disconnect();
+            socket.setAuthToken(userDetails, {rejectOnFailedDelivery: true})
+            .catch((err) => {
+              assert.notEqual(err, null);
+              assert.equal(err.name, 'AuthError');
+              assert.notEqual(socketErrors[0], null);
+              assert.equal(socketErrors[0].name, 'AuthError');
+              done();
+            });
+            respond();
+          } else {
+            var err = new Error('Failed to login');
+            err.name = 'FailedLoginError';
+            respond(err);
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.transmit('login', {username: 'bob'});
+        });
+      });
+    });
+
+    it('Should not reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is not true', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authSignAsync: true,
+        ackTimeout: 1000
+      });
+
+      var socketErrors = [];
+
+      server.on('connection', function (socket) {
+        socket.on('error', function (err) {
+          socketErrors.push(err);
+        });
+        socket.on('login', function (userDetails, respond) {
+          if (allowedUsers[userDetails.username]) {
+            client.disconnect();
+            socket.setAuthToken(userDetails)
+            .catch((err) => {
+              return err;
+            })
+            .then((err) => {
+              assert.equal(err, null);
+              assert.notEqual(socketErrors[0], null);
+              assert.equal(socketErrors[0].name, 'AuthError');
+              done();
+            });
+            respond();
+          } else {
+            var err = new Error('Failed to login');
+            err.name = 'FailedLoginError';
+            respond(err);
+          }
+        });
+      });
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.once('connect', function (statusA) {
+          client.transmit('login', {username: 'bob'});
+        });
       });
     });
 

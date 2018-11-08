@@ -1618,7 +1618,7 @@ describe('Integration tests', function () {
           assert.equal(serverSocket.channelSubscriptionsCount, 0);
           assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
           done();
-        }, 100);
+        }, 200);
       });
     });
   });

@@ -55,7 +55,9 @@ var SCServerSocket = function (id, server, socket) {
   });
 
   this.socket.on('close', (code, data) => {
-    this._onSCClose(code, data);
+    setTimeout(() => {
+      this._onSCClose(code, data);
+    }, 0);
   });
 
   if (!this.server.pingTimeoutDisabled) {

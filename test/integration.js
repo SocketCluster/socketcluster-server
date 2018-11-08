@@ -895,6 +895,7 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         var socketDisconnected = false;
         var socketDisconnectedBeforeConnect = false;
@@ -915,8 +916,10 @@ describe('Integration tests', function () {
             }
             socketDisconnected = true;
           });
-          socket.once('connectAbort', function () {
+          socket.once('connectAbort', function (code, reason) {
             clientSocketAborted = true;
+            assert.equal(code, 4444);
+            assert.equal(reason, 'Disconnect before handshake');
           });
         });
 
@@ -932,8 +935,9 @@ describe('Integration tests', function () {
         });
 
         setTimeout(function () {
-          client.disconnect();
+          client.disconnect(4444, 'Disconnect before handshake');
         }, 100);
+
         setTimeout(function () {
           assert.equal(socketDisconnected, false);
           assert.equal(socketDisconnectedBeforeConnect, false);
@@ -963,6 +967,7 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         var socketDisconnected = false;
         var socketDisconnectedBeforeConnect = false;
@@ -977,11 +982,13 @@ describe('Integration tests', function () {
         server.once('handshake', function (socket) {
           assert.equal(server.pendingClientsCount, 1);
           assert.notEqual(server.pendingClients[socket.id], null);
-          socket.once('disconnect', function () {
+          socket.once('disconnect', function (code, reason) {
             if (!connectionOnServer) {
               socketDisconnectedBeforeConnect = true;
             }
             socketDisconnected = true;
+            assert.equal(code, 4445);
+            assert.equal(reason, 'Disconnect after handshake');
           });
           socket.once('connectAbort', function () {
             clientSocketAborted = true;
@@ -1000,8 +1007,9 @@ describe('Integration tests', function () {
         });
 
         setTimeout(function () {
-          client.disconnect();
+          client.disconnect(4445, 'Disconnect after handshake');
         }, 200);
+
         setTimeout(function () {
           assert.equal(socketDisconnectedBeforeConnect, false);
           assert.equal(socketDisconnected, true);
@@ -1031,14 +1039,17 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         var serverSocketClosed = false;
         var serverSocketAborted = false;
         var serverClosure = false;
 
         server.on('handshake', function (socket) {
-          socket.once('close', function () {
+          socket.once('close', function (code, reason) {
             serverSocketClosed = true;
+            assert.equal(code, 4444);
+            assert.equal(reason, 'Disconnect before handshake');
           });
         });
 
@@ -1052,7 +1063,7 @@ describe('Integration tests', function () {
         });
 
         setTimeout(function () {
-          client.disconnect();
+          client.disconnect(4444, 'Disconnect before handshake');
         }, 100);
         setTimeout(function () {
           assert.equal(serverSocketClosed, true);
@@ -1081,14 +1092,17 @@ describe('Integration tests', function () {
           port: portNumber,
           multiplex: false
         });
+        client.on('error', function () {});
 
         var serverSocketClosed = false;
         var serverSocketDisconnected = false;
         var serverClosure = false;
 
         server.on('handshake', function (socket) {
-          socket.once('close', function () {
+          socket.once('close', function (code, reason) {
             serverSocketClosed = true;
+            assert.equal(code, 4445);
+            assert.equal(reason, 'Disconnect after handshake');
           });
         });
 
@@ -1102,7 +1116,7 @@ describe('Integration tests', function () {
         });
 
         setTimeout(function () {
-          client.disconnect();
+          client.disconnect(4445, 'Disconnect after handshake');
         }, 100);
         setTimeout(function () {
           assert.equal(serverSocketClosed, true);

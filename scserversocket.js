@@ -128,20 +128,15 @@ SCServerSocket.prototype._handleEventObject = function (obj, message) {
       if (err) {
         response.error(err, ackData);
       } else {
-        if (eventName === '#disconnect') {
-          var disconnectData = newEventData || {};
-          this._onSCClose(disconnectData.code, disconnectData.data);
-        } else {
-          if (this._autoAckEvents[eventName]) {
-            if (ackData !== undefined) {
-              response.end(ackData);
-            } else {
-              response.end();
-            }
-            this.emit(eventName, newEventData);
+        if (this._autoAckEvents[eventName]) {
+          if (ackData !== undefined) {
+            response.end(ackData);
           } else {
-            this.emit(eventName, newEventData, response.callback.bind(response));
+            response.end();
           }
+          this.emit(eventName, newEventData);
+        } else {
+          this.emit(eventName, newEventData, response.callback.bind(response));
         }
       }
     });
@@ -236,15 +231,8 @@ SCServerSocket.prototype.disconnect = function (code, data) {
   }
 
   if (this.state !== this.CLOSED) {
-    var packet = {
-      code: code,
-      data: data
-    };
-    if (this.socket.readyState === this.socket.OPEN) {
-      this.transmit('#disconnect', packet);
-    }
     this._onSCClose(code, data);
-    this.socket.close(code);
+    this.socket.close(code, data);
   }
 };
 

@@ -1,135 +1,143 @@
-var assert = require('assert');
-var socketClusterServer = require('../');
-var socketCluster = require('socketcluster-client');
-var localStorage = require('localStorage');
-var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
+const assert = require('assert');
+const socketClusterServer = require('../');
+const socketClusterClient = require('socketcluster-client');
+const localStorage = require('localStorage');
+const SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
 
 // Add to the global scope like in browser.
 global.localStorage = localStorage;
 
-var portNumber = 8008;
+let portNumber = 8008;
 
-var clientOptions;
-var serverOptions;
+let clientOptions;
+let serverOptions;
 
-var allowedUsers = {
+let allowedUsers = {
   bob: true,
   alice: true
 };
 
-var TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
-var WS_ENGINE = 'ws';
+const TEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 10;
+const WS_ENGINE = 'ws';
 
-var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MzE2Mzc1ODk3OTA4MDMxMCwiaWF0IjoxNTAyNzQ3NzQ2fQ.dSZOfsImq4AvCu-Or3Fcmo7JNv1hrV3WqxaiSKkTtAo';
-var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjMxNjM3NTg5NzkwODAzMTB9.XxbzPPnnXrJfZrS0FJwb_EAhIu2VY5i7rGyUThtNLh4';
-var invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZSI6ImJvYiIsImlhdCI6MTUwMjYyNTIxMywiZXhwIjoxNTAyNzExNjEzfQ.fakemYcOOjM9bzmS4UYRvlWSk_lm3WGHvclmFjLbyOk';
+let validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MzE2Mzc1ODk3OTA4MDMxMCwiaWF0IjoxNTAyNzQ3NzQ2fQ.dSZOfsImq4AvCu-Or3Fcmo7JNv1hrV3WqxaiSKkTtAo';
+let validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjMxNjM3NTg5NzkwODAzMTB9.XxbzPPnnXrJfZrS0FJwb_EAhIu2VY5i7rGyUThtNLh4';
+let invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZSI6ImJvYiIsImlhdCI6MTUwMjYyNTIxMywiZXhwIjoxNTAyNzExNjEzfQ.fakemYcOOjM9bzmS4UYRvlWSk_lm3WGHvclmFjLbyOk';
 
-var server, client;
+let server, client;
 
-var resolveAfterTimeout = function (duration, value) {
-  return new Promise((resolve, reject) => {
+function wait(duration) {
+  return new Promise((resolve) => {
     setTimeout(() => {
-      if (value === undefined) {
-        resolve();
-      } else {
-        resolve(value);
-      }
+      resolve();
     }, duration);
   });
+}
+
+async function resolveAfterTimeout(duration, value) {
+  await wait(duration);
+  return value;
 };
 
-var connectionHandler = function (socket) {
-  socket.on('login', function (userDetails, respond) {
-    if (allowedUsers[userDetails.username]) {
-      socket.setAuthToken(userDetails);
-      respond();
-    } else {
-      var err = new Error('Failed to login');
-      err.name = 'FailedLoginError';
-      respond(err);
+function connectionHandler(socket) {
+  (async () => {
+    for await (let rpc of socket.procedure('login')) {
+      if (allowedUsers[rpc.data.username]) {
+        socket.setAuthToken(rpc.data);
+        rpc.end();
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        rpc.error(err);
+      }
     }
-  });
-  socket.on('loginWithTenDayExpiry', function (userDetails, respond) {
-    if (allowedUsers[userDetails.username]) {
-      socket.setAuthToken(userDetails, {
-        expiresIn: TEN_DAYS_IN_SECONDS
-      });
-      respond();
-    } else {
-      var err = new Error('Failed to login');
-      err.name = 'FailedLoginError';
-      respond(err);
+  })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('loginWithTenDayExpiry')) {
+      if (allowedUsers[rpc.data.username]) {
+        socket.setAuthToken(rpc.data, {
+          expiresIn: TEN_DAYS_IN_SECONDS
+        });
+        rpc.end();
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        rpc.error(err);
+      }
     }
-  });
-  socket.on('loginWithTenDayExp', function (userDetails, respond) {
-    if (allowedUsers[userDetails.username]) {
-      userDetails.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
-      socket.setAuthToken(userDetails);
-      respond();
-    } else {
-      var err = new Error('Failed to login');
-      err.name = 'FailedLoginError';
-      respond(err);
+  })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('loginWithTenDayExp')) {
+      if (allowedUsers[rpc.data.username]) {
+        rpc.data.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
+        socket.setAuthToken(rpc.data);
+        rpc.end();
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        rpc.error(err);
+      }
     }
-  });
-  socket.on('loginWithTenDayExpAndExpiry', function (userDetails, respond) {
-    if (allowedUsers[userDetails.username]) {
-      userDetails.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
-      socket.setAuthToken(userDetails, {
-        expiresIn: TEN_DAYS_IN_SECONDS * 100 // 1000 days
-      });
-      respond();
-    } else {
-      var err = new Error('Failed to login');
-      err.name = 'FailedLoginError';
-      respond(err);
+  })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('loginWithTenDayExpAndExpiry')) {
+      if (allowedUsers[rpc.data.username]) {
+        rpc.data.exp = Math.round(Date.now() / 1000) + TEN_DAYS_IN_SECONDS;
+        socket.setAuthToken(rpc.data, {
+          expiresIn: TEN_DAYS_IN_SECONDS * 100 // 1000 days
+        });
+        rpc.end();
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        rpc.error(err);
+      }
     }
-  });
-  socket.on('loginWithIssAndIssuer', function (userDetails, respond) {
-    if (allowedUsers[userDetails.username]) {
-      userDetails.iss = 'foo';
-      socket.setAuthToken(userDetails, {
-        issuer: 'bar'
-      }).catch((err) => {});
-      respond();
-    } else {
-      var err = new Error('Failed to login');
-      err.name = 'FailedLoginError';
-      respond(err);
+  })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('loginWithIssAndIssuer')) {
+      if (allowedUsers[rpc.data.username]) {
+        rpc.data.iss = 'foo';
+        try {
+          await socket.setAuthToken(rpc.data, {
+            issuer: 'bar'
+          });
+        } catch (err) {}
+        rpc.end();
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        rpc.error(err);
+      }
     }
-  });
-  socket.on('setAuthKey', function (newAuthKey, respond) {
-    server.signatureKey = newAuthKey;
-    server.verificationKey = newAuthKey;
-    respond();
-  });
+  })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('setAuthKey')) {
+      server.signatureKey = rpc.data;
+      server.verificationKey = rpc.data;
+      rpc.end();
+    }
+  })();
 };
 
-var destroyTestCase = function (next) {
+function destroyTestCase() {
   if (client) {
-    client.on('error', function (err) {});
-
     if (client.state !== client.CLOSED) {
-      client.once('close', function () {
-        client.removeAllListeners('close');
-        client.removeAllListeners('connectAbort');
-        client.removeAllListeners('disconnect');
-        next();
-      });
+      client.closeAllListeners();
       client.disconnect();
-    } else {
-      next();
     }
-  } else {
-    next();
   }
 };
 
 describe('Integration tests', function () {
-  beforeEach('Run the server before start', function (done) {
+  beforeEach('Run the server before start', async function () {
     clientOptions = {
       hostname: '127.0.0.1',
-      multiplex: false,
       port: portNumber
     };
     serverOptions = {
@@ -138,423 +146,229 @@ describe('Integration tests', function () {
     };
 
     server = socketClusterServer.listen(portNumber, serverOptions);
-    server.on('connection', connectionHandler);
 
-    server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, function (req, next) {
+    (async () => {
+      for await (let {socket} of server.listener('connection')) {
+        connectionHandler(socket);
+      }
+    })();
+
+    server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, async function (req) {
       if (req.authToken.username === 'alice') {
-        var err = new Error('Blocked by MIDDLEWARE_AUTHENTICATE');
+        let err = new Error('Blocked by MIDDLEWARE_AUTHENTICATE');
         err.name = 'AuthenticateMiddlewareError';
-        next(err);
-      } else {
-        next();
+        throw err;
       }
     });
 
-    server.on('ready', function () {
-      done();
-    });
+    await server.listener('ready').once();
   });
 
-  afterEach('Shut down client after each test', function (done) {
-    server.close();
+  afterEach('Close server after each test', async function () {
     portNumber++;
-    destroyTestCase(function () {
-      global.localStorage.removeItem('socketCluster.authToken');
-      done();
-    });
+    destroyTestCase();
+    server.close();
+    global.localStorage.removeItem('socketCluster.authToken');
   });
 
   describe('Socket authentication', function () {
-    it('Should not send back error if JWT is not provided in handshake', function (done) {
-      client = socketCluster.connect(clientOptions);
-      client.once('connect', function (status) {
-        assert.equal(status.authError === undefined, true);
-        done();
-      });
+    it('Should not send back error if JWT is not provided in handshake', async function () {
+      client = socketClusterClient.create(clientOptions);
+      let event = await client.listener('connect').once();
+      assert.equal(event.authError === undefined, true);
     });
 
-    it('Should be authenticated on connect if previous JWT token is present', function (done) {
-      client = socketCluster.connect(clientOptions);
-      client.once('connect', function (statusA) {
-        client.transmit('login', {username: 'bob'});
-        client.once('authenticate', function (state) {
-          assert.equal(client.authState, 'authenticated');
-
-          client.once('disconnect', function () {
-            client.once('connect', function (statusB) {
-              assert.equal(statusB.isAuthenticated, true);
-              assert.equal(statusB.authError === undefined, true);
-              done();
-            });
-
-            client.connect();
-          });
-
-          client.disconnect();
-        });
-      });
+    it('Should be authenticated on connect if previous JWT token is present', async function () {
+      client = socketClusterClient.create(clientOptions);
+      await client.listener('connect').once();
+      client.invoke('login', {username: 'bob'});
+      await client.listener('authenticate').once();
+      assert.equal(client.authState, 'authenticated');
+      client.disconnect();
+      client.connect();
+      let event = await client.listener('connect').once();
+      assert.equal(event.isAuthenticated, true);
+      assert.equal(event.authError === undefined, true);
     });
 
-    it('Should send back error if JWT is invalid during handshake', function (done) {
+    it('Should send back error if JWT is invalid during handshake', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
-      client = socketCluster.connect(clientOptions);
-      client.once('connect', function (statusA) {
-        // Change the setAuthKey to invalidate the current token.
-        client.transmit('setAuthKey', 'differentAuthKey')
-        .then(function () {
-          client.once('disconnect', function () {
-            client.once('connect', function (statusB) {
-              assert.equal(statusB.isAuthenticated, false);
-              assert.notEqual(statusB.authError, null);
-              assert.equal(statusB.authError.name, 'AuthTokenInvalidError');
-              done();
-            });
+      client = socketClusterClient.create(clientOptions);
 
-            client.connect();
-          });
-
-          client.disconnect();
-        });
-      });
+      await client.listener('connect').once();
+      // Change the setAuthKey to invalidate the current token.
+      await client.invoke('setAuthKey', 'differentAuthKey');
+      client.disconnect();
+      client.connect();
+      let event = await client.listener('connect').once();
+      assert.equal(event.isAuthenticated, false);
+      assert.notEqual(event.authError, null);
+      assert.equal(event.authError.name, 'AuthTokenInvalidError');
     });
 
-    it('Should allow switching between users', function (done) {
+    it('Should allow switching between users', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
-      var authenticateEvents = [];
-      var deauthenticateEvents = [];
-      var authenticationStateChangeEvents = [];
-      var authStateChangeEvents = [];
+      let authenticateEvents = [];
+      let deauthenticateEvents = [];
+      let authenticationStateChangeEvents = [];
+      let authStateChangeEvents = [];
 
-      server.on('authenticationStateChange', function (socket, stateChangeData) {
-        authenticationStateChangeEvents.push({
-          socket: socket,
-          stateChangeData: stateChangeData
-        });
-      });
+      (async () => {
+        for await (let stateChangePacket of server.listener('authenticationStateChange')) {
+          authenticationStateChangeEvents.push(stateChangePacket);
+        }
+      })();
 
-      server.on('connection', function (socket) {
-        socket.on('authenticate', function (authToken) {
-          authenticateEvents.push(authToken);
-        });
-        socket.on('deauthenticate', function (oldAuthToken) {
-          deauthenticateEvents.push(oldAuthToken);
-        });
-        socket.on('authStateChange', function (stateChangeData) {
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let {authToken} of socket.listener('authenticate')) {
+              authenticateEvents.push(authToken);
+            }
+          })();
+          (async () => {
+            for await (let {oldAuthToken} of socket.listener('deauthenticate')) {
+              deauthenticateEvents.push(oldAuthToken);
+            }
+          })();
+          (async () => {
+            for await (let stateChangeData of socket.listener('authStateChange')) {
+              authStateChangeEvents.push(stateChangeData);
+            }
+          })();
+        }
+      })();
+
+      let clientSocketId;
+      client = socketClusterClient.create(clientOptions);
+      await client.listener('connect').once();
+      clientSocketId = client.id;
+      client.invoke('login', {username: 'alice'});
+
+      await wait(100);
+
+      assert.equal(deauthenticateEvents.length, 0);
+      assert.equal(authenticateEvents.length, 2);
+      assert.equal(authenticateEvents[0].username, 'bob');
+      assert.equal(authenticateEvents[1].username, 'alice');
+
+      assert.equal(authenticationStateChangeEvents.length, 1);
+      assert.notEqual(authenticationStateChangeEvents[0].socket, null);
+      assert.equal(authenticationStateChangeEvents[0].socket.id, clientSocketId);
+      assert.equal(authenticationStateChangeEvents[0].oldAuthState, 'unauthenticated');
+      assert.equal(authenticationStateChangeEvents[0].newAuthState, 'authenticated');
+      assert.notEqual(authenticationStateChangeEvents[0].authToken, null);
+      assert.equal(authenticationStateChangeEvents[0].authToken.username, 'bob');
+
+      assert.equal(authStateChangeEvents.length, 1);
+      assert.equal(authStateChangeEvents[0].oldAuthState, 'unauthenticated');
+      assert.equal(authStateChangeEvents[0].newAuthState, 'authenticated');
+      assert.notEqual(authStateChangeEvents[0].authToken, null);
+      assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
+    });
+
+    it('Should emit correct events/data when socket is deauthenticated', async function () {
+      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+
+      let authenticationStateChangeEvents = [];
+      let authStateChangeEvents = [];
+
+      (async () => {
+        for await (let stateChangePacket of server.listener('authenticationStateChange')) {
+          authenticationStateChangeEvents.push(stateChangePacket);
+        }
+      })();
+
+      client = socketClusterClient.create(clientOptions);
+
+      (async () => {
+        for await (let event of client.listener('connect')) {
+          client.deauthenticate();
+        }
+      })();
+
+      let {socket} = await server.listener('connection').once();
+      let initialAuthToken = socket.authToken;
+
+      (async () => {
+        for await (let stateChangeData of socket.listener('authStateChange')) {
           authStateChangeEvents.push(stateChangeData);
-        });
-      });
+        }
+      })();
 
-      var clientSocketId;
-      client = socketCluster.connect(clientOptions);
-      client.once('connect', function (statusA) {
-        clientSocketId = client.id;
-        client.transmit('login', {username: 'alice'});
-      });
+      let {oldAuthToken} = await socket.listener('deauthenticate').once();
+      assert.equal(oldAuthToken, initialAuthToken);
 
-      setTimeout(function () {
-        assert.equal(deauthenticateEvents.length, 0);
-        assert.equal(authenticateEvents.length, 2);
-        assert.equal(authenticateEvents[0].username, 'bob');
-        assert.equal(authenticateEvents[1].username, 'alice');
+      assert.equal(authStateChangeEvents.length, 2);
+      assert.equal(authStateChangeEvents[0].oldAuthState, 'unauthenticated');
+      assert.equal(authStateChangeEvents[0].newAuthState, 'authenticated');
+      assert.notEqual(authStateChangeEvents[0].authToken, null);
+      assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
+      assert.equal(authStateChangeEvents[1].oldAuthState, 'authenticated');
+      assert.equal(authStateChangeEvents[1].newAuthState, 'unauthenticated');
+      assert.equal(authStateChangeEvents[1].authToken, null);
 
-        assert.equal(authenticationStateChangeEvents.length, 1);
-        assert.notEqual(authenticationStateChangeEvents[0].socket, null);
-        assert.equal(authenticationStateChangeEvents[0].socket.id, clientSocketId);
-        assert.equal(authenticationStateChangeEvents[0].stateChangeData.oldState, 'unauthenticated');
-        assert.equal(authenticationStateChangeEvents[0].stateChangeData.newState, 'authenticated');
-        assert.notEqual(authenticationStateChangeEvents[0].stateChangeData.authToken, null);
-        assert.equal(authenticationStateChangeEvents[0].stateChangeData.authToken.username, 'bob');
-
-        assert.equal(authStateChangeEvents.length, 1);
-        assert.equal(authStateChangeEvents[0].oldState, 'unauthenticated');
-        assert.equal(authStateChangeEvents[0].newState, 'authenticated');
-        assert.notEqual(authStateChangeEvents[0].authToken, null);
-        assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
-
-        done();
-      }, 100);
+      assert.equal(authenticationStateChangeEvents.length, 2);
+      assert.notEqual(authenticationStateChangeEvents[0], null);
+      assert.equal(authenticationStateChangeEvents[0].oldAuthState, 'unauthenticated');
+      assert.equal(authenticationStateChangeEvents[0].newAuthState, 'authenticated');
+      assert.notEqual(authenticationStateChangeEvents[0].authToken, null);
+      assert.equal(authenticationStateChangeEvents[0].authToken.username, 'bob');
+      assert.notEqual(authenticationStateChangeEvents[1], null);
+      assert.equal(authenticationStateChangeEvents[1].oldAuthState, 'authenticated');
+      assert.equal(authenticationStateChangeEvents[1].newAuthState, 'unauthenticated');
+      assert.equal(authenticationStateChangeEvents[1].authToken, null);
     });
 
-    it('Should emit correct events/data when socket is deauthenticated', function (done) {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
-
-      var authenticationStateChangeEvents = [];
-      var authStateChangeEvents = [];
-
-      server.on('authenticationStateChange', function (socket, stateChangeData) {
-        authenticationStateChangeEvents.push({
-          socket: socket,
-          stateChangeData: stateChangeData
-        });
-      });
-
-      client = socketCluster.connect(clientOptions);
-      client.once('connect', function (statusA) {
-        client.deauthenticate();
-      });
-
-      server.on('connection', function (socket) {
-        var initialAuthToken = socket.authToken;
-
-        socket.on('authStateChange', function (stateChangeData) {
-          authStateChangeEvents.push(stateChangeData);
-        });
-
-        socket.on('deauthenticate', function (oldToken) {
-          assert.equal(oldToken, initialAuthToken);
-
-          assert.equal(authStateChangeEvents.length, 2);
-          assert.equal(authStateChangeEvents[0].oldState, 'unauthenticated');
-          assert.equal(authStateChangeEvents[0].newState, 'authenticated');
-          assert.notEqual(authStateChangeEvents[0].authToken, null);
-          assert.equal(authStateChangeEvents[0].authToken.username, 'bob');
-          assert.equal(authStateChangeEvents[1].oldState, 'authenticated');
-          assert.equal(authStateChangeEvents[1].newState, 'unauthenticated');
-          assert.equal(authStateChangeEvents[1].authToken, null);
-
-          assert.equal(authenticationStateChangeEvents.length, 2);
-          assert.notEqual(authenticationStateChangeEvents[0].stateChangeData, null);
-          assert.equal(authenticationStateChangeEvents[0].stateChangeData.oldState, 'unauthenticated');
-          assert.equal(authenticationStateChangeEvents[0].stateChangeData.newState, 'authenticated');
-          assert.notEqual(authenticationStateChangeEvents[0].stateChangeData.authToken, null);
-          assert.equal(authenticationStateChangeEvents[0].stateChangeData.authToken.username, 'bob');
-          assert.notEqual(authenticationStateChangeEvents[1].stateChangeData, null);
-          assert.equal(authenticationStateChangeEvents[1].stateChangeData.oldState, 'authenticated');
-          assert.equal(authenticationStateChangeEvents[1].stateChangeData.newState, 'unauthenticated');
-          assert.equal(authenticationStateChangeEvents[1].stateChangeData.authToken, null);
-          done();
-        });
-      });
-    });
-
-    it('Should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', function (done) {
+    it('Should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenAlice);
 
-      client = socketCluster.connect(clientOptions);
+      client = socketClusterClient.create(clientOptions);
       // The previous test authenticated us as 'alice', so that token will be passed to the server as
       // part of the handshake.
-      client.once('connect', function (statusB) {
-        // Any token containing the username 'alice' should be blocked by the MIDDLEWARE_AUTHENTICATE middleware.
-        // This will only affects token-based authentication, not the credentials-based login event.
-        assert.equal(statusB.isAuthenticated, false);
-        assert.notEqual(statusB.authError, null);
-        assert.equal(statusB.authError.name, 'AuthenticateMiddlewareError');
-        done();
-      });
+
+      let event = await client.listener('connect').once();
+      // Any token containing the username 'alice' should be blocked by the MIDDLEWARE_AUTHENTICATE middleware.
+      // This will only affects token-based authentication, not the credentials-based login event.
+      assert.equal(event.isAuthenticated, false);
+      assert.notEqual(event.authError, null);
+      assert.equal(event.authError.name, 'AuthenticateMiddlewareError');
     });
 
-    it('Token should be available after Promise resolves if token engine signing is synchronous', function (done) {
+    it('Token should be available after Promise resolves if token engine signing is synchronous', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: false
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.invoke('login', {username: 'bob'})
-          .then(function () {
-            assert.equal(client.authState, 'authenticated');
-            assert.notEqual(client.authToken, null);
-            assert.equal(client.authToken.username, 'bob');
-            done();
-          });
-        });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      await client.listener('connect').once();
+
+      client.invoke('login', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.equal(client.authState, 'authenticated');
+      assert.notEqual(client.authToken, null);
+      assert.equal(client.authToken.username, 'bob');
     });
 
-    it('If token engine signing is asynchronous, authentication can be captured using the authenticate event', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authSignAsync: true
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.transmit('login', {username: 'bob'});
-          client.on('authenticate', function (newSignedToken) {
-            assert.equal(client.authState, 'authenticated');
-            assert.notEqual(client.authToken, null);
-            assert.equal(client.authToken.username, 'bob');
-            done();
-          });
-        });
-      });
-    });
-
-    it('Should still work if token verification is asynchronous', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authVerifyAsync: false
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.transmit('login', {username: 'bob'});
-          client.once('authenticate', function (newSignedToken) {
-            client.once('disconnect', function () {
-              client.once('connect', function (statusB) {
-                assert.equal(statusB.isAuthenticated, true);
-                assert.notEqual(client.authToken, null);
-                assert.equal(client.authToken.username, 'bob');
-                done();
-              });
-              client.connect();
-            });
-            client.disconnect();
-          });
-        });
-      });
-    });
-
-    it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authVerifyAsync: false
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.once('authenticate', function (newSignedToken) {
-            assert.notEqual(client.authToken, null);
-            assert.notEqual(client.authToken.exp, null);
-            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
-            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
-            // Expiry must be accurate within 1000 milliseconds.
-            assert.equal(dateDifference < 1000, true);
-            done();
-          });
-          client.transmit('loginWithTenDayExpiry', {username: 'bob'});
-        });
-      });
-    });
-
-    it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authVerifyAsync: false
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.once('authenticate', function (newSignedToken) {
-            assert.notEqual(client.authToken, null);
-            assert.notEqual(client.authToken.exp, null);
-            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
-            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
-            // Expiry must be accurate within 1000 milliseconds.
-            assert.equal(dateDifference < 1000, true);
-            done();
-          });
-          client.transmit('loginWithTenDayExp', {username: 'bob'});
-        });
-      });
-    });
-
-    it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authVerifyAsync: false
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.once('authenticate', function (newSignedToken) {
-            assert.notEqual(client.authToken, null);
-            assert.notEqual(client.authToken.exp, null);
-            var dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
-            var dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
-            // Expiry must be accurate within 1000 milliseconds.
-            assert.equal(dateDifference < 1000, true);
-            done();
-          });
-          client.transmit('loginWithTenDayExpAndExpiry', {username: 'bob'});
-        });
-      });
-    });
-
-    it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', function (done) {
-      portNumber++;
-      server = socketClusterServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        authVerifyAsync: false
-      });
-      var warningMap = {};
-
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.once('authenticate', function (newSignedToken) {
-            throw new Error('Should not pass authentication because the signature should fail');
-          });
-          server.on('warning', function (warning) {
-            assert.notEqual(warning, null);
-            warningMap[warning.name] = warning;
-          });
-          client.once('error', function (err) {
-            assert.notEqual(err, null);
-            assert.equal(err.name, 'SocketProtocolError');
-          });
-          client.transmit('loginWithIssAndIssuer', {username: 'bob'});
-          setTimeout(function () {
-            server.removeAllListeners('warning');
-            assert.notEqual(warningMap['SocketProtocolError'], null);
-            done();
-          }, 1000);
-        });
-      });
-    });
-
-    it('Should trigger an authTokenSigned event and socket.signedAuthToken should be set after calling the socket.setAuthToken method', function (done) {
+    it('If token engine signing is asynchronous, authentication can be captured using the authenticate event', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -562,43 +376,283 @@ describe('Integration tests', function () {
         authSignAsync: true
       });
 
-      var authTokenSignedEventEmitted = false;
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
 
-      server.on('connection', function (socket) {
-        socket.on('authTokenSigned', function (signedAuthToken) {
-          authTokenSignedEventEmitted = true;
-          assert.notEqual(signedAuthToken, null);
-          assert.equal(signedAuthToken, socket.signedAuthToken);
-        });
-        socket.on('login', function (userDetails, respond) {
-          if (allowedUsers[userDetails.username]) {
-            socket.setAuthToken(userDetails, {async: true});
-            respond();
-          } else {
-            var err = new Error('Failed to login');
-            err.name = 'FailedLoginError';
-            respond(err);
-          }
-        });
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.once('connect', function (statusA) {
-          client.transmit('login', {username: 'bob'});
-        });
-        setTimeout(function () {
-          assert.equal(authTokenSignedEventEmitted, true);
-          done();
-        }, 100);
-      });
+      await client.listener('connect').once();
+
+      client.invoke('login', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.equal(client.authState, 'authenticated');
+      assert.notEqual(client.authToken, null);
+      assert.equal(client.authToken.username, 'bob');
     });
 
-    it('Should reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is true', function (done) {
+    it('Should still work if token verification is asynchronous', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authVerifyAsync: false
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+
+      client.invoke('login', {username: 'bob'});
+
+      await client.listener('authenticate').once();
+
+      client.disconnect();
+      client.connect();
+
+      let event = await client.listener('connect').once();
+
+      assert.equal(event.isAuthenticated, true);
+      assert.notEqual(client.authToken, null);
+      assert.equal(client.authToken.username, 'bob');
+    });
+
+    it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authVerifyAsync: false
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+      client.invoke('loginWithTenDayExpiry', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.notEqual(client.authToken, null);
+      assert.notEqual(client.authToken.exp, null);
+      let dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+      let dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+      // Expiry must be accurate within 1000 milliseconds.
+      assert.equal(dateDifference < 1000, true);
+    });
+
+    it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authVerifyAsync: false
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+      client.invoke('loginWithTenDayExp', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.notEqual(client.authToken, null);
+      assert.notEqual(client.authToken.exp, null);
+      let dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+      let dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+      // Expiry must be accurate within 1000 milliseconds.
+      assert.equal(dateDifference < 1000, true);
+    });
+
+    it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authVerifyAsync: false
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+      client.invoke('loginWithTenDayExpAndExpiry', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.notEqual(client.authToken, null);
+      assert.notEqual(client.authToken.exp, null);
+      let dateMillisecondsInTenDays = Date.now() + TEN_DAYS_IN_SECONDS * 1000;
+      let dateDifference = Math.abs(dateMillisecondsInTenDays - client.authToken.exp * 1000);
+      // Expiry must be accurate within 1000 milliseconds.
+      assert.equal(dateDifference < 1000, true);
+    });
+
+    it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authVerifyAsync: false
+      });
+      let warningMap = {};
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+
+      (async () => {
+        await client.listener('authenticate').once();
+        throw new Error('Should not pass authentication because the signature should fail');
+      })();
+
+      (async () => {
+        for await (let {warning} of server.listener('warning')) {
+          assert.notEqual(warning, null);
+          warningMap[warning.name] = warning;
+        }
+      })();
+
+      (async () => {
+        for await (let {error} of server.listener('error')) {
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'SocketProtocolError');
+        }
+      })();
+
+      let closePackets = [];
+
+      (async () => {
+        let event = await client.listener('close').once();
+        closePackets.push(event);
+      })();
+
+      let error;
+      try {
+        await client.invoke('loginWithIssAndIssuer', {username: 'bob'});
+      } catch (err) {
+        error = err;
+      }
+
+      assert.notEqual(error, null);
+      assert.equal(error.name, 'BadConnectionError');
+
+      await wait(1000);
+
+      assert.equal(closePackets.length, 1);
+      assert.equal(closePackets[0].code, 4002);
+      server.closeListener('warning');
+      assert.notEqual(warningMap['SocketProtocolError'], null);
+    });
+
+    it('Should trigger an authTokenSigned event and socket.signedAuthToken should be set after calling the socket.setAuthToken method', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        authSignAsync: true
+      });
+
+      let authTokenSignedEventEmitted = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let {signedAuthToken} of socket.listener('authTokenSigned')) {
+              authTokenSignedEventEmitted = true;
+              assert.notEqual(signedAuthToken, null);
+              assert.equal(signedAuthToken, socket.signedAuthToken);
+            }
+          })();
+
+          (async () => {
+            for await (let req of socket.procedure('login')) {
+              if (allowedUsers[req.data.username]) {
+                socket.setAuthToken(req.data, {async: true});
+                req.end();
+              } else {
+                let err = new Error('Failed to login');
+                err.name = 'FailedLoginError';
+                req.error(err);
+              }
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      await client.listener('connect').once();
+      await client.invoke('login', {username: 'bob'});
+      await client.listener('authenticate').once();
+
+      assert.equal(authTokenSignedEventEmitted, true);
+    });
+
+    it('Should reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is true', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -607,45 +661,49 @@ describe('Integration tests', function () {
         ackTimeout: 1000
       });
 
-      var socketErrors = [];
+      let socketErrors = [];
 
-      server.on('connection', function (socket) {
-        socket.on('error', function (err) {
-          socketErrors.push(err);
-        });
-        socket.on('login', function (userDetails, respond) {
-          if (allowedUsers[userDetails.username]) {
-            client.disconnect();
-            socket.setAuthToken(userDetails, {rejectOnFailedDelivery: true})
-            .catch((err) => {
-              assert.notEqual(err, null);
-              assert.equal(err.name, 'AuthError');
-              assert.notEqual(socketErrors[0], null);
-              assert.equal(socketErrors[0].name, 'AuthError');
-              done();
-            });
-            respond();
-          } else {
-            var err = new Error('Failed to login');
-            err.name = 'FailedLoginError';
-            respond(err);
-          }
-        });
-      });
-
-      server.on('ready', function () {
-        client = socketCluster.connect({
+      (async () => {
+        await server.listener('ready').once();
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
-        client.once('connect', function (statusA) {
-          client.transmit('login', {username: 'bob'});
-        });
-      });
+        await client.listener('connect').once();
+        client.invoke('login', {username: 'bob'});
+      })();
+
+      let {socket} = await server.listener('connection').once();
+
+      (async () => {
+        for await (let {error} of socket.listener('error')) {
+          socketErrors.push(error);
+        }
+      })();
+
+      let req = await socket.procedure('login').once();
+      if (allowedUsers[req.data.username]) {
+        req.end();
+        socket.disconnect();
+        let error;
+        try {
+          await socket.setAuthToken(req.data, {rejectOnFailedDelivery: true});
+        } catch (err) {
+          error = err;
+        }
+        assert.notEqual(error, null);
+        assert.equal(error.name, 'AuthError');
+        await wait(0);
+        assert.notEqual(socketErrors[0], null);
+        assert.equal(socketErrors[0].name, 'AuthError');
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        req.error(err);
+      }
     });
 
-    it('Should not reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is not true', function (done) {
+    it('Should not reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is not true', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -654,47 +712,48 @@ describe('Integration tests', function () {
         ackTimeout: 1000
       });
 
-      var socketErrors = [];
+      let socketErrors = [];
 
-      server.on('connection', function (socket) {
-        socket.on('error', function (err) {
-          socketErrors.push(err);
-        });
-        socket.on('login', function (userDetails, respond) {
-          if (allowedUsers[userDetails.username]) {
-            client.disconnect();
-            socket.setAuthToken(userDetails)
-            .catch((err) => {
-              return err;
-            })
-            .then((err) => {
-              assert.equal(err, null);
-              assert.notEqual(socketErrors[0], null);
-              assert.equal(socketErrors[0].name, 'AuthError');
-              done();
-            });
-            respond();
-          } else {
-            var err = new Error('Failed to login');
-            err.name = 'FailedLoginError';
-            respond(err);
-          }
-        });
-      });
-
-      server.on('ready', function () {
-        client = socketCluster.connect({
+      (async () => {
+        await server.listener('ready').once();
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
-        client.once('connect', function (statusA) {
-          client.transmit('login', {username: 'bob'});
-        });
-      });
+        await client.listener('connect').once();
+        client.invoke('login', {username: 'bob'});
+      })();
+
+      let {socket} = await server.listener('connection').once();
+
+      (async () => {
+        for await (let {error} of socket.listener('error')) {
+          socketErrors.push(error);
+        }
+      })();
+
+      let req = await socket.procedure('login').once();
+      if (allowedUsers[req.data.username]) {
+        req.end();
+        socket.disconnect();
+        let error;
+        try {
+          await socket.setAuthToken(req.data);
+        } catch (err) {
+          error = err;
+        }
+        assert.equal(error, null);
+        await wait(0);
+        assert.notEqual(socketErrors[0], null);
+        assert.equal(socketErrors[0].name, 'AuthError');
+      } else {
+        let err = new Error('Failed to login');
+        err.name = 'FailedLoginError';
+        req.error(err);
+      }
     });
 
-    it('The verifyToken method of the authEngine receives correct params', function (done) {
+    it('The verifyToken method of the authEngine receives correct params', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
       portNumber++;
@@ -702,29 +761,37 @@ describe('Integration tests', function () {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
-      server.setAuthEngine({
-        verifyToken: (signedAuthToken, verificationKey, verificationOptions) => {
-          setTimeout(() => {
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      (async () => {
+        await server.listener('ready').once();
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: portNumber
+        });
+      })();
+
+      return new Promise((resolve) => {
+        server.setAuthEngine({
+          verifyToken: async (signedAuthToken, verificationKey, verificationOptions) => {
+            await wait(500);
             assert.equal(signedAuthToken, validSignedAuthTokenBob);
             assert.equal(verificationKey, serverOptions.authKey);
             assert.notEqual(verificationOptions, null);
             assert.notEqual(verificationOptions.socket, null);
-            done();
-          }, 500)
-          return Promise.resolve({});
-        }
-      });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+            resolve();
+            return Promise.resolve({});
+          }
         });
       });
     });
 
-    it('Should remove client data from the server when client disconnects before authentication process finished', function (done) {
+    it('Should remove client data from the server when client disconnects before authentication process finished', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -735,149 +802,154 @@ describe('Integration tests', function () {
           return resolveAfterTimeout(500, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        var serverSocket;
-        server.on('handshake', function (socket) {
-          serverSocket = socket;
-        });
-        setTimeout(function () {
-          assert.equal(server.clientsCount, 0);
-          assert.equal(server.pendingClientsCount, 1);
-          assert.notEqual(serverSocket, null);
-          assert.equal(Object.keys(server.pendingClients)[0], serverSocket.id);
-          client.disconnect();
-        }, 100);
-        setTimeout(function () {
-          assert.equal(Object.keys(server.clients).length, 0);
-          assert.equal(server.clientsCount, 0);
-          assert.equal(server.pendingClientsCount, 0);
-          assert.equal(JSON.stringify(server.pendingClients), '{}');
-          done();
-        }, 1000);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let serverSocket;
+      (async () => {
+        for await (let {socket} of server.listener('handshake')) {
+          serverSocket = socket;
+        }
+      })();
+
+      await wait(100);
+      assert.equal(server.clientsCount, 0);
+      assert.equal(server.pendingClientsCount, 1);
+      assert.notEqual(serverSocket, null);
+      assert.equal(Object.keys(server.pendingClients)[0], serverSocket.id);
+      client.disconnect();
+
+      await wait(1000);
+      assert.equal(Object.keys(server.clients).length, 0);
+      assert.equal(server.clientsCount, 0);
+      assert.equal(server.pendingClientsCount, 0);
+      assert.equal(JSON.stringify(server.pendingClients), '{}');
     });
   });
 
   describe('Socket handshake', function () {
-    it('Exchange is attached to socket before the handshake event is triggered', function (done) {
+    it('Exchange is attached to socket before the handshake event is triggered', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      server.on('connection', connectionHandler);
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
+      await server.listener('ready').once();
 
-        server.once('handshake', function (socket) {
-          assert.notEqual(socket.exchange, null);
-        });
-
-        setTimeout(function () {
-          done();
-        }, 300);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let {socket} = await server.listener('handshake').once();
+      assert.notEqual(socket.exchange, null);
     });
   });
 
   describe('Socket connection', function () {
-    it('Server-side socket connect event and server connection event should trigger', function (done) {
+    it('Server-side socket connect event and server connection event should trigger', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      var connectionEmitted = false;
-      var connectionStatus;
+      let connectionEmitted = false;
+      let connectionEvent;
 
-      server.on('connection', connectionHandler);
-      server.once('connection', function (socket, status) {
-        connectionEmitted = true;
-        connectionStatus = status;
-        // Modify the status object and make sure that it doesn't get modified
-        // on the client.
-        status.foo = 123;
+      (async () => {
+        for await (let event of server.listener('connection')) {
+          connectionEvent = event;
+          connectionHandler(event.socket);
+          connectionEmitted = true;
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
 
-        var connectEmitted = false;
-        var _connectEmitted = false;
-        var connectStatus;
-        var socketId;
+      let connectEmitted = false;
+      let connectStatus;
+      let socketId;
 
-        server.once('handshake', function (socket) {
-          socket.once('connect', function (status) {
-            socketId = socket.id;
-            connectEmitted = true;
-            connectStatus = status;
-          });
-          socket.once('_connect', function () {
-            _connectEmitted = true;
-          });
-        });
+      (async () => {
+        for await (let {socket} of server.listener('handshake')) {
+          (async () => {
+            for await (let serverSocketStatus of socket.listener('connect')) {
+              socketId = socket.id;
+              connectEmitted = true;
+              connectStatus = serverSocketStatus;
+              // This is to check that mutating the status on the server
+              // doesn't affect the status sent to the client.
+              serverSocketStatus.foo = 123;
+            }
+          })();
+        }
+      })();
 
-        var clientConnectEmitted = false;
-        var clientConnectStatus = false;
+      let clientConnectEmitted = false;
+      let clientConnectStatus = false;
 
-        client.once('connect', function (status) {
+      (async () => {
+        for await (let event of client.listener('connect')) {
           clientConnectEmitted = true;
-          clientConnectStatus = status;
-        });
+          clientConnectStatus = event;
+        }
+      })();
 
-        setTimeout(function () {
-          assert.equal(connectEmitted, true);
-          assert.equal(_connectEmitted, true);
-          assert.equal(connectionEmitted, true);
-          assert.equal(clientConnectEmitted, true);
+      await wait(300);
 
-          assert.notEqual(connectionStatus, null);
-          assert.equal(connectionStatus.id, socketId);
-          assert.equal(connectionStatus.pingTimeout, server.pingTimeout);
-          assert.equal(connectionStatus.authError, null);
-          assert.equal(connectionStatus.isAuthenticated, false);
+      assert.equal(connectEmitted, true);
+      assert.equal(connectionEmitted, true);
+      assert.equal(clientConnectEmitted, true);
 
-          assert.notEqual(connectStatus, null);
-          assert.equal(connectStatus.id, socketId);
-          assert.equal(connectStatus.pingTimeout, server.pingTimeout);
-          assert.equal(connectStatus.authError, null);
-          assert.equal(connectStatus.isAuthenticated, false);
+      assert.notEqual(connectionEvent, null);
+      assert.equal(connectionEvent.id, socketId);
+      assert.equal(connectionEvent.pingTimeout, server.pingTimeout);
+      assert.equal(connectionEvent.authError, null);
+      assert.equal(connectionEvent.isAuthenticated, false);
 
-          assert.notEqual(clientConnectStatus, null);
-          assert.equal(clientConnectStatus.id, socketId);
-          assert.equal(clientConnectStatus.pingTimeout, server.pingTimeout);
-          assert.equal(clientConnectStatus.authError, null);
-          assert.equal(clientConnectStatus.isAuthenticated, false);
-          assert.equal(clientConnectStatus.foo, null);
-          // Client socket status should be a clone of server socket status; not
-          // a reference to the same object.
-          assert.notEqual(clientConnectStatus.foo, connectStatus.foo);
+      assert.notEqual(connectStatus, null);
+      assert.equal(connectStatus.id, socketId);
+      assert.equal(connectStatus.pingTimeout, server.pingTimeout);
+      assert.equal(connectStatus.authError, null);
+      assert.equal(connectStatus.isAuthenticated, false);
 
-          done();
-        }, 300);
-      });
+      assert.notEqual(clientConnectStatus, null);
+      assert.equal(clientConnectStatus.id, socketId);
+      assert.equal(clientConnectStatus.pingTimeout, server.pingTimeout);
+      assert.equal(clientConnectStatus.authError, null);
+      assert.equal(clientConnectStatus.isAuthenticated, false);
+      assert.equal(clientConnectStatus.foo, null);
+      // Client socket status should be a clone of server socket status; not
+      // a reference to the same object.
+      assert.notEqual(clientConnectStatus.foo, connectStatus.foo);
     });
   });
 
   describe('Socket disconnection', function () {
-    it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', function (done) {
+    it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -888,68 +960,73 @@ describe('Integration tests', function () {
           return resolveAfterTimeout(500, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
 
-        var socketDisconnected = false;
-        var socketDisconnectedBeforeConnect = false;
-        var clientSocketAborted = false;
+      let connectionOnServer = false;
 
-        var connectionOnServer = false;
-
-        server.once('connection', function () {
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
           connectionOnServer = true;
-        });
+          connectionHandler(socket);
+        }
+      })();
 
-        server.once('handshake', function (socket) {
-          assert.equal(server.pendingClientsCount, 1);
-          assert.notEqual(server.pendingClients[socket.id], null);
-          socket.once('disconnect', function () {
-            if (!connectionOnServer) {
-              socketDisconnectedBeforeConnect = true;
-            }
-            socketDisconnected = true;
-          });
-          socket.once('connectAbort', function (code, reason) {
-            clientSocketAborted = true;
-            assert.equal(code, 4444);
-            assert.equal(reason, 'Disconnect before handshake');
-          });
-        });
+      await server.listener('ready').once();
 
-        var serverDisconnected = false;
-        var serverSocketAborted = false;
-
-        server.once('disconnection', function () {
-          serverDisconnected = true;
-        });
-
-        server.once('connectionAbort', function () {
-          serverSocketAborted = true;
-        });
-
-        setTimeout(function () {
-          client.disconnect(4444, 'Disconnect before handshake');
-        }, 100);
-
-        setTimeout(function () {
-          assert.equal(socketDisconnected, false);
-          assert.equal(socketDisconnectedBeforeConnect, false);
-          assert.equal(clientSocketAborted, true);
-          assert.equal(serverSocketAborted, true);
-          assert.equal(serverDisconnected, false);
-          done();
-        }, 1000);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let socketDisconnected = false;
+      let socketDisconnectedBeforeConnect = false;
+      let clientSocketAborted = false;
+
+      (async () => {
+        let {socket} = await server.listener('handshake').once();
+        assert.equal(server.pendingClientsCount, 1);
+        assert.notEqual(server.pendingClients[socket.id], null);
+
+        (async () => {
+          await socket.listener('disconnect').once();
+          if (!connectionOnServer) {
+            socketDisconnectedBeforeConnect = true;
+          }
+          socketDisconnected = true;
+        })();
+
+        (async () => {
+          let event = await socket.listener('connectAbort').once();
+          clientSocketAborted = true;
+          assert.equal(event.code, 4444);
+          assert.equal(event.reason, 'Disconnect before handshake');
+        })();
+      })();
+
+      let serverDisconnected = false;
+      let serverSocketAborted = false;
+
+      (async () => {
+        await server.listener('disconnection').once();
+        serverDisconnected = true;
+      })();
+
+      (async () => {
+        await server.listener('connectionAbort').once();
+        serverSocketAborted = true;
+      })();
+
+      await wait(100);
+      client.disconnect(4444, 'Disconnect before handshake');
+
+      await wait(1000);
+      assert.equal(socketDisconnected, false);
+      assert.equal(socketDisconnectedBeforeConnect, false);
+      assert.equal(clientSocketAborted, true);
+      assert.equal(serverSocketAborted, true);
+      assert.equal(serverDisconnected, false);
     });
 
-    it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', function (done) {
+    it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -960,68 +1037,74 @@ describe('Integration tests', function () {
           return resolveAfterTimeout(10, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
 
-        var socketDisconnected = false;
-        var socketDisconnectedBeforeConnect = false;
-        var clientSocketAborted = false;
+      let connectionOnServer = false;
 
-        var connectionOnServer = false;
-
-        server.once('connection', function () {
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
           connectionOnServer = true;
-        });
+          connectionHandler(socket);
+        }
+      })();
 
-        server.once('handshake', function (socket) {
-          assert.equal(server.pendingClientsCount, 1);
-          assert.notEqual(server.pendingClients[socket.id], null);
-          socket.once('disconnect', function (code, reason) {
-            if (!connectionOnServer) {
-              socketDisconnectedBeforeConnect = true;
-            }
-            socketDisconnected = true;
-            assert.equal(code, 4445);
-            assert.equal(reason, 'Disconnect after handshake');
-          });
-          socket.once('connectAbort', function () {
-            clientSocketAborted = true;
-          });
-        });
+      await server.listener('ready').once();
 
-        var serverDisconnected = false;
-        var serverSocketAborted = false;
-
-        server.once('disconnection', function () {
-          serverDisconnected = true;
-        });
-
-        server.once('connectionAbort', function () {
-          serverSocketAborted = true;
-        });
-
-        setTimeout(function () {
-          client.disconnect(4445, 'Disconnect after handshake');
-        }, 200);
-
-        setTimeout(function () {
-          assert.equal(socketDisconnectedBeforeConnect, false);
-          assert.equal(socketDisconnected, true);
-          assert.equal(clientSocketAborted, false);
-          assert.equal(serverDisconnected, true);
-          assert.equal(serverSocketAborted, false);
-          done();
-        }, 1000);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let socketDisconnected = false;
+      let socketDisconnectedBeforeConnect = false;
+      let clientSocketAborted = false;
+
+      (async () => {
+        let {socket} = await server.listener('handshake').once();
+        assert.equal(server.pendingClientsCount, 1);
+        assert.notEqual(server.pendingClients[socket.id], null);
+
+        (async () => {
+          let event = await socket.listener('disconnect').once();
+          if (!connectionOnServer) {
+            socketDisconnectedBeforeConnect = true;
+          }
+          socketDisconnected = true;
+          assert.equal(event.code, 4445);
+          assert.equal(event.reason, 'Disconnect after handshake');
+        })();
+
+        (async () => {
+          let event = await socket.listener('connectAbort').once();
+          clientSocketAborted = true;
+        })();
+      })();
+
+      let serverDisconnected = false;
+      let serverSocketAborted = false;
+
+      (async () => {
+        await server.listener('disconnection').once();
+        serverDisconnected = true;
+      })();
+
+      (async () => {
+        await server.listener('connectionAbort').once();
+        serverSocketAborted = true;
+      })();
+
+      await wait(200);
+      client.disconnect(4445, 'Disconnect after handshake');
+
+      await wait(1000);
+
+      assert.equal(socketDisconnectedBeforeConnect, false);
+      assert.equal(socketDisconnected, true);
+      assert.equal(clientSocketAborted, false);
+      assert.equal(serverDisconnected, true);
+      assert.equal(serverSocketAborted, false);
     });
 
-    it('The close event should trigger when the socket loses the connection before the handshake', function (done) {
+    it('The close event should trigger when the socket loses the connection before the handshake', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -1032,49 +1115,57 @@ describe('Integration tests', function () {
           return resolveAfterTimeout(500, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
 
-        var serverSocketClosed = false;
-        var serverSocketAborted = false;
-        var serverClosure = false;
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionOnServer = true;
+          connectionHandler(socket);
+        }
+      })();
 
-        server.on('handshake', function (socket) {
-          socket.once('close', function (code, reason) {
-            serverSocketClosed = true;
-            assert.equal(code, 4444);
-            assert.equal(reason, 'Disconnect before handshake');
-          });
-        });
+      await server.listener('ready').once();
 
-        server.once('connectionAbort', function () {
-          serverSocketAborted = true;
-        });
-
-        server.on('closure', function (socket) {
-          assert.equal(socket.state, socket.CLOSED);
-          serverClosure = true;
-        });
-
-        setTimeout(function () {
-          client.disconnect(4444, 'Disconnect before handshake');
-        }, 100);
-        setTimeout(function () {
-          assert.equal(serverSocketClosed, true);
-          assert.equal(serverSocketAborted, true);
-          assert.equal(serverClosure, true);
-          done();
-        }, 1000);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let serverSocketClosed = false;
+      let serverSocketAborted = false;
+      let serverClosure = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('handshake')) {
+          let event = await socket.listener('close').once();
+          serverSocketClosed = true;
+          assert.equal(event.code, 4444);
+          assert.equal(event.reason, 'Disconnect before handshake');
+        }
+      })();
+
+      (async () => {
+        for await (let event of server.listener('connectionAbort')) {
+          serverSocketAborted = true;
+        }
+      })();
+
+      (async () => {
+        for await (let event of server.listener('closure')) {
+          assert.equal(event.socket.state, event.socket.CLOSED);
+          serverClosure = true;
+        }
+      })();
+
+      await wait(100);
+      client.disconnect(4444, 'Disconnect before handshake');
+
+      await wait(1000);
+      assert.equal(serverSocketClosed, true);
+      assert.equal(serverSocketAborted, true);
+      assert.equal(serverClosure, true);
     });
 
-    it('The close event should trigger when the socket loses the connection after the handshake', function (done) {
+    it('The close event should trigger when the socket loses the connection after the handshake', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -1085,70 +1176,85 @@ describe('Integration tests', function () {
           return resolveAfterTimeout(0, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
 
-        var serverSocketClosed = false;
-        var serverSocketDisconnected = false;
-        var serverClosure = false;
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionOnServer = true;
+          connectionHandler(socket);
+        }
+      })();
 
-        server.on('handshake', function (socket) {
-          socket.once('close', function (code, reason) {
-            serverSocketClosed = true;
-            assert.equal(code, 4445);
-            assert.equal(reason, 'Disconnect after handshake');
-          });
-        });
+      await server.listener('ready').once();
 
-        server.once('disconnection', function () {
-          serverSocketDisconnected = true;
-        });
-
-        server.on('closure', function (socket) {
-          assert.equal(socket.state, socket.CLOSED);
-          serverClosure = true;
-        });
-
-        setTimeout(function () {
-          client.disconnect(4445, 'Disconnect after handshake');
-        }, 100);
-        setTimeout(function () {
-          assert.equal(serverSocketClosed, true);
-          assert.equal(serverSocketDisconnected, true);
-          assert.equal(serverClosure, true);
-          done();
-        }, 300);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let serverSocketClosed = false;
+      let serverSocketDisconnected = false;
+      let serverClosure = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('handshake')) {
+          let event = await socket.listener('close').once();
+          serverSocketClosed = true;
+          assert.equal(event.code, 4445);
+          assert.equal(event.reason, 'Disconnect after handshake');
+        }
+      })();
+
+      (async () => {
+        for await (let event of server.listener('disconnection')) {
+          serverSocketDisconnected = true;
+        }
+      })();
+
+      (async () => {
+        for await (let event of server.listener('closure')) {
+          assert.equal(event.socket.state, event.socket.CLOSED);
+          serverClosure = true;
+        }
+      })();
+
+      await wait(100);
+      client.disconnect(4445, 'Disconnect after handshake');
+
+      await wait(1000);
+      assert.equal(serverSocketClosed, true);
+      assert.equal(serverSocketDisconnected, true);
+      assert.equal(serverClosure, true);
     });
   });
 
   describe('Socket pub/sub', function () {
-    it('Should support subscription batching', function (done) {
+    it('Should support subscription batching', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
-      server.on('connection', function (socket) {
-        connectionHandler(socket);
-        var isFirstMessage = true;
-        socket.on('message', function (rawMessage) {
-          if (isFirstMessage) {
-            var data = JSON.parse(rawMessage);
-            // All 20 subscriptions should arrive as a single message.
-            assert.equal(data.length, 20);
-            isFirstMessage = false;
-          }
-        });
-      });
 
-      var subscribeMiddlewareCounter = 0;
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+          let isFirstMessage = true;
+
+          (async () => {
+            for await (let {message} of socket.listener('message')) {
+              if (isFirstMessage) {
+                let data = JSON.parse(message);
+                // All 20 subscriptions should arrive as a single message.
+                assert.equal(data.length, 20);
+                isFirstMessage = false;
+              }
+            }
+          })();
+        }
+      })();
+
+      let subscribeMiddlewareCounter = 0;
+
       // Each subscription should pass through the middleware individually, even
       // though they were sent as a batch/array.
       server.addMiddleware(server.MIDDLEWARE_SUBSCRIBE, function (req, next) {
@@ -1158,7 +1264,7 @@ describe('Integration tests', function () {
           assert.equal(JSON.stringify(req.data), JSON.stringify({foo: 123}));
         } else if (req.channel === 'my-channel-12') {
           // Block my-channel-12
-          var err = new Error('You cannot subscribe to channel 12');
+          let err = new Error('You cannot subscribe to channel 12');
           err.name = 'UnauthorizedSubscribeError';
           next(err);
           return;
@@ -1166,169 +1272,190 @@ describe('Integration tests', function () {
         next();
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        var channelList = [];
-        for (var i = 0; i < 20; i++) {
-          var subscribeOptions = {
-            batch: true
-          };
-          if (i === 10) {
-            subscribeOptions.data = {foo: 123};
-          }
-          channelList.push(
-            client.subscribe('my-channel-' + i, subscribeOptions)
-          );
-        }
-        channelList[12].on('subscribe', function (err) {
-          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
-        });
-        channelList[12].on('subscribeFail', function (err) {
-          assert.notEqual(err, null);
-          assert.equal(err.name, 'UnauthorizedSubscribeError');
-        });
-        channelList[19].watch(function (data) {
-          assert.equal(data, 'Hello!');
-          assert.equal(subscribeMiddlewareCounter, 20);
-          done();
-        });
-        channelList[0].on('subscribe', function () {
-          client.publish('my-channel-19', 'Hello!');
-        });
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let channelList = [];
+      for (let i = 0; i < 20; i++) {
+        let subscribeOptions = {
+          batch: true
+        };
+        if (i === 10) {
+          subscribeOptions.data = {foo: 123};
+        }
+        channelList.push(
+          client.subscribe('my-channel-' + i, subscribeOptions)
+        );
+      }
+
+      (async () => {
+        for await (let event of channelList[12].listener('subscribe')) {
+          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
+        }
+      })();
+
+      (async () => {
+        for await (let event of channelList[12].listener('subscribeFail')) {
+          assert.notEqual(event.error, null);
+          assert.equal(event.error.name, 'UnauthorizedSubscribeError');
+        }
+      })();
+
+      (async () => {
+        for await (let event of channelList[0].listener('subscribe')) {
+          client.publish('my-channel-19', 'Hello!');
+        }
+      })();
+
+      for await (let data of channelList[19]) {
+        assert.equal(data, 'Hello!');
+        assert.equal(subscribeMiddlewareCounter, 20);
+        break;
+      }
     });
 
-    it('Client should not be able to subscribe to a channel before the handshake has completed', function (done) {
+    it('Client should not be able to subscribe to a channel before the handshake has completed', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
+
       server.setAuthEngine({
         verifyToken: function (signedAuthToken, verificationKey, verificationOptions) {
           return resolveAfterTimeout(500, {});
         }
       });
-      server.on('connection', connectionHandler);
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
 
-        var isSubscribed = false;
-        var error;
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
 
-        server.on('subscription', function (socket, channel) {
-          isSubscribed = true;
-        });
+      await server.listener('ready').once();
 
-        // Hack to capture the error without relying on the standard client flow.
-        client.transport._callbackMap[2] = {
-          event: '#subscribe',
-          data: {"channel":"someChannel"},
-          callback: function (err) {
-            error = err;
-          }
-        };
-
-        // Trick the server by sending a fake subscribe before the handshake is done.
-        client.transport.socket.on('open', function () {
-          client.send('{"event":"#subscribe","data":{"channel":"someChannel"},"cid":2}');
-        });
-
-        setTimeout(function () {
-          assert.equal(isSubscribed, false);
-          assert.notEqual(error, null);
-          assert.equal(error.name, 'InvalidActionError');
-          done();
-        }, 1000);
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+
+      let isSubscribed = false;
+      let error;
+
+      (async () => {
+        for await (let event of server.listener('subscription')) {
+          isSubscribed = true;
+        }
+      })();
+
+      // Hack to capture the error without relying on the standard client flow.
+      client.transport._callbackMap[2] = {
+        event: '#subscribe',
+        data: {"channel":"someChannel"},
+        callback: function (err) {
+          error = err;
+        }
+      };
+
+      // Trick the server by sending a fake subscribe before the handshake is done.
+      client.transport.socket.on('open', function () {
+        client.send('{"event":"#subscribe","data":{"channel":"someChannel"},"cid":2}');
+      });
+
+      await wait(1000);
+      assert.equal(isSubscribed, false);
+      assert.notEqual(error, null);
+      assert.equal(error.name, 'InvalidActionError');
     });
 
-    it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish packets without crashing', function (done) {
+    it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish events without crashing', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      server.on('connection', connectionHandler);
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
+      await server.listener('ready').once();
 
-        var nullInChannelArrayError;
-        var objectAsChannelNameError;
-        var nullChannelNameError;
-        var nullUnsubscribeError;
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
 
-        var undefinedPublishError;
-        var objectAsChannelNamePublishError;
-        var nullPublishError;
+      let nullInChannelArrayError;
+      let objectAsChannelNameError;
+      let nullChannelNameError;
+      let nullUnsubscribeError;
 
-        // Hacks to capture the errors without relying on the standard client flow.
-        client.transport._callbackMap[2] = {
-          event: '#subscribe',
-          data: [null],
-          callback: function (err) {
-            nullInChannelArrayError = err;
-          }
-        };
-        client.transport._callbackMap[3] = {
-          event: '#subscribe',
-          data: {"channel": {"hello": 123}},
-          callback: function (err) {
-            objectAsChannelNameError = err;
-          }
-        };
-        client.transport._callbackMap[4] = {
-          event: '#subscribe',
-          data: null,
-          callback: function (err) {
-            nullChannelNameError = err;
-          }
-        };
-        client.transport._callbackMap[5] = {
-          event: '#unsubscribe',
-          data: [null],
-          callback: function (err) {
-            nullUnsubscribeError = err;
-          }
-        };
-        client.transport._callbackMap[6] = {
-          event: '#publish',
-          data: null,
-          callback: function (err) {
-            undefinedPublishError = err;
-          }
-        };
-        client.transport._callbackMap[7] = {
-          event: '#publish',
-          data: {"channel": {"hello": 123}},
-          callback: function (err) {
-            objectAsChannelNamePublishError = err;
-          }
-        };
-        client.transport._callbackMap[8] = {
-          event: '#publish',
-          data: {"channel": null},
-          callback: function (err) {
-            nullPublishError = err;
-          }
-        };
+      let undefinedPublishError;
+      let objectAsChannelNamePublishError;
+      let nullPublishError;
 
-        // Trick the server by sending a fake subscribe before the handshake is done.
-        client.on('connect', function () {
+      // Hacks to capture the errors without relying on the standard client flow.
+      client.transport._callbackMap[2] = {
+        event: '#subscribe',
+        data: [null],
+        callback: function (err) {
+          nullInChannelArrayError = err;
+        }
+      };
+      client.transport._callbackMap[3] = {
+        event: '#subscribe',
+        data: {"channel": {"hello": 123}},
+        callback: function (err) {
+          objectAsChannelNameError = err;
+        }
+      };
+      client.transport._callbackMap[4] = {
+        event: '#subscribe',
+        data: null,
+        callback: function (err) {
+          nullChannelNameError = err;
+        }
+      };
+      client.transport._callbackMap[5] = {
+        event: '#unsubscribe',
+        data: [null],
+        callback: function (err) {
+          nullUnsubscribeError = err;
+        }
+      };
+      client.transport._callbackMap[6] = {
+        event: '#publish',
+        data: null,
+        callback: function (err) {
+          undefinedPublishError = err;
+        }
+      };
+      client.transport._callbackMap[7] = {
+        event: '#publish',
+        data: {"channel": {"hello": 123}},
+        callback: function (err) {
+          objectAsChannelNamePublishError = err;
+        }
+      };
+      client.transport._callbackMap[8] = {
+        event: '#publish',
+        data: {"channel": null},
+        callback: function (err) {
+          nullPublishError = err;
+        }
+      };
+
+      (async () => {
+        for await (let event of client.listener('connect')) {
+          // Trick the server by sending a fake subscribe before the handshake is done.
           client.send('{"event":"#subscribe","data":[null],"cid":2}');
           client.send('{"event":"#subscribe","data":{"channel":{"hello":123}},"cid":3}');
           client.send('{"event":"#subscribe","data":null,"cid":4}');
@@ -1336,78 +1463,164 @@ describe('Integration tests', function () {
           client.send('{"event":"#publish","data":null,"cid":6}');
           client.send('{"event":"#publish","data":{"channel":{"hello":123}},"cid":7}');
           client.send('{"event":"#publish","data":{"channel":null},"cid":8}');
-        });
+        }
+      })();
 
-        setTimeout(function () {
-          assert.notEqual(nullInChannelArrayError, null);
-          // console.log('nullInChannelArrayError:', nullInChannelArrayError);
-          assert.notEqual(objectAsChannelNameError, null);
-          // console.log('objectAsChannelNameError:', objectAsChannelNameError);
-          assert.notEqual(nullChannelNameError, null);
-          // console.log('nullChannelNameError:', nullChannelNameError);
-          assert.notEqual(nullUnsubscribeError, null);
-          // console.log('nullUnsubscribeError:', nullUnsubscribeError);
-          assert.notEqual(undefinedPublishError, null);
-          // console.log('undefinedPublishError:', undefinedPublishError);
-          assert.notEqual(objectAsChannelNamePublishError, null);
-          // console.log('objectAsChannelNamePublishError:', objectAsChannelNamePublishError);
-          assert.notEqual(nullPublishError, null);
-          // console.log('nullPublishError:', nullPublishError);
+      await wait(300);
 
-          done();
-        }, 300);
-      });
+      assert.notEqual(nullInChannelArrayError, null);
+      assert.notEqual(objectAsChannelNameError, null);
+      assert.notEqual(nullChannelNameError, null);
+      assert.notEqual(nullUnsubscribeError, null);
+      assert.notEqual(undefinedPublishError, null);
+      assert.notEqual(objectAsChannelNamePublishError, null);
+      assert.notEqual(nullPublishError, null);
     });
 
-    it('When default SCSimpleBroker broker engine is used, unsubscribe event should trigger before disconnect event', function (done) {
+    it('When default SCSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      var eventList = [];
+      let eventList = [];
 
-      server.on('connection', function (socket) {
-        socket.on('unsubscribe', function (channel) {
+      (async () => {
+        await server.listener('ready').once();
+
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: portNumber
+        });
+
+        await client.subscribe('foo').listener('subscribe').once();
+        await wait(200);
+        client.disconnect();
+      })();
+
+      let {socket} = await server.listener('connection').once();
+
+      (async () => {
+        for await (let event of socket.listener('unsubscribe')) {
           eventList.push({
             type: 'unsubscribe',
-            channel: channel
+            channel: event.channel
           });
-        });
-        socket.on('disconnect', function (code, reason) {
-          eventList.push({
-            type: 'disconnect',
-            code: code,
-            reason: reason
-          });
-          assert.equal(eventList[0].type, 'unsubscribe');
-          assert.equal(eventList[0].channel, 'foo');
-          assert.equal(eventList[1].type, 'disconnect');
+        }
+      })();
 
-          done();
-        });
+      let disconnectPacket = await socket.listener('disconnect').once();
+      eventList.push({
+        type: 'disconnect',
+        code: disconnectPacket.code,
+        reason: disconnectPacket.data
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-
-        client.subscribe('foo').on('subscribe', function () {
-          setTimeout(function () {
-            client.disconnect();
-          }, 200);
-        });
-      });
+      await wait(0);
+      assert.equal(eventList[0].type, 'disconnect');
+      assert.equal(eventList[1].type, 'unsubscribe');
+      assert.equal(eventList[1].channel, 'foo');
     });
 
-    it('When disconnecting a socket, the unsubscribe event should trigger before disconnect event (accounting for delayed unsubscribe by brokerEngine)', function (done) {
+    it('When default SCSimpleBroker broker engine is used, scServer.exchange should support consuming data from a channel', async function () {
       portNumber++;
-      var customBrokerEngine = new SCSimpleBroker();
-      var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      (async () => {
+        await client.listener('connect').once();
+
+        client.publish('foo', 'hi1');
+        await wait(10);
+        client.publish('foo', 'hi2');
+      })();
+
+      let receivedSubscribedData = [];
+      let receivedChannelData = [];
+
+      (async () => {
+        let subscription = server.exchange.subscribe('foo');
+        for await (let data of subscription) {
+          receivedSubscribedData.push(data);
+        }
+      })();
+
+      let channel = server.exchange.channel('foo');
+      for await (let data of channel) {
+        receivedChannelData.push(data);
+        if (receivedChannelData.length > 1) {
+          break;
+        }
+      }
+
+      assert.equal(server.exchange.isSubscribed('foo'), true);
+      assert.equal(server.exchange.subscriptions().join(','), 'foo');
+
+      assert.equal(receivedSubscribedData[0], 'hi1');
+      assert.equal(receivedSubscribedData[1], 'hi2');
+      assert.equal(receivedChannelData[0], 'hi1');
+      assert.equal(receivedChannelData[1], 'hi2');
+    });
+
+    it('When default SCSimpleBroker broker engine is used, scServer.exchange should support publishing data to a channel', async function () {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
+      });
+
+      (async () => {
+        await client.listener('subscribe').once();
+        server.exchange.publish('bar', 'hello1');
+        await wait(10);
+        server.exchange.publish('bar', 'hello2');
+      })();
+
+      let receivedSubscribedData = [];
+      let receivedChannelData = [];
+
+      (async () => {
+        let subscription = client.subscribe('bar');
+        for await (let data of subscription) {
+          receivedSubscribedData.push(data);
+        }
+      })();
+
+      let channel = client.channel('bar');
+      for await (let data of channel) {
+        receivedChannelData.push(data);
+        if (receivedChannelData.length > 1) {
+          break;
+        }
+      }
+
+      assert.equal(receivedSubscribedData[0], 'hello1');
+      assert.equal(receivedSubscribedData[1], 'hello2');
+      assert.equal(receivedChannelData[0], 'hello1');
+      assert.equal(receivedChannelData[1], 'hello2');
+    });
+
+    it('When disconnecting a socket, the unsubscribe event should trigger after the disconnect event', async function () {
+      portNumber++;
+      let customBrokerEngine = new SCSimpleBroker();
+      let defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
       customBrokerEngine.unsubscribeSocket = function (socket, channel) {
         return resolveAfterTimeout(100, defaultUnsubscribeSocket.call(this, socket, channel));
       };
@@ -1418,47 +1631,49 @@ describe('Integration tests', function () {
         brokerEngine: customBrokerEngine
       });
 
-      var eventList = [];
+      let eventList = [];
 
-      server.on('connection', function (socket) {
-        socket.on('unsubscribe', function (channel) {
+      (async () => {
+        await server.listener('ready').once();
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: portNumber
+        });
+
+        for await (let event of client.subscribe('foo').listener('subscribe')) {
+          (async () => {
+            await wait(200);
+            client.disconnect();
+          })();
+        }
+      })();
+
+      let {socket} = await server.listener('connection').once();
+
+      (async () => {
+        for await (let event of socket.listener('unsubscribe')) {
           eventList.push({
             type: 'unsubscribe',
-            channel: channel
+            channel: event.channel
           });
-        });
-        socket.on('disconnect', function (code, reason) {
-          eventList.push({
-            type: 'disconnect',
-            code: code,
-            reason: reason
-          });
+        }
+      })();
 
-          assert.equal(eventList[0].type, 'unsubscribe');
-          assert.equal(eventList[0].channel, 'foo');
-          assert.equal(eventList[1].type, 'disconnect');
+      let event = await socket.listener('disconnect').once();
 
-          done();
-        });
+      eventList.push({
+        type: 'disconnect',
+        code: event.code,
+        reason: event.reason
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
-
-        client.subscribe('foo').on('subscribe', function () {
-          setTimeout(function () {
-            client.disconnect();
-          }, 200);
-        });
-      });
+      await wait(0);
+      assert.equal(eventList[0].type, 'disconnect');
+      assert.equal(eventList[1].type, 'unsubscribe');
+      assert.equal(eventList[1].channel, 'foo');
     });
 
-    it('Socket should emit an error when trying to unsubscribe to a channel which it is not subscribed to', function (done) {
+    it('Socket should emit an error when trying to unsubscribe to a channel which it is not subscribed to', async function () {
       portNumber++;
 
       server = socketClusterServer.listen(portNumber, {
@@ -1466,35 +1681,43 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
 
-      var errorList = [];
+      let errorList = [];
 
-      server.on('connection', function (socket) {
-        socket.on('error', function (err) {
-          errorList.push(err);
-        });
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let {error} of socket.listener('error')) {
+              errorList.push(error);
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
+      let error;
+      try {
+        await client.invoke('#unsubscribe', 'bar');
+      } catch (err) {
+        error = err;
+      }
+      assert.notEqual(error, null);
+      assert.equal(error.name, 'BrokerError');
 
-        client.transmit('#unsubscribe', 'bar');
-
-        setTimeout(function () {
-          assert.equal(errorList.length, 1);
-          assert.equal(errorList[0].name, 'BrokerError');
-          done();
-        }, 100);
-      });
+      await wait(100);
+      assert.equal(errorList.length, 1);
+      assert.equal(errorList[0].name, 'BrokerError');
     });
 
-    it('Socket should not receive messages from a channel which it has only just unsubscribed from (accounting for delayed unsubscribe by brokerEngine)', function (done) {
+    it('Socket should not receive messages from a channel which it has only just unsubscribed from (accounting for delayed unsubscribe by brokerEngine)', async function () {
       portNumber++;
-      var customBrokerEngine = new SCSimpleBroker();
-      var defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
+      let customBrokerEngine = new SCSimpleBroker();
+      let defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
       customBrokerEngine.unsubscribeSocket = function (socket, channel) {
         return resolveAfterTimeout(300, defaultUnsubscribeSocket.call(this, socket, channel));
       };
@@ -1505,45 +1728,50 @@ describe('Integration tests', function () {
         brokerEngine: customBrokerEngine
       });
 
-      server.on('connection', function (socket) {
-        socket.on('unsubscribe', function (channelName) {
-          if (channelName === 'foo') {
-            server.exchange.publish('foo', 'hello');
-          }
-        });
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let event of socket.listener('unsubscribe')) {
+              if (event.channel === 'foo') {
+                server.exchange.publish('foo', 'hello');
+              }
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
+      // Stub the isSubscribed method so that it always returns true.
+      // That way the client will always invoke watchers whenever
+      // it receives a #publish event.
+      client.isSubscribed = function () { return true; };
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        // Stub the isSubscribed method so that it always returns true.
-        // That way the client will always invoke watchers whenever
-        // it receives a #publish event.
-        client.isSubscribed = function () { return true; };
+      let messageList = [];
 
-        var messageList = [];
+      let fooChannel = client.subscribe('foo');
 
-        var fooChannel = client.subscribe('foo');
-
-        client.watch('foo', function (data) {
+      (async () => {
+        for await (let data of fooChannel) {
           messageList.push(data);
-        });
+        }
+      })();
 
-        fooChannel.on('subscribe', function () {
-          client.transmit('#unsubscribe', 'foo');
-        });
+      (async () => {
+        for await (let event of fooChannel.listener('subscribe')) {
+          client.invoke('#unsubscribe', 'foo');
+        }
+      })();
 
-        setTimeout(function () {
-          assert.equal(messageList.length, 0);
-          done();
-        }, 200);
-      });
+      await wait(200);
+      assert.equal(messageList.length, 0);
     });
 
-    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut(channel) is called', function (done) {
+    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut(channel) is called', async function () {
       portNumber++;
 
       server = socketClusterServer.listen(portNumber, {
@@ -1551,45 +1779,49 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
 
-      var errorList = [];
-      var serverSocket;
-      var wasKickOutCalled = false;
+      let errorList = [];
+      let serverSocket;
+      let wasKickOutCalled = false;
 
-      server.on('connection', function (socket) {
-        serverSocket = socket;
-        socket.on('error', function (err) {
-          errorList.push(err);
-        });
-        socket.on('subscribe', function (channelName) {
-          if (channelName === 'foo') {
-            setTimeout(function () {
-              wasKickOutCalled = true;
-              socket.kickOut('foo', 'Socket was kicked out of the channel');
-            }, 50);
-          }
-        });
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+
+          (async () => {
+            for await (let {error} of socket.listener('error')) {
+              errorList.push(error);
+            }
+          })();
+
+          (async () => {
+            for await (let event of socket.listener('subscribe')) {
+              if (event.channel === 'foo') {
+                await wait(50);
+                wasKickOutCalled = true;
+                socket.kickOut('foo', 'Socket was kicked out of the channel');
+              }
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
+      client.subscribe('foo');
 
-        client.subscribe('foo');
-
-        setTimeout(function () {
-          assert.equal(errorList.length, 0);
-          assert.equal(wasKickOutCalled, true);
-          assert.equal(serverSocket.channelSubscriptionsCount, 0);
-          assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
-          done();
-        }, 100);
-      });
+      await wait(100);
+      assert.equal(errorList.length, 0);
+      assert.equal(wasKickOutCalled, true);
+      assert.equal(serverSocket.channelSubscriptionsCount, 0);
+      assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
     });
 
-    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut() is called without arguments', function (done) {
+    it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut() is called without arguments', async function () {
       portNumber++;
 
       server = socketClusterServer.listen(portNumber, {
@@ -1597,108 +1829,111 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
 
-      var errorList = [];
-      var serverSocket;
-      var wasKickOutCalled = false;
+      let errorList = [];
+      let serverSocket;
+      let wasKickOutCalled = false;
 
-      server.on('connection', function (socket) {
-        serverSocket = socket;
-        socket.on('error', function (err) {
-          errorList.push(err);
-        });
-        socket.on('subscribe', function (channelName) {
-          if (socket.channelSubscriptionsCount === 2) {
-            setTimeout(function () {
-              wasKickOutCalled = true;
-              socket.kickOut();
-            }, 50);
-          }
-        });
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+
+          (async () => {
+            for await (let {error} of socket.listener('error')) {
+              errorList.push(error);
+            }
+          })();
+
+          (async () => {
+            for await (let event of socket.listener('subscribe')) {
+              if (socket.channelSubscriptionsCount === 2) {
+                await wait(50);
+                wasKickOutCalled = true;
+                socket.kickOut();
+              }
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
 
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
+      client.subscribe('foo');
+      client.subscribe('bar');
 
-        client.subscribe('foo');
-        client.subscribe('bar');
-
-        setTimeout(function () {
-          assert.equal(errorList.length, 0);
-          assert.equal(wasKickOutCalled, true);
-          assert.equal(serverSocket.channelSubscriptionsCount, 0);
-          assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
-          done();
-        }, 200);
-      });
+      await wait(200);
+      assert.equal(errorList.length, 0);
+      assert.equal(wasKickOutCalled, true);
+      assert.equal(serverSocket.channelSubscriptionsCount, 0);
+      assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
     });
   });
 
   describe('Socket destruction', function () {
-    it('Server socket destroy should disconnect the socket', function (done) {
+    it('Server socket destroy should disconnect the socket', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      server.on('connection', function (socket) {
-        setTimeout(function () {
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          await wait(100);
           socket.destroy(1000, 'Custom reason');
-        }, 100);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('disconnect', function (code, reason) {
-          assert.equal(code, 1000);
-          assert.equal(reason, 'Custom reason');
-          assert.equal(server.clientsCount, 0);
-          assert.equal(server.pendingClientsCount, 0);
-          done();
-        });
-      });
+
+      let {code, reason} = await client.listener('disconnect').once();
+      assert.equal(code, 1000);
+      assert.equal(reason, 'Custom reason');
+      assert.equal(server.clientsCount, 0);
+      assert.equal(server.pendingClientsCount, 0);
     });
 
-    it('Server socket destroy should set the active property on the socket to false', function (done) {
+    it('Server socket destroy should set the active property on the socket to false', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
 
-      var serverSocket;
+      let serverSocket;
 
-      server.on('connection', function (socket) {
-        serverSocket = socket;
-        assert.equal(socket.active, true);
-        setTimeout(function () {
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+          assert.equal(socket.active, true);
+          await wait(100);
           socket.destroy();
-        }, 100);
+        }
+      })();
+
+      await server.listener('ready').once();
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: portNumber
       });
-      server.on('ready', function () {
-        client = socketCluster.connect({
-          hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('disconnect', function (code, reason) {
-          assert.equal(serverSocket.active, false);
-          done();
-        });
-      });
+
+      await client.listener('disconnect').once();
+      assert.equal(serverSocket.active, false);
     });
   });
 
   describe('Socket Ping/pong', function () {
-    describe('When when pingTimeoutDisabled is not set (false)', function () {
-      beforeEach('Launch server with ping options before start', function (done) {
+    describe('When when pingTimeoutDisabled is not set', function () {
+      beforeEach('Launch server with ping options before start', async function () {
         portNumber++;
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
@@ -1708,60 +1943,62 @@ describe('Integration tests', function () {
           pingInterval: 2000,
           pingTimeout: 500
         });
-        server.on('ready', function () {
-          done();
-        });
+
+        await server.listener('ready').once();
       });
 
-      afterEach('Shut down server afterwards', function (done) {
-        destroyTestCase(function () {
-          server.close();
-          done();
-        });
+      afterEach('Shut down server afterwards', async function () {
+        destroyTestCase();
+        server.close();
       });
 
-      it('Should disconnect socket if server does not receive a pong from client before timeout', function (done) {
-        client = socketCluster.connect({
+      it('Should disconnect socket if server does not receive a pong from client before timeout', async function () {
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
 
-        var serverWarning = null;
-        server.on('warning', function (err) {
-          serverWarning = err;
-        });
+        let serverWarning = null;
+        (async () => {
+          for await (let {warning} of server.listener('warning')) {
+            serverWarning = warning;
+          }
+        })();
 
-        var serverDisconnectionCode = null;
-        server.on('disconnection', function (socket, code) {
-          serverDisconnectionCode = code;
-        });
+        let serverDisconnectionCode = null;
+        (async () => {
+          for await (let event of server.listener('disconnection')) {
+            serverDisconnectionCode = event.code;
+          }
+        })();
 
-        var clientError = null;
-        client.on('error', function (err) {
-          clientError = err;
-        });
+        let clientError = null;
+        (async () => {
+          for await (let {error} of client.listener('error')) {
+            clientError = error;
+          }
+        })();
 
-        var clientDisconnectCode = null;
-        client.on('disconnect', function (code) {
-          clientDisconnectCode = code;
-        });
+        let clientDisconnectCode = null;
+        (async () => {
+          for await (let event of client.listener('disconnect')) {
+            clientDisconnectCode = event.code;
+          }
+        })();
 
-        setTimeout(function () {
-          assert.notEqual(clientError, null);
-          assert.equal(clientError.name, 'SocketProtocolError');
-          assert.equal(clientDisconnectCode, 4000);
+        await wait(1000);
+        assert.notEqual(clientError, null);
+        assert.equal(clientError.name, 'SocketProtocolError');
+        assert.equal(clientDisconnectCode, 4001);
 
-          assert.notEqual(serverWarning, null);
-          assert.equal(serverWarning.name, 'SocketProtocolError');
-          assert.equal(serverDisconnectionCode, 4001);
-          done();
-        }, 1000);
+        assert.notEqual(serverWarning, null);
+        assert.equal(serverWarning.name, 'SocketProtocolError');
+        assert.equal(serverDisconnectionCode, 4001);
       });
     });
 
     describe('When when pingTimeoutDisabled is true', function () {
-      beforeEach('Launch server with ping options before start', function (done) {
+      beforeEach('Launch server with ping options before start', async function () {
         portNumber++;
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
@@ -1772,274 +2009,259 @@ describe('Integration tests', function () {
           pingTimeout: 500,
           pingTimeoutDisabled: true
         });
-        server.on('ready', function () {
-          done();
-        });
+
+        await server.listener('ready').once();
       });
 
-      afterEach('Shut down server afterwards', function (done) {
-        destroyTestCase(function () {
-          server.close();
-          done();
-        });
+      afterEach('Shut down server afterwards', async function () {
+        destroyTestCase();
+        server.close();
       });
 
-      it('Should not disconnect socket if server does not receive a pong from client before timeout', function (done) {
-        client = socketCluster.connect({
+      it('Should not disconnect socket if server does not receive a pong from client before timeout', async function () {
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: portNumber,
-          multiplex: false,
           pingTimeoutDisabled: true
         });
 
-        var serverWarning = null;
-        server.on('warning', function (err) {
-          serverWarning = err;
-        });
+        let serverWarning = null;
+        (async () => {
+          for await (let {warning} of server.listener('warning')) {
+            serverWarning = warning;
+          }
+        })();
 
-        var serverDisconnectionCode = null;
-        server.on('disconnection', function (socket, code) {
-          serverDisconnectionCode = code;
-        });
+        let serverDisconnectionCode = null;
+        (async () => {
+          for await (let event of server.listener('disconnection')) {
+            serverDisconnectionCode = event.code;
+          }
+        })();
 
-        var clientError = null;
-        client.on('error', function (err) {
-          clientError = err;
-        });
+        let clientError = null;
+        (async () => {
+          for await (let {error} of client.listener('error')) {
+            clientError = error;
+          }
+        })();
 
-        var clientDisconnectCode = null;
-        client.on('disconnect', function (code) {
-          clientDisconnectCode = code;
-        });
+        let clientDisconnectCode = null;
+        (async () => {
+          for await (let event of client.listener('disconnect')) {
+            clientDisconnectCode = event.code;
+          }
+        })();
 
-        setTimeout(function () {
-          assert.equal(clientError, null);
-          assert.equal(clientDisconnectCode, null);
+        await wait(1000);
+        assert.equal(clientError, null);
+        assert.equal(clientDisconnectCode, null);
 
-          assert.equal(serverWarning, null);
-          assert.equal(serverDisconnectionCode, null);
-          done();
-        }, 1000);
+        assert.equal(serverWarning, null);
+        assert.equal(serverDisconnectionCode, null);
       });
     });
   });
 
   describe('Middleware', function () {
-    var middlewareFunction;
-    var middlewareWasExecuted = false;
+    let middlewareFunction;
+    let middlewareWasExecuted = false;
 
-    beforeEach('Launch server without middleware before start', function (done) {
+    beforeEach('Launch server without middleware before start', async function () {
       portNumber++;
       server = socketClusterServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
-      server.on('ready', function () {
-        done();
-      });
+      await server.listener('ready').once();
     });
 
-    afterEach('Shut down server afterwards', function (done) {
-      destroyTestCase(function () {
-        server.close();
-        done();
-      });
+    afterEach('Shut down server afterwards', async function () {
+      destroyTestCase();
+      server.close();
     });
 
     describe('MIDDLEWARE_AUTHENTICATE', function () {
-      it('Should not run authenticate middleware if JWT token does not exist', function (done) {
-        middlewareFunction = function (req, next) {
+      it('Should not run authenticate middleware if JWT token does not exist', async function () {
+        middlewareFunction = async function (req) {
           middlewareWasExecuted = true;
-          next();
         };
         server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
 
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
 
-        client.once('connect', function () {
-          assert.notEqual(middlewareWasExecuted, true);
-          done();
-        });
+        await client.listener('connect').once();
+        assert.notEqual(middlewareWasExecuted, true);
       });
 
-      it('Should run authenticate middleware if JWT token exists', function (done) {
+      it('Should run authenticate middleware if JWT token exists', async function () {
         global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
-        middlewareFunction = function (req, next) {
+        middlewareFunction = async function (req) {
           middlewareWasExecuted = true;
-          next();
         };
         server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
 
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
 
-        client.transmit('login', {username: 'bob'});
-        client.once('authenticate', function (state) {
-          assert.equal(middlewareWasExecuted, true);
-          done();
-        });
+        (async () => {
+          try {
+            await client.invoke('login', {username: 'bob'});
+          } catch (err) {}
+        })();
+
+        await client.listener('authenticate').once();
+        assert.equal(middlewareWasExecuted, true);
       });
     });
 
     describe('MIDDLEWARE_HANDSHAKE_SC', function () {
-      it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_SC blocks with an error', function (done) {
-        var middlewareWasExecuted = false;
-        var serverWarnings = [];
-        var clientErrors = [];
-        var abortStatus;
+      it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_SC blocks with an error', async function () {
+        let middlewareWasExecuted = false;
+        let serverWarnings = [];
+        let clientErrors = [];
+        let abortStatus;
 
-        middlewareFunction = function (req, next) {
-          setTimeout(function () {
-            middlewareWasExecuted = true;
-            var err = new Error('SC handshake failed because the server was too lazy');
-            err.name = 'TooLazyHandshakeError';
-            next(err);
-          }, 100);
+        middlewareFunction = async function (req) {
+          await wait(100);
+          middlewareWasExecuted = true;
+          let err = new Error('SC handshake failed because the server was too lazy');
+          err.name = 'TooLazyHandshakeError';
+          throw err;
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
-        server.on('warning', function (err) {
-          serverWarnings.push(err);
-        });
+        (async () => {
+          for await (let {warning} of server.listener('warning')) {
+            serverWarnings.push(warning);
+          }
+        })();
 
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
 
-        client.on('error', function (err) {
-          clientErrors.push(err);
-        });
+        (async () => {
+          for await (let {error} of client.listener('error')) {
+            clientErrors.push(error);
+          }
+        })();
 
-        client.once('connectAbort', function (status, reason) {
-          abortStatus = status;
-        });
+        (async () => {
+          let event = await client.listener('connectAbort').once();
+          abortStatus = event.code;
+        })();
 
-        setTimeout(function () {
-          assert.equal(middlewareWasExecuted, true);
-          assert.notEqual(clientErrors[0], null);
-          assert.equal(clientErrors[0].name, 'TooLazyHandshakeError');
-          assert.notEqual(clientErrors[1], null);
-          assert.equal(clientErrors[1].name, 'SocketProtocolError');
-          assert.notEqual(serverWarnings[0], null);
-          assert.equal(serverWarnings[0].name, 'TooLazyHandshakeError');
-          assert.notEqual(abortStatus, null);
-          done();
-        }, 200);
+        await wait(200);
+        assert.equal(middlewareWasExecuted, true);
+        assert.notEqual(clientErrors[0], null);
+        assert.equal(clientErrors[0].name, 'TooLazyHandshakeError');
+        assert.notEqual(clientErrors[1], null);
+        assert.equal(clientErrors[1].name, 'SocketProtocolError');
+        assert.notEqual(serverWarnings[0], null);
+        assert.equal(serverWarnings[0].name, 'TooLazyHandshakeError');
+        assert.notEqual(abortStatus, null);
       });
 
-      it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_SC blocks without providing a status code', function (done) {
-        var middlewareWasExecuted = false;
-        var abortStatus;
-        var abortReason;
+      it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_SC blocks without providing a status code', async function () {
+        let middlewareWasExecuted = false;
+        let abortStatus;
+        let abortReason;
 
-        middlewareFunction = function (req, next) {
-          setTimeout(function () {
-            middlewareWasExecuted = true;
-            var err = new Error('SC handshake failed because the server was too lazy');
-            err.name = 'TooLazyHandshakeError';
-            next(err);
-          }, 100);
+        middlewareFunction = async function (req) {
+          await wait(100);
+          middlewareWasExecuted = true;
+          let err = new Error('SC handshake failed because the server was too lazy');
+          err.name = 'TooLazyHandshakeError';
+          throw err;
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
-
-        client.once('connectAbort', function (status, reason) {
-          abortStatus = status;
-          abortReason = reason;
+          port: portNumber
         });
 
-        setTimeout(function () {
-          assert.equal(middlewareWasExecuted, true);
-          assert.equal(abortStatus, 4008);
-          assert.equal(abortReason, 'TooLazyHandshakeError: SC handshake failed because the server was too lazy');
-          done();
-        }, 200);
+        (async () => {
+          let event = await client.listener('connectAbort').once();
+          abortStatus = event.code;
+          abortReason = event.reason;
+        })();
+
+        await wait(200);
+        assert.equal(middlewareWasExecuted, true);
+        assert.equal(abortStatus, 4008);
+        assert.equal(abortReason, 'TooLazyHandshakeError: SC handshake failed because the server was too lazy');
       });
 
-      it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_SC blocks by providing a status code', function (done) {
-        var middlewareWasExecuted = false;
-        var abortStatus;
-        var abortReason;
+      it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_SC blocks by providing a status code', async function () {
+        let middlewareWasExecuted = false;
+        let abortStatus;
+        let abortReason;
 
-        middlewareFunction = function (req, next) {
-          setTimeout(function () {
-            middlewareWasExecuted = true;
-            var err = new Error('SC handshake failed because of invalid query auth parameters');
-            err.name = 'InvalidAuthQueryHandshakeError';
-
-            // Pass custom 4501 status code as the second argument to the next() function.
-            // We will treat this code as a fatal authentication failure on the front end.
-            // A status code of 4500 or higher means that the client shouldn't try to reconnect.
-            next(err, 4501);
-          }, 100);
+        middlewareFunction = async function (req) {
+          await wait(100);
+          middlewareWasExecuted = true;
+          let err = new Error('SC handshake failed because of invalid query auth parameters');
+          err.name = 'InvalidAuthQueryHandshakeError';
+          // Set custom 4501 status code as a property of the error.
+          // We will treat this code as a fatal authentication failure on the front end.
+          // A status code of 4500 or higher means that the client shouldn't try to reconnect.
+          err.statusCode = 4501;
+          throw err;
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
-        });
-        client.on('error', function () {});
-
-        client.once('connectAbort', function (status, reason) {
-          abortStatus = status;
-          abortReason = reason;
+          port: portNumber
         });
 
-        setTimeout(function () {
-          assert.equal(middlewareWasExecuted, true);
-          assert.equal(abortStatus, 4501);
-          assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: SC handshake failed because of invalid query auth parameters');
-          done();
-        }, 200);
+        (async () => {
+          let event = await client.listener('connectAbort').once();
+          abortStatus = event.code;
+          abortReason = event.reason;
+        })();
+
+        await wait(200);
+        assert.equal(middlewareWasExecuted, true);
+        assert.equal(abortStatus, 4501);
+        assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: SC handshake failed because of invalid query auth parameters');
       });
 
-      it('Should connect with a delay if next() is called after a timeout inside the middleware function', function (done) {
-        var createConnectionTime = null;
-        var connectEventTime = null;
-        var abortStatus;
-        var abortReason;
+      it('Should connect with a delay if next() is called after a timeout inside the middleware function', async function () {
+        let createConnectionTime = null;
+        let connectEventTime = null;
+        let abortStatus;
+        let abortReason;
 
-        middlewareFunction = function (req, next) {
-          setTimeout(function () {
-            next();
-          }, 500);
+        middlewareFunction = async function (req) {
+          await wait(500);
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
         createConnectionTime = Date.now();
-        client = socketCluster.connect({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: portNumber,
-          multiplex: false
+          port: portNumber
         });
 
-        client.once('connectAbort', function (status, reason) {
-          abortStatus = status;
-          abortReason = reason;
-        });
-        client.once('connect', function () {
-          connectEventTime = Date.now();
-          assert.equal(connectEventTime - createConnectionTime > 400, true);
-          done();
-        });
+        (async () => {
+          let event = await client.listener('connectAbort').once();
+          abortStatus = event.code;
+          abortReason = event.reason;
+        })();
+
+        await client.listener('connect').once();
+        connectEventTime = Date.now();
+        assert.equal(connectEventTime - createConnectionTime > 400, true);
       });
     });
   });

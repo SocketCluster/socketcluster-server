@@ -1,15 +1,15 @@
-var scErrors = require('sc-errors');
-var InvalidActionError = scErrors.InvalidActionError;
+const scErrors = require('sc-errors');
+const InvalidActionError = scErrors.InvalidActionError;
 
-var Response = function (socket, id) {
+function Response(socket, id) {
   this.socket = socket;
   this.id = id;
   this.sent = false;
-};
+}
 
 Response.prototype._respond = function (responseData, options) {
   if (this.sent) {
-    throw new InvalidActionError('Response ' + this.id + ' has already been sent');
+    throw new InvalidActionError(`Response ${this.id} has already been sent`);
   } else {
     this.sent = true;
     this.socket.sendObject(responseData, options);
@@ -18,7 +18,7 @@ Response.prototype._respond = function (responseData, options) {
 
 Response.prototype.end = function (data, options) {
   if (this.id) {
-    var responseData = {
+    let responseData = {
       rid: this.id
     };
     if (data !== undefined) {
@@ -30,9 +30,9 @@ Response.prototype.end = function (data, options) {
 
 Response.prototype.error = function (error, data, options) {
   if (this.id) {
-    var err = scErrors.dehydrateError(error);
+    let err = scErrors.dehydrateError(error);
 
-    var responseData = {
+    let responseData = {
       rid: this.id,
       error: err
     };

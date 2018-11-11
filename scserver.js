@@ -1,34 +1,31 @@
-var SCServerSocket = require('./scserversocket');
-var AuthEngine = require('sc-auth').AuthEngine;
-var formatter = require('sc-formatter');
-var EventEmitter = require('events').EventEmitter;
-var Emitter = require('component-emitter');
-var base64id = require('base64id');
-var async = require('async');
-var url = require('url');
-var crypto = require('crypto');
-var uuid = require('uuid');
-var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
+const SCServerSocket = require('./scserversocket');
+const AuthEngine = require('sc-auth').AuthEngine;
+const formatter = require('sc-formatter');
+const base64id = require('base64id');
+const async = require('async');
+const url = require('url');
+const crypto = require('crypto');
+const uuid = require('uuid');
+const SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
+const AsyncStreamEmitter = require('async-stream-emitter');
 
-var scErrors = require('sc-errors');
-var AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
-var AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
-var AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
-var AuthTokenError = scErrors.AuthTokenError;
-var SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
-var InvalidArgumentsError = scErrors.InvalidArgumentsError;
-var InvalidOptionsError = scErrors.InvalidOptionsError;
-var InvalidActionError = scErrors.InvalidActionError;
-var BrokerError = scErrors.BrokerError;
-var ServerProtocolError = scErrors.ServerProtocolError;
+const scErrors = require('sc-errors');
+const AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
+const AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
+const AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
+const AuthTokenError = scErrors.AuthTokenError;
+const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
+const InvalidArgumentsError = scErrors.InvalidArgumentsError;
+const InvalidOptionsError = scErrors.InvalidOptionsError;
+const InvalidActionError = scErrors.InvalidActionError;
+const BrokerError = scErrors.BrokerError;
+const ServerProtocolError = scErrors.ServerProtocolError;
 
 
-var SCServer = function (options) {
-  var self = this;
+function SCServer(options) {
+  AsyncStreamEmitter.call(this);
 
-  EventEmitter.call(this);
-
-  var opts = {
+  let opts = {
     brokerEngine: new SCSimpleBroker(),
     wsEngine: 'ws',
     wsEngineServerOptions: {},
@@ -53,7 +50,8 @@ var SCServer = function (options) {
 
   this.MIDDLEWARE_HANDSHAKE_WS = 'handshakeWS';
   this.MIDDLEWARE_HANDSHAKE_SC = 'handshakeSC';
-  this.MIDDLEWARE_EMIT = 'emit';
+  this.MIDDLEWARE_TRANSMIT = 'transmit';
+  this.MIDDLEWARE_INVOKE = 'invoke';
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
   this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
   this.MIDDLEWARE_PUBLISH_OUT = 'publishOut';
@@ -65,7 +63,8 @@ var SCServer = function (options) {
   this._middleware = {};
   this._middleware[this.MIDDLEWARE_HANDSHAKE_WS] = [];
   this._middleware[this.MIDDLEWARE_HANDSHAKE_SC] = [];
-  this._middleware[this.MIDDLEWARE_EMIT] = [];
+  this._middleware[this.MIDDLEWARE_TRANSMIT] = [];
+  this._middleware[this.MIDDLEWARE_INVOKE] = [];
   this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_IN] = [];
   this._middleware[this.MIDDLEWARE_PUBLISH_OUT] = [];
@@ -90,25 +89,37 @@ var SCServer = function (options) {
 
   // Make sure there is always a leading and a trailing slash in the WS path.
   this._path = opts.path.replace(/\/?$/, '/').replace(/^\/?/, '/');
-  this.isReady = false;
 
-  this.brokerEngine.once('ready', () => {
+  if (this.brokerEngine.isReady) {
     this.isReady = true;
-    this.emit('ready');
-  });
-
-  var wsEngine = typeof opts.wsEngine === 'string' ? require(opts.wsEngine) : opts.wsEngine;
-  if (!wsEngine || !wsEngine.Server) {
-    throw new InvalidOptionsError('The wsEngine option must be a path or module name which points ' +
-      'to a valid WebSocket engine module with a compatible interface');
+    this.emit('ready', {});
+  } else {
+    this.isReady = false;
+    (async () => {
+      await this.brokerEngine.listener('ready').once();
+      this.isReady = true;
+      this.emit('ready', {});
+    })();
   }
-  var WSServer = wsEngine.Server;
+
+  let wsEngine = typeof opts.wsEngine === 'string' ? require(opts.wsEngine) : opts.wsEngine;
+  if (!wsEngine || !wsEngine.Server) {
+    throw new InvalidOptionsError(
+      'The wsEngine option must be a path or module name which points ' +
+      'to a valid WebSocket engine module with a compatible interface'
+    );
+  }
+  let WSServer = wsEngine.Server;
 
   if (opts.authPrivateKey != null || opts.authPublicKey != null) {
     if (opts.authPrivateKey == null) {
-      throw new InvalidOptionsError('The authPrivateKey option must be specified if authPublicKey is specified');
+      throw new InvalidOptionsError(
+        'The authPrivateKey option must be specified if authPublicKey is specified'
+      );
     } else if (opts.authPublicKey == null) {
-      throw new InvalidOptionsError('The authPublicKey option must be specified if authPrivateKey is specified');
+      throw new InvalidOptionsError(
+        'The authPublicKey option must be specified if authPrivateKey is specified'
+      );
     }
     this.signatureKey = opts.authPrivateKey;
     this.verificationKey = opts.authPublicKey;
@@ -162,7 +173,7 @@ var SCServer = function (options) {
 
   this.exchange = this.brokerEngine.exchange();
 
-  var wsServerOptions = opts.wsEngineServerOptions || {};
+  let wsServerOptions = opts.wsEngineServerOptions || {};
   wsServerOptions.server = this.httpServer;
   wsServerOptions.verifyClient = this.verifyHandshake.bind(this);
 
@@ -186,9 +197,9 @@ var SCServer = function (options) {
 
   this.wsServer.on('error', this._handleServerError.bind(this));
   this.wsServer.on('connection', this._handleSocketConnection.bind(this));
-};
+}
 
-SCServer.prototype = Object.create(EventEmitter.prototype);
+SCServer.prototype = Object.create(AsyncStreamEmitter.prototype);
 
 SCServer.prototype.setAuthEngine = function (authEngine) {
   this.auth = authEngine;
@@ -198,40 +209,47 @@ SCServer.prototype.setCodecEngine = function (codecEngine) {
   this.codec = codecEngine;
 };
 
+SCServer.prototype.emitError = function (error) {
+  this.emit('error', {error});
+};
+
+SCServer.prototype.emitWarning = function (warning) {
+  this.emit('warning', {warning});
+};
+
 SCServer.prototype._handleServerError = function (error) {
   if (typeof error === 'string') {
     error = new ServerProtocolError(error);
   }
-  this.emit('error', error);
+  this.emitError(error);
 };
 
-SCServer.prototype._handleSocketError = function (error) {
-  // We don't want to crash the entire worker on socket error
-  // so we emit it as a warning instead.
-  this.emit('warning', error);
+SCServer.prototype._handleSocketErrors = async function (socket) {
+  // A socket error will show up as a warning on the server.
+  for await (let event of socket.listener('error')) {
+    this.emitWarning(event.error);
+  }
 };
 
 SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
   scSocket.disconnect(4005);
 };
 
-SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback) {
+SCServer.prototype._subscribeSocket = async function (socket, channelOptions) {
   if (!channelOptions) {
-    callback && callback('Socket ' + socket.id + ' provided a malformated channel payload');
-    return;
+    throw new InvalidActionError(`Socket ${socket.id} provided a malformated channel payload`);
   }
 
   if (this.socketChannelLimit && socket.channelSubscriptionsCount >= this.socketChannelLimit) {
-    callback && callback('Socket ' + socket.id + ' tried to exceed the channel subscription limit of ' +
-      this.socketChannelLimit);
-    return;
+    throw new InvalidActionError(
+      `Socket ${socket.id} tried to exceed the channel subscription limit of ${this.socketChannelLimit}`
+    );
   }
 
-  var channelName = channelOptions.channel;
+  let channelName = channelOptions.channel;
 
   if (typeof channelName !== 'string') {
-    callback && callback('Socket ' + socket.id + ' provided an invalid channel name');
-    return;
+    throw new InvalidActionError(`Socket ${socket.id} provided an invalid channel name`);
   }
 
   if (socket.channelSubscriptionsCount == null) {
@@ -242,22 +260,21 @@ SCServer.prototype._subscribeSocket = function (socket, channelOptions, callback
     socket.channelSubscriptionsCount++;
   }
 
-  this.brokerEngine.subscribeSocket(socket, channelName)
-  .then(() => {
-    return null;
-  })
-  .catch((err) => {
-    return err;
-  })
-  .then((err) => {
-    if (err) {
-      delete socket.channelSubscriptions[channelName];
-      socket.channelSubscriptionsCount--;
-    } else {
-      socket.emit('subscribe', channelName, channelOptions);
-      this.emit('subscription', socket, channelName, channelOptions);
-    }
-    callback && callback(err);
+  try {
+    await this.brokerEngine.subscribeSocket(socket, channelName);
+  } catch (err) {
+    delete socket.channelSubscriptions[channelName];
+    socket.channelSubscriptionsCount--;
+    throw err;
+  }
+  socket.emit('subscribe', {
+    channel: channelName,
+    subscribeOptions: channelOptions
+  });
+  this.emit('subscription', {
+    socket,
+    channel: channelName,
+    subscribeOptions: channelOptions
   });
 };
 
@@ -269,10 +286,14 @@ SCServer.prototype._unsubscribeSocketFromAllChannels = function (socket) {
 
 SCServer.prototype._unsubscribeSocket = function (socket, channel) {
   if (typeof channel !== 'string') {
-    throw new InvalidActionError('Socket ' + socket.id + ' tried to unsubscribe from an invalid channel name');
+    throw new InvalidActionError(
+      `Socket ${socket.id} tried to unsubscribe from an invalid channel name`
+    );
   }
   if (!socket.channelSubscriptions[channel]) {
-    throw new InvalidActionError('Socket ' + socket.id + ' tried to unsubscribe from a channel which it is not subscribed to');
+    throw new InvalidActionError(
+      `Socket ${socket.id} tried to unsubscribe from a channel which it is not subscribed to`
+    );
   }
 
   delete socket.channelSubscriptions[channel];
@@ -282,13 +303,13 @@ SCServer.prototype._unsubscribeSocket = function (socket, channel) {
 
   this.brokerEngine.unsubscribeSocket(socket, channel);
 
-  socket.emit('unsubscribe', channel);
-  this.emit('unsubscription', socket, channel);
+  socket.emit('unsubscribe', {channel});
+  this.emit('unsubscription', {socket, channel});
 };
 
 SCServer.prototype._processTokenError = function (err) {
-  var authError = null;
-  var isBadToken = true;
+  let authError = null;
+  let isBadToken = true;
 
   if (err) {
     if (err.name === 'TokenExpiredError') {
@@ -311,22 +332,29 @@ SCServer.prototype._processTokenError = function (err) {
 };
 
 SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
-  var badAuthStatus = {
+  let badAuthStatus = {
     authError: error,
     signedAuthToken: signedAuthToken
   };
-  scSocket.emit('badAuthToken', badAuthStatus);
-  this.emit('badSocketAuthToken', scSocket, badAuthStatus);
+  scSocket.emit('badAuthToken', {
+    authError: error,
+    signedAuthToken: signedAuthToken
+  });
+  this.emit('badSocketAuthToken', {
+    socket: scSocket,
+    authError: error,
+    signedAuthToken: signedAuthToken
+  });
 };
 
 SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
-  var verificationOptions = Object.assign({socket: scSocket}, this.defaultVerificationOptions);
+  let verificationOptions = Object.assign({socket: scSocket}, this.defaultVerificationOptions);
 
-  var handleVerifyTokenResult = (result) => {
-    var err = result.error;
-    var token = result.token;
+  let handleVerifyTokenResult = (result) => {
+    let err = result.error;
+    let token = result.token;
 
-    var oldState = scSocket.authState;
+    let oldAuthState = scSocket.authState;
     if (token) {
       scSocket.signedAuthToken = signedAuthToken;
       scSocket.authToken = token;
@@ -356,25 +384,25 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
         }
         // If an error is passed back from the authenticate middleware, it will be treated as a
         // server warning and not a socket error.
-        callback(middlewareError, isBadToken || false, oldState);
+        callback(middlewareError, isBadToken || false, oldAuthState);
       });
     } else {
-      var errorData = this._processTokenError(err);
+      let errorData = this._processTokenError(err);
 
       // If the error is related to the JWT being badly formatted, then we will
       // treat the error as a socket error.
       if (err && signedAuthToken != null) {
-        scSocket.emit('error', errorData.authError);
+        scSocket.emitError(errorData.authError);
         if (errorData.isBadToken) {
           this._emitBadAuthTokenError(scSocket, errorData.authError, signedAuthToken);
         }
       }
-      callback(errorData.authError, errorData.isBadToken, oldState);
+      callback(errorData.authError, errorData.isBadToken, oldAuthState);
     }
   };
 
-  var verifyTokenResult;
-  var verifyTokenError;
+  let verifyTokenResult;
+  let verifyTokenError;
 
   try {
     verifyTokenResult = this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions);
@@ -383,16 +411,17 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
   }
 
   if (verifyTokenResult instanceof Promise) {
-    verifyTokenResult
-    .then((token) => {
-      return {token: token};
-    })
-    .catch((err) => {
-      return {error: err};
-    })
-    .then(handleVerifyTokenResult);
+    (async () => {
+      let result = {};
+      try {
+        result.token = await verifyTokenResult;
+      } catch (err) {
+        result.error = err;
+      }
+      handleVerifyTokenResult(result);
+    })();
   } else {
-    var result = {
+    let result = {
       token: verifyTokenResult,
       error: verifyTokenError
     };
@@ -401,218 +430,265 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
 };
 
 SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
-  if (this.options.wsEngine === 'ws') {
-    // Normalize ws module to match sc-uws module.
+  if (!wsSocket.upgradeReq) {
+    // Normalize ws modules to match.
     wsSocket.upgradeReq = upgradeReq;
   }
 
-  var id = this.generateId();
+  let id = this.generateId();
 
-  var scSocket = new SCServerSocket(id, this, wsSocket);
+  let scSocket = new SCServerSocket(id, this, wsSocket);
   scSocket.exchange = this.exchange;
 
-  scSocket.on('error', (err) => {
-    this._handleSocketError(err);
-  });
+  this._handleSocketErrors(scSocket);
 
   this.pendingClients[id] = scSocket;
   this.pendingClientsCount++;
 
-  scSocket.on('#authenticate', (signedAuthToken, respond) => {
-    this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldState) => {
-      if (err) {
-        if (isBadToken) {
-          scSocket.deauthenticate();
-        }
-      } else {
-        scSocket.triggerAuthenticationEvents(oldState);
-      }
-      var authStatus = {
-        isAuthenticated: !!scSocket.authToken,
-        authError: scErrors.dehydrateError(err)
-      };
-      if (err && isBadToken) {
-        respond(err, authStatus);
-      } else {
-        respond(null, authStatus);
-      }
-    });
-  });
+  let handleSocketAuthenticate = async () => {
+    for await (let rpc of scSocket.procedure('#authenticate')) {
+      let signedAuthToken = rpc.data;
 
-  scSocket.on('#removeAuthToken', () => {
-    scSocket.deauthenticateSelf();
-  });
-
-  scSocket.on('#subscribe', (channelOptions, res) => {
-    if (!channelOptions) {
-      channelOptions = {};
-    } else if (typeof channelOptions === 'string') {
-      channelOptions = {
-        channel: channelOptions
-      };
-    }
-    // This is an invalid state; it means the client tried to subscribe before
-    // having completed the handshake.
-    if (scSocket.state === scSocket.OPEN) {
-      this._subscribeSocket(scSocket, channelOptions, (err) => {
+      this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldAuthState) => {
         if (err) {
-          var error = new BrokerError('Failed to subscribe socket to the ' + channelOptions.channel + ' channel - ' + err);
-          res(error);
-          scSocket.emit('error', error);
-        } else {
-          if (channelOptions.batch) {
-            res(undefined, undefined, {batch: true});
-          } else {
-            res();
+          if (isBadToken) {
+            scSocket.deauthenticate();
           }
+        } else {
+          scSocket.triggerAuthenticationEvents(oldAuthState);
+        }
+        if (err && isBadToken) {
+          rpc.error(err);
+        } else {
+          let authStatus = {
+            isAuthenticated: !!scSocket.authToken,
+            authError: scErrors.dehydrateError(err)
+          };
+          rpc.end(authStatus);
         }
       });
-    } else {
-      var error = new InvalidActionError('Cannot subscribe socket to a channel before it has completed the handshake');
-      res(error);
-      this.emit('warning', error);
     }
-  });
+  };
+  handleSocketAuthenticate();
 
-  scSocket.on('#unsubscribe', (channel, res) => {
-    var error;
-    try {
-      this._unsubscribeSocket(scSocket, channel);
-    } catch (err) {
-      error = new BrokerError('Failed to unsubscribe socket from the ' + channel + ' channel - ' + err.message);
+  let handleSocketRemoveAuthToken = async () => {
+    for await (let data of scSocket.receiver('#removeAuthToken')) {
+      scSocket.deauthenticateSelf();
     }
-    if (error) {
-      res(error);
-      scSocket.emit('error', error);
-    } else {
-      res();
-    }
-  });
+  };
+  handleSocketRemoveAuthToken();
 
-  var cleanupSocket = (type, code, data) => {
+  let handleSocketSubscribe = async () => {
+    for await (let rpc of scSocket.procedure('#subscribe')) {
+      let channelOptions = rpc.data;
+
+      if (!channelOptions) {
+        channelOptions = {};
+      } else if (typeof channelOptions === 'string') {
+        channelOptions = {
+          channel: channelOptions
+        };
+      }
+
+      (async () => {
+        if (scSocket.state === scSocket.OPEN) {
+          try {
+            await this._subscribeSocket(scSocket, channelOptions);
+          } catch (err) {
+            let error = new BrokerError(`Failed to subscribe socket to the ${channelOptions.channel} channel - ${err}`);
+            rpc.error(error);
+            scSocket.emitError(error);
+            return;
+          }
+          if (channelOptions.batch) {
+            rpc.end(undefined, {batch: true});
+            return;
+          }
+          rpc.end();
+          return;
+        }
+        // This is an invalid state; it means the client tried to subscribe before
+        // having completed the handshake.
+        let error = new InvalidActionError('Cannot subscribe socket to a channel before it has completed the handshake');
+        rpc.error(error);
+        this.emitWarning(error);
+      })();
+    }
+  };
+  handleSocketSubscribe();
+
+  let handleSocketUnsubscribe = async () => {
+    for await (let rpc of scSocket.procedure('#unsubscribe')) {
+      let channel = rpc.data;
+      let error;
+      try {
+        this._unsubscribeSocket(scSocket, channel);
+      } catch (err) {
+        error = new BrokerError(
+          `Failed to unsubscribe socket from the ${channel} channel - ${err}`
+        );
+      }
+      if (error) {
+        rpc.error(error);
+        scSocket.emitError(error);
+      } else {
+        rpc.end();
+      }
+    }
+  };
+  handleSocketUnsubscribe();
+
+  let cleanupSocket = (type, code, reason) => {
     clearTimeout(scSocket._handshakeTimeoutRef);
 
-    scSocket.off('#handshake');
-    scSocket.off('#authenticate');
-    scSocket.off('#removeAuthToken');
-    scSocket.off('#subscribe');
-    scSocket.off('#unsubscribe');
-    scSocket.off('authenticate');
-    scSocket.off('authStateChange');
-    scSocket.off('deauthenticate');
-    scSocket.off('_disconnect');
-    scSocket.off('_connectAbort');
+    scSocket.closeProcedure('#handshake');
+    scSocket.closeProcedure('#authenticate');
+    scSocket.closeProcedure('#subscribe');
+    scSocket.closeProcedure('#unsubscribe');
+    scSocket.closeReceiver('#removeAuthToken');
+    scSocket.closeListener('authenticate');
+    scSocket.closeListener('authStateChange');
+    scSocket.closeListener('deauthenticate');
 
-    var isClientFullyConnected = !!this.clients[id];
+    let isClientFullyConnected = !!this.clients[id];
 
     if (isClientFullyConnected) {
       delete this.clients[id];
       this.clientsCount--;
     }
 
-    var isClientPending = !!this.pendingClients[id];
+    let isClientPending = !!this.pendingClients[id];
     if (isClientPending) {
       delete this.pendingClients[id];
       this.pendingClientsCount--;
     }
 
-    this._unsubscribeSocketFromAllChannels(scSocket);
-
     if (type === 'disconnect') {
-      this.emit('_disconnection', scSocket, code, data);
-      this.emit('disconnection', scSocket, code, data);
+      this.emit('disconnection', {
+        socket: scSocket,
+        code,
+        reason
+      });
     } else if (type === 'abort') {
-      this.emit('_connectionAbort', scSocket, code, data);
-      this.emit('connectionAbort', scSocket, code, data);
+      this.emit('connectionAbort', {
+        socket: scSocket,
+        code,
+        reason
+      });
     }
-    this.emit('_closure', scSocket, code, data);
-    this.emit('closure', scSocket, code, data);
+    this.emit('closure', {
+      socket: scSocket,
+      code,
+      reason
+    });
+
+    this._unsubscribeSocketFromAllChannels(scSocket);
   };
 
-  scSocket.once('_disconnect', cleanupSocket.bind(scSocket, 'disconnect'));
-  scSocket.once('_connectAbort', cleanupSocket.bind(scSocket, 'abort'));
+  let handleSocketDisconnect = async () => {
+    let event = await scSocket.listener('disconnect').once();
+    cleanupSocket('disconnect', event.code, event.data);
+  };
+  handleSocketDisconnect();
+
+  let handleSocketAbort = async () => {
+    let event = await scSocket.listener('connectAbort').once();
+    cleanupSocket('abort', event.code, event.data);
+  };
+  handleSocketAbort();
 
   scSocket._handshakeTimeoutRef = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.handshakeTimeout);
-  scSocket.once('#handshake', (data, respond) => {
-    if (!data) {
-      data = {};
-    }
-    var signedAuthToken = data.authToken || null;
-    clearTimeout(scSocket._handshakeTimeoutRef);
 
-    this._passThroughHandshakeSCMiddleware({
-      socket: scSocket
-    }, (err, statusCode) => {
-      if (err) {
-        if (err.statusCode == null) {
-          err.statusCode = statusCode;
-        }
-        respond(err);
-        scSocket.disconnect(err.statusCode);
-        return;
-      }
-      this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldState) => {
-        if (scSocket.state === scSocket.CLOSED) {
+  let handleSocketHandshake = async () => {
+    for await (let rpc of scSocket.procedure('#handshake')) {
+      let data = rpc.data || {};
+      let signedAuthToken = data.authToken || null;
+      clearTimeout(scSocket._handshakeTimeoutRef);
+
+      this._passThroughHandshakeSCMiddleware({
+        socket: scSocket
+      }, (err, statusCode) => {
+        if (err) {
+          if (err.statusCode == null) {
+            err.statusCode = statusCode;
+          }
+          rpc.error(err);
+          scSocket.disconnect(err.statusCode);
           return;
         }
+        this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldAuthState) => {
+          if (scSocket.state === scSocket.CLOSED) {
+            return;
+          }
 
-        var clientSocketStatus = {
-          id: scSocket.id,
-          pingTimeout: this.pingTimeout
-        };
-        var serverSocketStatus = {
-          id: scSocket.id,
-          pingTimeout: this.pingTimeout
-        };
+          let clientSocketStatus = {
+            id: scSocket.id,
+            pingTimeout: this.pingTimeout
+          };
+          let serverSocketStatus = {
+            id: scSocket.id,
+            pingTimeout: this.pingTimeout
+          };
 
-        if (err) {
-          if (signedAuthToken != null) {
-            // Because the token is optional as part of the handshake, we don't count
-            // it as an error if the token wasn't provided.
-            clientSocketStatus.authError = scErrors.dehydrateError(err);
-            serverSocketStatus.authError = err;
+          if (err) {
+            if (signedAuthToken != null) {
+              // Because the token is optional as part of the handshake, we don't count
+              // it as an error if the token wasn't provided.
+              clientSocketStatus.authError = scErrors.dehydrateError(err);
+              serverSocketStatus.authError = err;
 
-            if (isBadToken) {
-              scSocket.deauthenticate();
+              if (isBadToken) {
+                scSocket.deauthenticate();
+              }
             }
           }
-        }
-        clientSocketStatus.isAuthenticated = !!scSocket.authToken;
-        serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
+          clientSocketStatus.isAuthenticated = !!scSocket.authToken;
+          serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
 
-        if (this.pendingClients[id]) {
-          delete this.pendingClients[id];
-          this.pendingClientsCount--;
-        }
-        this.clients[id] = scSocket;
-        this.clientsCount++;
+          if (this.pendingClients[id]) {
+            delete this.pendingClients[id];
+            this.pendingClientsCount--;
+          }
+          this.clients[id] = scSocket;
+          this.clientsCount++;
 
-        scSocket.state = scSocket.OPEN;
+          scSocket.state = scSocket.OPEN;
 
-        scSocket.emit('connect', serverSocketStatus);
-        scSocket.emit('_connect', serverSocketStatus);
+          if (clientSocketStatus.isAuthenticated) {
+            // Needs to be executed after the connection event to allow
+            // consumers to be setup from inside the connection loop.
+            (async () => {
+              await this.listener('connection').once();
+              scSocket.triggerAuthenticationEvents(oldAuthState);
+            })();
+          }
 
-        this.emit('_connection', scSocket, serverSocketStatus);
-        this.emit('connection', scSocket, serverSocketStatus);
+          scSocket.emit('connect', serverSocketStatus);
+          this.emit('connection', {socket: scSocket, ...serverSocketStatus});
 
-        if (clientSocketStatus.isAuthenticated) {
-          scSocket.triggerAuthenticationEvents(oldState);
-        }
-        // Treat authentication failure as a 'soft' error
-        respond(null, clientSocketStatus);
+          // Treat authentication failure as a 'soft' error
+          rpc.end(clientSocketStatus);
+        });
       });
-    });
-  });
+    }
+  };
+  handleSocketHandshake();
 
   // Emit event to signal that a socket handshake has been initiated.
-  // The _handshake event is for internal use (including third-party plugins)
-  this.emit('_handshake', scSocket);
-  this.emit('handshake', scSocket);
+  this.emit('handshake', {socket: scSocket});
 };
 
 SCServer.prototype.close = function () {
   this.isReady = false;
-  this.wsServer.close.apply(this.wsServer, arguments);
+  return new Promise((resolve, reject) => {
+    this.wsServer.close((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
 };
 
 SCServer.prototype.getPath = function () {
@@ -632,26 +708,26 @@ SCServer.prototype.addMiddleware = function (type, middleware) {
 };
 
 SCServer.prototype.removeMiddleware = function (type, middleware) {
-  var middlewareFunctions = this._middleware[type];
+  let middlewareFunctions = this._middleware[type];
 
   this._middleware[type] = middlewareFunctions.filter((fn) => {
     return fn !== middleware;
   });
 };
 
-SCServer.prototype.verifyHandshake = function (info, cb) {
-  var req = info.req;
-  var origin = info.origin;
+SCServer.prototype.verifyHandshake = function (info, callback) {
+  let req = info.req;
+  let origin = info.origin;
   if (origin === 'null' || origin == null) {
     origin = '*';
   }
-  var ok = false;
+  let ok = false;
 
   if (this._allowAllOrigins) {
     ok = true;
   } else {
     try {
-      var parts = url.parse(origin);
+      let parts = url.parse(origin);
       parts.port = parts.port || 80;
       ok = ~this.origins.indexOf(parts.hostname + ':' + parts.port) ||
         ~this.origins.indexOf(parts.hostname + ':*') ||
@@ -660,70 +736,243 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
   }
 
   if (ok) {
-    var handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE_WS];
+    let handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE_WS];
     if (handshakeMiddleware.length) {
-      var callbackInvoked = false;
+      let callbackInvoked = false;
       async.applyEachSeries(handshakeMiddleware, req, (err) => {
         if (callbackInvoked) {
-          this.emit('warning', new InvalidActionError('Callback for ' + this.MIDDLEWARE_HANDSHAKE_WS + ' middleware was already invoked'));
+          this.emitWarning(
+            new InvalidActionError(
+              `Callback for ${this.MIDDLEWARE_HANDSHAKE_WS} middleware was already invoked`
+            )
+          );
         } else {
           callbackInvoked = true;
           if (err) {
             if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + this.MIDDLEWARE_HANDSHAKE_WS + ' middleware', this.MIDDLEWARE_HANDSHAKE_WS);
+              err = new SilentMiddlewareBlockedError(
+                `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_WS} middleware`,
+                this.MIDDLEWARE_HANDSHAKE_WS
+              );
             } else if (this.middlewareEmitWarnings) {
-              this.emit('warning', err);
+              this.emitWarning(err);
             }
-            cb(false, 401, err);
+            callback(false, 401, typeof err === 'string' ? err : err.message);
           } else {
-            cb(true);
+            callback(true);
           }
         }
       });
     } else {
-      cb(true);
+      callback(true);
     }
   } else {
-    var err = new ServerProtocolError('Failed to authorize socket handshake - Invalid origin: ' + origin);
-    this.emit('warning', err);
-    cb(false, 403, err);
+    let err = new ServerProtocolError(
+      `Failed to authorize socket handshake - Invalid origin: ${origin}`
+    );
+    this.emitWarning(err);
+    callback(false, 403, err.message);
   }
 };
 
-SCServer.prototype._isPrivateTransmittedEvent = function (event) {
+SCServer.prototype._isReservedRemoteEvent = function (event) {
   return typeof event === 'string' && event.indexOf('#') === 0;
 };
 
-SCServer.prototype.verifyInboundEvent = function (socket, eventName, eventData, cb) {
-  var request = {
-    socket: socket,
-    event: eventName,
-    data: eventData
-  };
-
-  var token = socket.getAuthToken();
+SCServer.prototype.verifyInboundRemoteEvent = function (requestOptions, callback) {
+  let socket = requestOptions.socket;
+  let token = socket.getAuthToken();
   if (this.isAuthTokenExpired(token)) {
-    request.authTokenExpiredError = new AuthTokenExpiredError('The socket auth token has expired', token.exp);
+    requestOptions.authTokenExpiredError = new AuthTokenExpiredError(
+      'The socket auth token has expired',
+      token.exp
+    );
 
     socket.deauthenticate();
   }
 
-  this._passThroughMiddleware(request, cb);
+  this._passThroughMiddleware(requestOptions, callback);
 };
 
 SCServer.prototype.isAuthTokenExpired = function (token) {
   if (token && token.exp != null) {
-    var currentTime = Date.now();
-    var expiryMilliseconds = token.exp * 1000;
+    let currentTime = Date.now();
+    let expiryMilliseconds = token.exp * 1000;
     return currentTime > expiryMilliseconds;
   }
   return false;
 };
 
-SCServer.prototype._passThroughMiddleware = function (options, cb) {
-  var callbackInvoked = false;
+SCServer.prototype._processPublishAction = function (options, request, callback) {
+  let callbackInvoked = false;
 
-  var request = {
+  if (this.allowClientPublish) {
+    let eventData = options.data || {};
+    request.channel = eventData.channel;
+    request.data = eventData.data;
+
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
+      (err) => {
+        if (callbackInvoked) {
+          this.emitWarning(
+            new InvalidActionError(
+              `Callback for ${this.MIDDLEWARE_PUBLISH_IN} middleware was already invoked`
+            )
+          );
+        } else {
+          callbackInvoked = true;
+          if (request.data !== undefined) {
+            eventData.data = request.data;
+          }
+          if (err) {
+            if (err === true || err.silent) {
+              err = new SilentMiddlewareBlockedError(
+                `Action was silently blocked by ${this.MIDDLEWARE_PUBLISH_IN} middleware`,
+                this.MIDDLEWARE_PUBLISH_IN
+              );
+            } else if (this.middlewareEmitWarnings) {
+              this.emitWarning(err);
+            }
+            callback(err, eventData, request.ackData);
+          } else {
+            if (typeof request.channel !== 'string') {
+              err = new BrokerError(
+                `Socket ${request.socket.id} tried to publish to an invalid ${request.channel} channel`
+              );
+              this.emitWarning(err);
+              callback(err, eventData, request.ackData);
+              return;
+            }
+            (async () => {
+              let error;
+              try {
+                await this.exchange.publish(request.channel, request.data);
+              } catch (err) {
+                error = err;
+                this.emitWarning(error);
+              }
+              callback(error, eventData, request.ackData);
+            })();
+          }
+        }
+      }
+    );
+  } else {
+    let noPublishError = new InvalidActionError('Client publish feature is disabled');
+    this.emitWarning(noPublishError);
+    callback(noPublishError);
+  }
+};
+
+SCServer.prototype._processSubscribeAction = function (options, request, callback) {
+  let callbackInvoked = false;
+
+  let eventData = options.data || {};
+  request.channel = eventData.channel;
+  request.waitForAuth = eventData.waitForAuth;
+  request.data = eventData.data;
+
+  if (request.waitForAuth && request.authTokenExpiredError) {
+    // If the channel has the waitForAuth flag set, then we will handle the expiry quietly
+    // and we won't pass this request through the subscribe middleware.
+    callback(request.authTokenExpiredError, eventData);
+  } else {
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
+      (err) => {
+        if (callbackInvoked) {
+          this.emitWarning(
+            new InvalidActionError(
+              `Callback for ${this.MIDDLEWARE_SUBSCRIBE} middleware was already invoked`
+            )
+          );
+        } else {
+          callbackInvoked = true;
+          if (err) {
+            if (err === true || err.silent) {
+              err = new SilentMiddlewareBlockedError(
+                `Action was silently blocked by ${this.MIDDLEWARE_SUBSCRIBE} middleware`,
+                this.MIDDLEWARE_SUBSCRIBE
+              );
+            } else if (this.middlewareEmitWarnings) {
+              this.emitWarning(err);
+            }
+          }
+          if (request.data !== undefined) {
+            eventData.data = request.data;
+          }
+          callback(err, eventData);
+        }
+      }
+    );
+  }
+};
+
+SCServer.prototype._processTransmitAction = function (options, request, callback) {
+  let callbackInvoked = false;
+
+  request.event = options.event;
+  request.data = options.data;
+
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_TRANSMIT], request,
+    (err) => {
+      if (callbackInvoked) {
+        this.emitWarning(
+          new InvalidActionError(
+            `Callback for ${this.MIDDLEWARE_TRANSMIT} middleware was already invoked`
+          )
+        );
+      } else {
+        callbackInvoked = true;
+        if (err) {
+          if (err === true || err.silent) {
+            err = new SilentMiddlewareBlockedError(
+              `Action was silently blocked by ${this.MIDDLEWARE_TRANSMIT} middleware`,
+              this.MIDDLEWARE_TRANSMIT
+            );
+          } else if (this.middlewareEmitWarnings) {
+            this.emitWarning(err);
+          }
+        }
+        callback(err, request.data);
+      }
+    }
+  );
+};
+
+SCServer.prototype._processInvokeAction = function (options, request, callback) {
+  let callbackInvoked = false;
+
+  request.event = options.event;
+  request.data = options.data;
+
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_INVOKE], request,
+    (err) => {
+      if (callbackInvoked) {
+        this.emitWarning(
+          new InvalidActionError(
+            `Callback for ${this.MIDDLEWARE_INVOKE} middleware was already invoked`
+          )
+        );
+      } else {
+        callbackInvoked = true;
+        if (err) {
+          if (err === true || err.silent) {
+            err = new SilentMiddlewareBlockedError(
+              `Action was silently blocked by ${this.MIDDLEWARE_INVOKE} middleware`,
+              this.MIDDLEWARE_INVOKE
+            );
+          } else if (this.middlewareEmitWarnings) {
+            this.emitWarning(err);
+          }
+        }
+        callback(err, request.data);
+      }
+    }
+  );
+};
+
+SCServer.prototype._passThroughMiddleware = function (options, callback) {
+  let request = {
     socket: options.socket
   };
 
@@ -731,125 +980,49 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
     request.authTokenExpiredError = options.authTokenExpiredError;
   }
 
-  var event = options.event;
+  let event = options.event;
 
-  if (this._isPrivateTransmittedEvent(event)) {
-    if (event === '#subscribe') {
-      var eventData = options.data || {};
-      request.channel = eventData.channel;
-      request.waitForAuth = eventData.waitForAuth;
-      request.data = eventData.data;
-
-      if (request.waitForAuth && request.authTokenExpiredError) {
-        // If the channel has the waitForAuth flag set, then we will handle the expiry quietly
-        // and we won't pass this request through the subscribe middleware.
-        cb(request.authTokenExpiredError, eventData);
+  if (options.cid == null) {
+    // If transmit.
+    if (this._isReservedRemoteEvent(event)) {
+      if (event === '#publish') {
+        this._processPublishAction(options, request, callback);
+      } else if (event === '#removeAuthToken') {
+        callback(null, options.data);
       } else {
-        async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
-          (err) => {
-            if (callbackInvoked) {
-              this.emit('warning', new InvalidActionError('Callback for ' + this.MIDDLEWARE_SUBSCRIBE + ' middleware was already invoked'));
-            } else {
-              callbackInvoked = true;
-              if (err) {
-                if (err === true || err.silent) {
-                  err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + this.MIDDLEWARE_SUBSCRIBE + ' middleware', this.MIDDLEWARE_SUBSCRIBE);
-                } else if (this.middlewareEmitWarnings) {
-                  this.emit('warning', err);
-                }
-              }
-              if (request.data !== undefined) {
-                eventData.data = request.data;
-              }
-              cb(err, eventData);
-            }
-          }
-        );
-      }
-    } else if (event === '#publish') {
-      if (this.allowClientPublish) {
-        var eventData = options.data || {};
-        request.channel = eventData.channel;
-        request.data = eventData.data;
-
-        async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
-          (err) => {
-            if (callbackInvoked) {
-              this.emit('warning', new InvalidActionError('Callback for ' + this.MIDDLEWARE_PUBLISH_IN + ' middleware was already invoked'));
-            } else {
-              callbackInvoked = true;
-              if (request.data !== undefined) {
-                eventData.data = request.data;
-              }
-              if (err) {
-                if (err === true || err.silent) {
-                  err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + this.MIDDLEWARE_PUBLISH_IN + ' middleware', this.MIDDLEWARE_PUBLISH_IN);
-                } else if (this.middlewareEmitWarnings) {
-                  this.emit('warning', err);
-                }
-                cb(err, eventData, request.ackData);
-              } else {
-                if (typeof request.channel !== 'string') {
-                  err = new BrokerError('Socket ' + request.socket.id + ' tried to publish to an invalid ' + request.channel + ' channel');
-                  this.emit('warning', err);
-                  cb(err, eventData, request.ackData);
-                  return;
-                }
-                this.exchange.publish(request.channel, request.data)
-                .then(() => {
-                  return null;
-                })
-                .catch((err) => {
-                  return err;
-                })
-                .then((err) => {
-                  if (err) {
-                    this.emit('warning', err);
-                  }
-                  cb(err, eventData, request.ackData);
-                });
-              }
-            }
-          }
-        );
-      } else {
-        var noPublishError = new InvalidActionError('Client publish feature is disabled');
-        this.emit('warning', noPublishError);
-        cb(noPublishError, options.data);
+        let error = new InvalidActionError(`The reserved transmitted event ${event} is not supported`);
+        callback(error);
       }
     } else {
-      // Do not allow blocking other reserved events or it could interfere with SC behaviour
-      cb(null, options.data);
+      this._processTransmitAction(options, request, callback);
     }
   } else {
-    request.event = event;
-    request.data = options.data;
-
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_EMIT], request,
-      (err) => {
-        if (callbackInvoked) {
-          this.emit('warning', new InvalidActionError('Callback for ' + this.MIDDLEWARE_EMIT + ' middleware was already invoked'));
-        } else {
-          callbackInvoked = true;
-          if (err) {
-            if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + this.MIDDLEWARE_EMIT + ' middleware', this.MIDDLEWARE_EMIT);
-            } else if (this.middlewareEmitWarnings) {
-              this.emit('warning', err);
-            }
-          }
-          cb(err, request.data);
-        }
+    // If invoke/RPC.
+    if (this._isReservedRemoteEvent(event)) {
+      if (event === '#subscribe') {
+        this._processSubscribeAction(options, request, callback);
+      } else if (event === '#publish') {
+        this._processPublishAction(options, request, callback);
+      } else if (
+        event === '#handshake' ||
+        event === '#authenticate' ||
+        event === '#unsubscribe'
+      ) {
+        callback(null, options.data);
+      } else {
+        let error = new InvalidActionError(`The reserved invoked event ${event} is not supported`);
+        callback(error);
       }
-    );
+    } else {
+      this._processInvokeAction(options, request, callback);
+    }
   }
 };
 
-SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
-  var self = this;
-  var callbackInvoked = false;
+SCServer.prototype._passThroughAuthenticateMiddleware = function (options, callback) {
+  let callbackInvoked = false;
 
-  var request = {
+  let request = {
     socket: options.socket,
     authToken: options.authToken
   };
@@ -857,41 +1030,51 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
     (err, results) => {
       if (callbackInvoked) {
-        self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
+        this.emitWarning(
+          new InvalidActionError(
+            `Callback for ${this.MIDDLEWARE_AUTHENTICATE} middleware was already invoked`
+          )
+        );
       } else {
         callbackInvoked = true;
-        var isBadToken = false;
+        let isBadToken = false;
         if (results.length) {
           isBadToken = results[results.length - 1] || false;
         }
         if (err) {
           if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware', self.MIDDLEWARE_AUTHENTICATE);
-          } else if (self.middlewareEmitWarnings) {
-            self.emit('warning', err);
+            err = new SilentMiddlewareBlockedError(
+              `Action was silently blocked by ${this.MIDDLEWARE_AUTHENTICATE} middleware`,
+              this.MIDDLEWARE_AUTHENTICATE
+            );
+          } else if (this.middlewareEmitWarnings) {
+            this.emitWarning(err);
           }
         }
-        cb(err, isBadToken);
+        callback(err, isBadToken);
       }
     }
   );
 };
 
-SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
-  var self = this;
-  var callbackInvoked = false;
+SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, callback) {
+  let callbackInvoked = false;
 
-  var request = {
+  let request = {
     socket: options.socket
   };
 
   async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
     (err, results) => {
       if (callbackInvoked) {
-        self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware was already invoked'));
+        this.emitWarning(
+          new InvalidActionError(
+            `Callback for ${this.MIDDLEWARE_HANDSHAKE_SC} middleware was already invoked`
+          )
+        );
       } else {
         callbackInvoked = true;
-        var statusCode;
+        let statusCode;
         if (results.length) {
           statusCode = results[results.length - 1] || 4008;
         } else {
@@ -902,24 +1085,25 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
             statusCode = err.statusCode;
           }
           if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware', self.MIDDLEWARE_HANDSHAKE_SC);
-          } else if (self.middlewareEmitWarnings) {
-            self.emit('warning', err);
+            err = new SilentMiddlewareBlockedError(
+              `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_SC} middleware`,
+              this.MIDDLEWARE_HANDSHAKE_SC
+            );
+          } else if (this.middlewareEmitWarnings) {
+            this.emitWarning(err);
           }
         }
-        cb(err, statusCode);
+        callback(err, statusCode);
       }
     }
   );
 };
 
-SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, cb) {
-  var self = this;
-
-  var callbackInvoked = false;
+SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, callback) {
+  let callbackInvoked = false;
 
   if (eventName === '#publish') {
-    var request = {
+    let request = {
       socket: socket,
       channel: eventData.channel,
       data: eventData.data
@@ -927,7 +1111,11 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
     async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
       (err) => {
         if (callbackInvoked) {
-          self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware was already invoked'));
+          this.emitWarning(
+            new InvalidActionError(
+              `Callback for ${this.MIDDLEWARE_PUBLISH_OUT} middleware was already invoked`
+            )
+          );
         } else {
           callbackInvoked = true;
           if (request.data !== undefined) {
@@ -935,22 +1123,25 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
           }
           if (err) {
             if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError('Action was silently blocked by ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware', self.MIDDLEWARE_PUBLISH_OUT);
-            } else if (self.middlewareEmitWarnings) {
-              self.emit('warning', err);
+              err = new SilentMiddlewareBlockedError(
+                `Action was silently blocked by ${this.MIDDLEWARE_PUBLISH_OUT} middleware`,
+                this.MIDDLEWARE_PUBLISH_OUT
+              );
+            } else if (this.middlewareEmitWarnings) {
+              this.emitWarning(err);
             }
-            cb(err, eventData);
+            callback(err, eventData);
           } else {
             if (options && request.useCache) {
               options.useCache = true;
             }
-            cb(null, eventData);
+            callback(null, eventData);
           }
         }
       }
     );
   } else {
-    cb(null, eventData);
+    callback(null, eventData);
   }
 };
 

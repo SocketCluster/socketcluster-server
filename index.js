@@ -2,7 +2,7 @@
  * Module dependencies.
  */
 
-var http = require('http');
+const http = require('http');
 
 /**
  * Expose SCServer constructor.
@@ -36,12 +36,12 @@ module.exports.listen = function (port, options, fn) {
     options = {};
   }
 
-  var server = http.createServer(function (req, res) {
+  let server = http.createServer(function (req, res) {
     res.writeHead(501);
     res.end('Not Implemented');
   });
 
-  var socketClusterServer = module.exports.attach(server, options);
+  let socketClusterServer = module.exports.attach(server, options);
   socketClusterServer.httpServer = server;
   server.listen(port, fn);
 
@@ -62,6 +62,6 @@ module.exports.attach = function (server, options) {
     options = {};
   }
   options.httpServer = server;
-  var socketClusterServer = new module.exports.SCServer(options);
+  let socketClusterServer = new module.exports.SCServer(options);
   return socketClusterServer;
 };

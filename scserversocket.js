@@ -1,19 +1,20 @@
-var cloneDeep = require('lodash.clonedeep');
-var Emitter = require('component-emitter');
-var Response = require('./response').Response;
+const cloneDeep = require('lodash.clonedeep');
+const StreamDemux = require('stream-demux');
+const AsyncStreamEmitter = require('async-stream-emitter');
+const Response = require('./response').Response;
 
-var scErrors = require('sc-errors');
-var InvalidArgumentsError = scErrors.InvalidArgumentsError;
-var SocketProtocolError = scErrors.SocketProtocolError;
-var TimeoutError = scErrors.TimeoutError;
-var InvalidActionError = scErrors.InvalidActionError;
-var AuthError = scErrors.AuthError;
+const scErrors = require('sc-errors');
+const InvalidArgumentsError = scErrors.InvalidArgumentsError;
+const SocketProtocolError = scErrors.SocketProtocolError;
+const TimeoutError = scErrors.TimeoutError;
+const InvalidActionError = scErrors.InvalidActionError;
+const AuthError = scErrors.AuthError;
 
 
-var SCServerSocket = function (id, server, socket) {
-  Emitter.call(this);
+function SCServerSocket(id, server, socket) {
+  AsyncStreamEmitter.call(this);
 
-  this._autoAckEvents = {
+  this._autoAckRPCs = {
     '#publish': 1
   };
 
@@ -24,12 +25,11 @@ var SCServerSocket = function (id, server, socket) {
   this.authState = this.UNAUTHENTICATED;
   this.active = true;
 
+  this._receiverDemux = new StreamDemux();
+  this._procedureDemux = new StreamDemux();
+
   this.request = this.socket.upgradeReq || {};
 
-  var wsEngine = this.server.options.wsEngine;
-  if (wsEngine === 'sc-uws' || wsEngine === 'uws') {
-    this.request.connection = this.socket._socket;
-  }
   if (this.request.connection) {
     this.remoteAddress = this.request.connection.remoteAddress;
     this.remoteFamily = this.request.connection.remoteFamily;
@@ -51,13 +51,11 @@ var SCServerSocket = function (id, server, socket) {
   this.channelSubscriptionsCount = 0;
 
   this.socket.on('error', (err) => {
-    this.emit('error', err);
+    this.emitError(err);
   });
 
   this.socket.on('close', (code, data) => {
-    setTimeout(() => {
-      this._onSCClose(code, data);
-    }, 0);
+    this._onSCClose(code, data);
   });
 
   if (!this.server.pingTimeoutDisabled) {
@@ -69,39 +67,39 @@ var SCServerSocket = function (id, server, socket) {
   this.socket.on('message', (message, flags) => {
     this._resetPongTimeout();
 
-    this.emit('message', message);
+    this.emit('message', {message});
 
-    var obj;
+    let obj;
     try {
       obj = this.decode(message);
     } catch (err) {
       if (err.name === 'Error') {
         err.name = 'InvalidMessageError';
       }
-      this.emit('error', err);
+      this.emitError(err);
       return;
     }
 
     // If pong
     if (obj === '#2') {
-      var token = this.getAuthToken();
+      let token = this.getAuthToken();
       if (this.server.isAuthTokenExpired(token)) {
         this.deauthenticate();
       }
     } else {
       if (Array.isArray(obj)) {
-        var len = obj.length;
-        for (var i = 0; i < len; i++) {
-          this._handleEventObject(obj[i], message);
+        let len = obj.length;
+        for (let i = 0; i < len; i++) {
+          this._handleRemoteEventObject(obj[i], message);
         }
       } else {
-        this._handleEventObject(obj, message);
+        this._handleRemoteEventObject(obj, message);
       }
     }
   });
-};
+}
 
-SCServerSocket.prototype = Object.create(Emitter.prototype);
+SCServerSocket.prototype = Object.create(AsyncStreamEmitter.prototype);
 
 SCServerSocket.CONNECTING = SCServerSocket.prototype.CONNECTING = 'connecting';
 SCServerSocket.OPEN = SCServerSocket.prototype.OPEN = 'open';
@@ -113,45 +111,83 @@ SCServerSocket.UNAUTHENTICATED = SCServerSocket.prototype.UNAUTHENTICATED = 'una
 SCServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 SCServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
+SCServerSocket.prototype.receiver = function (receiverName) {
+  return this._receiverDemux.stream(receiverName);
+};
+
+SCServerSocket.prototype.closeReceiver = function (receiverName) {
+  this._receiverDemux.close(receiverName);
+};
+
+SCServerSocket.prototype.procedure = function (procedureName) {
+  return this._procedureDemux.stream(procedureName);
+};
+
+SCServerSocket.prototype.closeProcedure = function (procedureName) {
+  this._procedureDemux.close(procedureName);
+};
+
 SCServerSocket.prototype._sendPing = function () {
   if (this.state !== this.CLOSED) {
     this.sendObject('#1');
   }
 };
 
-SCServerSocket.prototype._handleEventObject = function (obj, message) {
+SCServerSocket.prototype._handleRemoteEventObject = function (obj, message) {
   if (obj && obj.event != null) {
-    var eventName = obj.event;
+    let eventName = obj.event;
 
-    var response = new Response(this, obj.cid);
-    this.server.verifyInboundEvent(this, eventName, obj.data, (err, newEventData, ackData) => {
-      if (err) {
-        response.error(err, ackData);
-      } else {
-        if (this._autoAckEvents[eventName]) {
-          if (ackData !== undefined) {
-            response.end(ackData);
-          } else {
-            response.end();
-          }
-          this.emit(eventName, newEventData);
-        } else {
-          this.emit(eventName, newEventData, response.callback.bind(response));
+    let requestOptions = {
+      socket: this,
+      event: eventName,
+      data: obj.data,
+    };
+
+    if (obj.cid == null) {
+      this.server.verifyInboundRemoteEvent(requestOptions, (err, newEventData) => {
+        if (!err) {
+          this._receiverDemux.write(eventName, newEventData);
         }
-      }
-    });
+      });
+    } else {
+      requestOptions.cid = obj.cid;
+      let response = new Response(this, requestOptions.cid);
+      this.server.verifyInboundRemoteEvent(requestOptions, (err, newEventData, ackData) => {
+        if (err) {
+          response.error(err);
+        } else {
+          if (this._autoAckRPCs[eventName]) {
+            if (ackData !== undefined) {
+              response.end(ackData);
+            } else {
+              response.end();
+            }
+          } else {
+            this._procedureDemux.write(eventName, {
+              data: newEventData,
+              end: (data) => {
+                response.end(data);
+              },
+              error: (err) => {
+                response.error(err);
+              }
+            });
+          }
+        }
+      });
+    }
   } else if (obj && obj.rid != null) {
     // If incoming message is a response to a previously sent message
-    var ret = this._callbackMap[obj.rid];
+    let ret = this._callbackMap[obj.rid];
     if (ret) {
       clearTimeout(ret.timeout);
       delete this._callbackMap[obj.rid];
-      var rehydratedError = scErrors.hydrateError(obj.error);
+      let rehydratedError = scErrors.hydrateError(obj.error);
       ret.callback(rehydratedError, obj.data);
     }
   } else {
     // The last remaining case is to treat the message as raw
-    this.emit('raw', message);
+    this.emit('raw', {message});
   }
 };
 
@@ -178,46 +214,46 @@ SCServerSocket.prototype.getBytesReceived = function () {
   return this.socket.bytesReceived;
 };
 
-SCServerSocket.prototype._onSCClose = function (code, data) {
+SCServerSocket.prototype.emitError = function (error) {
+  this.emit('error', {
+    error
+  });
+};
+
+SCServerSocket.prototype._onSCClose = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
   if (this.state !== this.CLOSED) {
-    var prevState = this.state;
+    let prevState = this.state;
     this.state = this.CLOSED;
 
     if (prevState === this.CONNECTING) {
-      // Private connectAbort event for internal use only
-      this.emit('_connectAbort', code, data);
-      this.emit('connectAbort', code, data);
+      this.emit('connectAbort', {code, reason});
     } else {
-      // Private disconnect event for internal use only
-      this.emit('_disconnect', code, data);
-      this.emit('disconnect', code, data);
+      this.emit('disconnect', {code, reason});
     }
-    // Private close event for internal use only
-    this.emit('_close', code, data);
-    this.emit('close', code, data);
+    this.emit('close', {code, reason});
 
     if (!SCServerSocket.ignoreStatuses[code]) {
-      var closeMessage;
-      if (data) {
-        var reasonString;
-        if (typeof data === 'object') {
+      let closeMessage;
+      if (reason) {
+        let reasonString;
+        if (typeof reason === 'object') {
           try {
-            reasonString = JSON.stringify(data);
+            reasonString = JSON.stringify(reason);
           } catch (error) {
-            reasonString = data.toString();
+            reasonString = reason.toString();
           }
         } else {
-          reasonString = data;
+          reasonString = reason;
         }
-        closeMessage = 'Socket connection closed with status code ' + code + ' and reason: ' + reasonString;
+        closeMessage = `Socket connection closed with status code ${code} and reason: ${reasonString}`;
       } else {
-        closeMessage = 'Socket connection closed with status code ' + code;
+        closeMessage = `Socket connection closed with status code ${code}`;
       }
-      var err = new SocketProtocolError(SCServerSocket.errorStatuses[code] || closeMessage, code);
-      this.emit('error', err);
+      let err = new SocketProtocolError(SCServerSocket.errorStatuses[code] || closeMessage, code);
+      this.emitError(err);
     }
   }
 };
@@ -226,8 +262,8 @@ SCServerSocket.prototype.disconnect = function (code, data) {
   code = code || 1000;
 
   if (typeof code !== 'number') {
-    var err = new InvalidArgumentsError('If specified, the code argument must be a number');
-    this.emit('error', err);
+    let err = new InvalidArgumentsError('If specified, the code argument must be a number');
+    this.emitError(err);
   }
 
   if (this.state !== this.CLOSED) {
@@ -270,11 +306,11 @@ SCServerSocket.prototype.sendObjectBatch = function (object) {
   this._batchTimeout = setTimeout(() => {
     delete this._batchTimeout;
     if (this._batchSendList.length) {
-      var str;
+      let str;
       try {
         str = this.encode(this._batchSendList);
       } catch (err) {
-        this.emit('error', err);
+        this.emitError(err);
       }
       if (str != null) {
         this.send(str);
@@ -285,11 +321,11 @@ SCServerSocket.prototype.sendObjectBatch = function (object) {
 };
 
 SCServerSocket.prototype.sendObjectSingle = function (object) {
-  var str;
+  let str;
   try {
     str = this.encode(object);
   } catch (err) {
-    this.emit('error', err);
+    this.emitError(err);
   }
   if (str != null) {
     this.send(str);
@@ -306,7 +342,7 @@ SCServerSocket.prototype.sendObject = function (object, options) {
 
 SCServerSocket.prototype.transmit = function (event, data, options) {
   this.server.verifyOutboundEvent(this, event, data, options, (err, newData) => {
-    var eventObject = {
+    let eventObject = {
       event: event
     };
     if (newData !== undefined) {
@@ -332,7 +368,7 @@ SCServerSocket.prototype.invoke = function (event, data, options) {
         reject(err);
         return;
       }
-      var eventObject = {
+      let eventObject = {
         event: event,
         cid: this._nextCallId()
       };
@@ -340,8 +376,8 @@ SCServerSocket.prototype.invoke = function (event, data, options) {
         eventObject.data = newData;
       }
 
-      var timeout = setTimeout(() => {
-        var error = new TimeoutError("Event response for '" + event + "' timed out");
+      let timeout = setTimeout(() => {
+        let error = new TimeoutError(`Event response for "${event}" timed out`);
         delete this._callbackMap[eventObject.cid];
         reject(error);
       }, this.server.ackTimeout);
@@ -367,23 +403,29 @@ SCServerSocket.prototype.invoke = function (event, data, options) {
   });
 };
 
-SCServerSocket.prototype.triggerAuthenticationEvents = function (oldState) {
-  if (oldState !== this.AUTHENTICATED) {
-    var stateChangeData = {
-      oldState: oldState,
-      newState: this.authState,
+SCServerSocket.prototype.triggerAuthenticationEvents = function (oldAuthState) {
+  if (oldAuthState !== this.AUTHENTICATED) {
+    let stateChangeData = {
+      oldAuthState,
+      newAuthState: this.authState,
       authToken: this.authToken
     };
     this.emit('authStateChange', stateChangeData);
-    this.server.emit('authenticationStateChange', this, stateChangeData);
+    this.server.emit('authenticationStateChange', {
+      socket: this,
+      ...stateChangeData
+    });
   }
-  this.emit('authenticate', this.authToken);
-  this.server.emit('authentication', this, this.authToken);
+  this.emit('authenticate', {authToken: this.authToken});
+  this.server.emit('authentication', {
+    socket: this,
+    authToken: this.authToken
+  });
 };
 
-SCServerSocket.prototype.setAuthToken = function (data, options) {
-  var authToken = cloneDeep(data);
-  var oldState = this.authState;
+SCServerSocket.prototype.setAuthToken = async function (data, options) {
+  let authToken = cloneDeep(data);
+  let oldAuthState = this.authState;
   this.authState = this.AUTHENTICATED;
 
   if (options == null) {
@@ -392,19 +434,21 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
     options = cloneDeep(options);
     if (options.algorithm != null) {
       delete options.algorithm;
-      var err = new InvalidArgumentsError('Cannot change auth token algorithm at runtime - It must be specified as a config option on launch');
-      this.emit('error', err);
+      let err = new InvalidArgumentsError(
+        'Cannot change auth token algorithm at runtime - It must be specified as a config option on launch'
+      );
+      this.emitError(err);
     }
   }
 
   options.mutatePayload = true;
-  var rejectOnFailedDelivery = options.rejectOnFailedDelivery;
+  let rejectOnFailedDelivery = options.rejectOnFailedDelivery;
   delete options.rejectOnFailedDelivery;
-  var defaultSignatureOptions = this.server.defaultSignatureOptions;
+  let defaultSignatureOptions = this.server.defaultSignatureOptions;
 
   // We cannot have the exp claim on the token and the expiresIn option
   // set at the same time or else auth.signToken will throw an error.
-  var expiresIn;
+  let expiresIn;
   if (options.expiresIn == null) {
     expiresIn = defaultSignatureOptions.expiresIn;
   } else {
@@ -431,63 +475,56 @@ SCServerSocket.prototype.setAuthToken = function (data, options) {
 
   this.authToken = authToken;
 
-  var handleSignTokenResult = (result) => {
-    if (result.error) {
-      this.emit('error', result.error);
-      this._onSCClose(4002, result.error.toString());
-      this.socket.close(4002);
-      throw result.error;
-    }
-    var tokenData = {
-      token: result.signedToken
-    };
-    if (this.authToken === authToken) {
-      this.signedAuthToken = result.signedToken;
-      this.emit('authTokenSigned', result.signedToken);
-    }
-    return this.invoke('#setAuthToken', tokenData)
-    .catch((err) => {
-      var authError = new AuthError('Failed to deliver auth token to client - ' + err.message);
-      this.emit('error', authError);
-      if (rejectOnFailedDelivery) {
-        throw authError;
-      }
-    });
+  let handleAuthTokenSignFail = (error) => {
+    this.emitError(error);
+    this._onSCClose(4002, error.toString());
+    this.socket.close(4002);
+    throw error;
   };
 
-  var signTokenResult;
-  var signTokenError;
-  var signTokenPromise;
+  let sendAuthTokenToClient = async (signedToken) => {
+    let tokenData = {
+      token: signedToken
+    };
+    try {
+      return await this.invoke('#setAuthToken', tokenData);
+    } catch (err) {
+      throw new AuthError(`Failed to deliver auth token to client - ${err}`);
+    }
+  };
+
+  let signTokenResult;
 
   try {
     signTokenResult = this.server.auth.signToken(authToken, this.server.signatureKey, options);
   } catch (err) {
-    signTokenError = err;
+    handleAuthTokenSignFail(err);
   }
 
+  let signedAuthToken;
   if (signTokenResult instanceof Promise) {
-    signTokenPromise = signTokenResult
-    .then((signedToken) => {
-      return {signedToken: signedToken};
-    })
-    .catch((err) => {
-      return {error: err};
-    })
-    .then(handleSignTokenResult);
-  } else {
-    var result = {
-      signedToken: signTokenResult,
-      error: signTokenError
-    };
     try {
-      signTokenPromise = handleSignTokenResult(result);
+      signedAuthToken = await signTokenResult;
     } catch (err) {
-      signTokenPromise = Promise.reject(err);
+      handleAuthTokenSignFail(err);
+    }
+  } else {
+    signedAuthToken = signTokenResult;
+  }
+  if (this.authToken === authToken) {
+    this.signedAuthToken = signedAuthToken;
+    this.emit('authTokenSigned', {signedAuthToken});
+  }
+
+  this.triggerAuthenticationEvents(oldAuthState);
+  try {
+    await sendAuthTokenToClient(signedAuthToken);
+  } catch (err) {
+    this.emitError(err);
+    if (rejectOnFailedDelivery) {
+      throw err;
     }
   }
-
-  this.triggerAuthenticationEvents(oldState);
-  return signTokenPromise;
 };
 
 SCServerSocket.prototype.getAuthToken = function () {
@@ -495,21 +532,27 @@ SCServerSocket.prototype.getAuthToken = function () {
 };
 
 SCServerSocket.prototype.deauthenticateSelf = function () {
-  var oldState = this.authState;
-  var oldToken = this.authToken;
+  let oldAuthState = this.authState;
+  let oldAuthToken = this.authToken;
   this.signedAuthToken = null;
   this.authToken = null;
   this.authState = this.UNAUTHENTICATED;
-  if (oldState !== this.UNAUTHENTICATED) {
-    var stateChangeData = {
-      oldState: oldState,
-      newState: this.authState
+  if (oldAuthState !== this.UNAUTHENTICATED) {
+    let stateChangeData = {
+      oldAuthState,
+      newAuthState: this.authState
     };
     this.emit('authStateChange', stateChangeData);
-    this.server.emit('authenticationStateChange', this, stateChangeData);
+    this.server.emit('authenticationStateChange', {
+      socket: this,
+      ...stateChangeData
+    });
   }
-  this.emit('deauthenticate', oldToken);
-  this.server.emit('deauthentication', this, oldToken);
+  this.emit('deauthenticate', {oldAuthToken});
+  this.server.emit('deauthentication', {
+    socket: this,
+    oldAuthToken
+  });
 };
 
 SCServerSocket.prototype.deauthenticate = function () {
@@ -522,12 +565,12 @@ SCServerSocket.prototype.kickOut = function (channel, message) {
     Object.keys(this.channelSubscriptions).forEach((channelName) => {
       delete this.channelSubscriptions[channelName];
       this.channelSubscriptionsCount--;
-      this.emit('#kickOut', {message: message, channel: channelName});
+      this.transmit('#kickOut', {message: message, channel: channelName});
     });
   } else {
     delete this.channelSubscriptions[channel];
     this.channelSubscriptionsCount--;
-    this.emit('#kickOut', {message: message, channel: channel});
+    this.transmit('#kickOut', {message: message, channel: channel});
   }
   return this.server.brokerEngine.unsubscribeSocket(this, channel);
 };

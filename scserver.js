@@ -658,7 +658,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
             } else if (self.middlewareEmitWarnings) {
               self.emit('warning', err);
             }
-            cb(false, 401, err);
+            cb(false, 401, typeof err === 'string' ? err : err.message);
           } else {
             cb(true);
           }
@@ -670,7 +670,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
   } else {
     var err = new ServerProtocolError('Failed to authorize socket handshake - Invalid origin: ' + origin);
     this.emit('warning', err);
-    cb(false, 403, err);
+    cb(false, 403, err.message);
   }
 };
 

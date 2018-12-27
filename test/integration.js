@@ -168,7 +168,7 @@ describe('Integration tests', function () {
     portNumber++;
     destroyTestCase();
     server.close();
-    global.localStorage.removeItem('socketCluster.authToken');
+    global.localStorage.removeItem('asyngular.authToken');
   });
 
   describe('Socket authentication', function () {
@@ -192,7 +192,7 @@ describe('Integration tests', function () {
     });
 
     it('Should send back error if JWT is invalid during handshake', async function () {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
       client = asyngularClient.create(clientOptions);
 
@@ -208,7 +208,7 @@ describe('Integration tests', function () {
     });
 
     it('Should allow switching between users', async function () {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
       let authenticateEvents = [];
       let deauthenticateEvents = [];
@@ -270,7 +270,7 @@ describe('Integration tests', function () {
     });
 
     it('Should emit correct events/data when socket is deauthenticated', async function () {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
       let authenticationStateChangeEvents = [];
       let authStateChangeEvents = [];
@@ -323,7 +323,7 @@ describe('Integration tests', function () {
     });
 
     it('Should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', async function () {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenAlice);
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenAlice);
 
       client = asyngularClient.create(clientOptions);
       // The previous test authenticated us as 'alice', so that token will be passed to the server as
@@ -754,7 +754,7 @@ describe('Integration tests', function () {
     });
 
     it('The verifyToken method of the authEngine receives correct params', async function () {
-      global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
       portNumber++;
       server = asyngularServer.listen(portNumber, {
@@ -2098,7 +2098,7 @@ describe('Integration tests', function () {
       });
 
       it('Should run authenticate middleware if JWT token exists', async function () {
-        global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
+        global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
         middlewareFunction = async function (req) {
           middlewareWasExecuted = true;

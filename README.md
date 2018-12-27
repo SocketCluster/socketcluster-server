@@ -16,7 +16,7 @@ To install this module:
 You need to attach it to an existing Node.js http or https server (example):
 ```js
 var http = require('http');
-var asyngularServer = require('socketcluster-server');
+var asyngularServer = require('asyngular-server');
 
 var httpServer = http.createServer();
 var agServer = asyngularServer.attach(httpServer);

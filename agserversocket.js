@@ -23,7 +23,6 @@ function AGServerSocket(id, server, socket) {
   this.socket = socket;
   this.state = this.CONNECTING;
   this.authState = this.UNAUTHENTICATED;
-  this.active = true;
 
   this._receiverDemux = new StreamDemux();
   this._procedureDemux = new StreamDemux();
@@ -270,11 +269,6 @@ AGServerSocket.prototype.disconnect = function (code, data) {
     this._onSCClose(code, data);
     this.socket.close(code, data);
   }
-};
-
-AGServerSocket.prototype.destroy = function (code, data) {
-  this.active = false;
-  this.disconnect(code, data);
 };
 
 AGServerSocket.prototype.terminate = function () {

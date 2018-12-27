@@ -54,7 +54,7 @@ httpServer.listen(8000);
 For more detailed examples of how to use Asyngular, see `test/integration.js`.
 Also, see tests from the `asyngular-client` module.
 
-## Running the integration tests
+## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/asyngular-server.git`
 - Navigate to project directory: `cd asyngular-server`

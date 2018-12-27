@@ -1523,7 +1523,7 @@ describe('Integration tests', function () {
       assert.equal(eventList[1].channel, 'foo');
     });
 
-    it('When default SCSimpleBroker broker engine is used, scServer.exchange should support consuming data from a channel', async function () {
+    it('When default SCSimpleBroker broker engine is used, agServer.exchange should support consuming data from a channel', async function () {
       portNumber++;
       server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
@@ -1572,7 +1572,7 @@ describe('Integration tests', function () {
       assert.equal(receivedChannelData[1], 'hi2');
     });
 
-    it('When default SCSimpleBroker broker engine is used, scServer.exchange should support publishing data to a channel', async function () {
+    it('When default SCSimpleBroker broker engine is used, agServer.exchange should support publishing data to a channel', async function () {
       portNumber++;
       server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,

@@ -5,20 +5,20 @@
 const http = require('http');
 
 /**
- * Expose SCServer constructor.
+ * Expose AGServer constructor.
  *
  * @api public
  */
 
-module.exports.SCServer = require('./scserver');
+module.exports.AGServer = require('./agserver');
 
 /**
- * Expose SCServerSocket constructor.
+ * Expose AGServerSocket constructor.
  *
  * @api public
  */
 
-module.exports.SCServerSocket = require('./scserversocket');
+module.exports.AGServerSocket = require('./agserversocket');
 
 /**
  * Creates an http.Server exclusively used for WS upgrades.
@@ -26,7 +26,7 @@ module.exports.SCServerSocket = require('./scserversocket');
  * @param {Number} port
  * @param {Function} callback
  * @param {Object} options
- * @return {SCServer} websocket cluster server
+ * @return {AGServer} websocket cluster server
  * @api public
  */
 
@@ -41,11 +41,11 @@ module.exports.listen = function (port, options, fn) {
     res.end('Not Implemented');
   });
 
-  let socketClusterServer = module.exports.attach(server, options);
-  socketClusterServer.httpServer = server;
+  let asyngularServer = module.exports.attach(server, options);
+  asyngularServer.httpServer = server;
   server.listen(port, fn);
 
-  return socketClusterServer;
+  return asyngularServer;
 };
 
 /**
@@ -53,7 +53,7 @@ module.exports.listen = function (port, options, fn) {
  *
  * @param {http.Server} server
  * @param {Object} options
- * @return {SCServer} websocket cluster server
+ * @return {AGServer} websocket cluster server
  * @api public
  */
 
@@ -62,6 +62,6 @@ module.exports.attach = function (server, options) {
     options = {};
   }
   options.httpServer = server;
-  let socketClusterServer = new module.exports.SCServer(options);
-  return socketClusterServer;
+  let asyngularServer = new module.exports.AGServer(options);
+  return asyngularServer;
 };

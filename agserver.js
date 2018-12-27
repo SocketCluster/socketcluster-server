@@ -1,4 +1,4 @@
-const SCServerSocket = require('./scserversocket');
+const AGServerSocket = require('./agserversocket');
 const AuthEngine = require('sc-auth').AuthEngine;
 const formatter = require('sc-formatter');
 const base64id = require('base64id');
@@ -22,7 +22,7 @@ const BrokerError = scErrors.BrokerError;
 const ServerProtocolError = scErrors.ServerProtocolError;
 
 
-function SCServer(options) {
+function AGServer(options) {
   AsyncStreamEmitter.call(this);
 
   let opts = {
@@ -199,43 +199,43 @@ function SCServer(options) {
   this.wsServer.on('connection', this._handleSocketConnection.bind(this));
 }
 
-SCServer.prototype = Object.create(AsyncStreamEmitter.prototype);
+AGServer.prototype = Object.create(AsyncStreamEmitter.prototype);
 
-SCServer.prototype.setAuthEngine = function (authEngine) {
+AGServer.prototype.setAuthEngine = function (authEngine) {
   this.auth = authEngine;
 };
 
-SCServer.prototype.setCodecEngine = function (codecEngine) {
+AGServer.prototype.setCodecEngine = function (codecEngine) {
   this.codec = codecEngine;
 };
 
-SCServer.prototype.emitError = function (error) {
+AGServer.prototype.emitError = function (error) {
   this.emit('error', {error});
 };
 
-SCServer.prototype.emitWarning = function (warning) {
+AGServer.prototype.emitWarning = function (warning) {
   this.emit('warning', {warning});
 };
 
-SCServer.prototype._handleServerError = function (error) {
+AGServer.prototype._handleServerError = function (error) {
   if (typeof error === 'string') {
     error = new ServerProtocolError(error);
   }
   this.emitError(error);
 };
 
-SCServer.prototype._handleSocketErrors = async function (socket) {
+AGServer.prototype._handleSocketErrors = async function (socket) {
   // A socket error will show up as a warning on the server.
   for await (let event of socket.listener('error')) {
     this.emitWarning(event.error);
   }
 };
 
-SCServer.prototype._handleHandshakeTimeout = function (scSocket) {
+AGServer.prototype._handleHandshakeTimeout = function (scSocket) {
   scSocket.disconnect(4005);
 };
 
-SCServer.prototype._subscribeSocket = async function (socket, channelOptions) {
+AGServer.prototype._subscribeSocket = async function (socket, channelOptions) {
   if (!channelOptions) {
     throw new InvalidActionError(`Socket ${socket.id} provided a malformated channel payload`);
   }
@@ -278,13 +278,13 @@ SCServer.prototype._subscribeSocket = async function (socket, channelOptions) {
   });
 };
 
-SCServer.prototype._unsubscribeSocketFromAllChannels = function (socket) {
+AGServer.prototype._unsubscribeSocketFromAllChannels = function (socket) {
   Object.keys(socket.channelSubscriptions).forEach((channelName) => {
     this._unsubscribeSocket(socket, channelName);
   });
 };
 
-SCServer.prototype._unsubscribeSocket = function (socket, channel) {
+AGServer.prototype._unsubscribeSocket = function (socket, channel) {
   if (typeof channel !== 'string') {
     throw new InvalidActionError(
       `Socket ${socket.id} tried to unsubscribe from an invalid channel name`
@@ -307,7 +307,7 @@ SCServer.prototype._unsubscribeSocket = function (socket, channel) {
   this.emit('unsubscription', {socket, channel});
 };
 
-SCServer.prototype._processTokenError = function (err) {
+AGServer.prototype._processTokenError = function (err) {
   let authError = null;
   let isBadToken = true;
 
@@ -331,7 +331,7 @@ SCServer.prototype._processTokenError = function (err) {
   };
 };
 
-SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
+AGServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
   let badAuthStatus = {
     authError: error,
     signedAuthToken: signedAuthToken
@@ -347,7 +347,7 @@ SCServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAut
   });
 };
 
-SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
+AGServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
   let verificationOptions = Object.assign({socket: scSocket}, this.defaultVerificationOptions);
 
   let handleVerifyTokenResult = (result) => {
@@ -429,7 +429,7 @@ SCServer.prototype._processAuthToken = function (scSocket, signedAuthToken, call
   }
 };
 
-SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
+AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   if (!wsSocket.upgradeReq) {
     // Normalize ws modules to match.
     wsSocket.upgradeReq = upgradeReq;
@@ -437,7 +437,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
   let id = this.generateId();
 
-  let scSocket = new SCServerSocket(id, this, wsSocket);
+  let scSocket = new AGServerSocket(id, this, wsSocket);
   scSocket.exchange = this.exchange;
 
   this._handleSocketErrors(scSocket);
@@ -678,7 +678,7 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   this.emit('handshake', {socket: scSocket});
 };
 
-SCServer.prototype.close = function () {
+AGServer.prototype.close = function () {
   this.isReady = false;
   return new Promise((resolve, reject) => {
     this.wsServer.close((err) => {
@@ -691,15 +691,15 @@ SCServer.prototype.close = function () {
   });
 };
 
-SCServer.prototype.getPath = function () {
+AGServer.prototype.getPath = function () {
   return this._path;
 };
 
-SCServer.prototype.generateId = function () {
+AGServer.prototype.generateId = function () {
   return base64id.generateId();
 };
 
-SCServer.prototype.addMiddleware = function (type, middleware) {
+AGServer.prototype.addMiddleware = function (type, middleware) {
   if (!this._middleware[type]) {
     throw new InvalidArgumentsError(`Middleware type "${type}" is not supported`);
     // Read more: https://socketcluster.io/#!/docs/middleware-and-authorization
@@ -707,7 +707,7 @@ SCServer.prototype.addMiddleware = function (type, middleware) {
   this._middleware[type].push(middleware);
 };
 
-SCServer.prototype.removeMiddleware = function (type, middleware) {
+AGServer.prototype.removeMiddleware = function (type, middleware) {
   let middlewareFunctions = this._middleware[type];
 
   this._middleware[type] = middlewareFunctions.filter((fn) => {
@@ -715,7 +715,7 @@ SCServer.prototype.removeMiddleware = function (type, middleware) {
   });
 };
 
-SCServer.prototype.verifyHandshake = function (info, callback) {
+AGServer.prototype.verifyHandshake = function (info, callback) {
   let req = info.req;
   let origin = info.origin;
   if (origin === 'null' || origin == null) {
@@ -775,11 +775,11 @@ SCServer.prototype.verifyHandshake = function (info, callback) {
   }
 };
 
-SCServer.prototype._isReservedRemoteEvent = function (event) {
+AGServer.prototype._isReservedRemoteEvent = function (event) {
   return typeof event === 'string' && event.indexOf('#') === 0;
 };
 
-SCServer.prototype.verifyInboundRemoteEvent = function (requestOptions, callback) {
+AGServer.prototype.verifyInboundRemoteEvent = function (requestOptions, callback) {
   let socket = requestOptions.socket;
   let token = socket.getAuthToken();
   if (this.isAuthTokenExpired(token)) {
@@ -794,7 +794,7 @@ SCServer.prototype.verifyInboundRemoteEvent = function (requestOptions, callback
   this._passThroughMiddleware(requestOptions, callback);
 };
 
-SCServer.prototype.isAuthTokenExpired = function (token) {
+AGServer.prototype.isAuthTokenExpired = function (token) {
   if (token && token.exp != null) {
     let currentTime = Date.now();
     let expiryMilliseconds = token.exp * 1000;
@@ -803,7 +803,7 @@ SCServer.prototype.isAuthTokenExpired = function (token) {
   return false;
 };
 
-SCServer.prototype._processPublishAction = function (options, request, callback) {
+AGServer.prototype._processPublishAction = function (options, request, callback) {
   let callbackInvoked = false;
 
   if (this.allowClientPublish) {
@@ -864,7 +864,7 @@ SCServer.prototype._processPublishAction = function (options, request, callback)
   }
 };
 
-SCServer.prototype._processSubscribeAction = function (options, request, callback) {
+AGServer.prototype._processSubscribeAction = function (options, request, callback) {
   let callbackInvoked = false;
 
   let eventData = options.data || {};
@@ -907,7 +907,7 @@ SCServer.prototype._processSubscribeAction = function (options, request, callbac
   }
 };
 
-SCServer.prototype._processTransmitAction = function (options, request, callback) {
+AGServer.prototype._processTransmitAction = function (options, request, callback) {
   let callbackInvoked = false;
 
   request.event = options.event;
@@ -939,7 +939,7 @@ SCServer.prototype._processTransmitAction = function (options, request, callback
   );
 };
 
-SCServer.prototype._processInvokeAction = function (options, request, callback) {
+AGServer.prototype._processInvokeAction = function (options, request, callback) {
   let callbackInvoked = false;
 
   request.event = options.event;
@@ -971,7 +971,7 @@ SCServer.prototype._processInvokeAction = function (options, request, callback) 
   );
 };
 
-SCServer.prototype._passThroughMiddleware = function (options, callback) {
+AGServer.prototype._passThroughMiddleware = function (options, callback) {
   let request = {
     socket: options.socket
   };
@@ -1019,7 +1019,7 @@ SCServer.prototype._passThroughMiddleware = function (options, callback) {
   }
 };
 
-SCServer.prototype._passThroughAuthenticateMiddleware = function (options, callback) {
+AGServer.prototype._passThroughAuthenticateMiddleware = function (options, callback) {
   let callbackInvoked = false;
 
   let request = {
@@ -1057,7 +1057,7 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, callb
   );
 };
 
-SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, callback) {
+AGServer.prototype._passThroughHandshakeSCMiddleware = function (options, callback) {
   let callbackInvoked = false;
 
   let request = {
@@ -1099,7 +1099,7 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, callba
   );
 };
 
-SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, callback) {
+AGServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, callback) {
   let callbackInvoked = false;
 
   if (eventName === '#publish') {
@@ -1145,4 +1145,4 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
   }
 };
 
-module.exports = SCServer;
+module.exports = AGServer;

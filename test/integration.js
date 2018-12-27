@@ -1,5 +1,5 @@
 const assert = require('assert');
-const socketClusterServer = require('../');
+const asyngularServer = require('../');
 const asyngularClient = require('asyngular-client');
 const localStorage = require('localStorage');
 const SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
@@ -145,7 +145,7 @@ describe('Integration tests', function () {
       wsEngine: WS_ENGINE
     };
 
-    server = socketClusterServer.listen(portNumber, serverOptions);
+    server = asyngularServer.listen(portNumber, serverOptions);
 
     (async () => {
       for await (let {socket} of server.listener('connection')) {
@@ -339,7 +339,7 @@ describe('Integration tests', function () {
 
     it('Token should be available after Promise resolves if token engine signing is synchronous', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: false
@@ -370,7 +370,7 @@ describe('Integration tests', function () {
 
     it('If token engine signing is asynchronous, authentication can be captured using the authenticate event', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: true
@@ -401,7 +401,7 @@ describe('Integration tests', function () {
 
     it('Should still work if token verification is asynchronous', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authVerifyAsync: false
@@ -438,7 +438,7 @@ describe('Integration tests', function () {
 
     it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authVerifyAsync: false
@@ -471,7 +471,7 @@ describe('Integration tests', function () {
 
     it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authVerifyAsync: false
@@ -504,7 +504,7 @@ describe('Integration tests', function () {
 
     it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authVerifyAsync: false
@@ -537,7 +537,7 @@ describe('Integration tests', function () {
 
     it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authVerifyAsync: false
@@ -605,7 +605,7 @@ describe('Integration tests', function () {
 
     it('Should trigger an authTokenSigned event and socket.signedAuthToken should be set after calling the socket.setAuthToken method', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: true
@@ -654,7 +654,7 @@ describe('Integration tests', function () {
 
     it('Should reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is true', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: true,
@@ -705,7 +705,7 @@ describe('Integration tests', function () {
 
     it('Should not reject Promise returned by socket.setAuthToken if token delivery fails and rejectOnFailedDelivery option is not true', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         authSignAsync: true,
@@ -757,7 +757,7 @@ describe('Integration tests', function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -793,7 +793,7 @@ describe('Integration tests', function () {
 
     it('Should remove client data from the server when client disconnects before authentication process finished', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -840,7 +840,7 @@ describe('Integration tests', function () {
   describe('Socket handshake', function () {
     it('Exchange is attached to socket before the handshake event is triggered', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -866,7 +866,7 @@ describe('Integration tests', function () {
   describe('Socket connection', function () {
     it('Server-side socket connect event and server connection event should trigger', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -951,7 +951,7 @@ describe('Integration tests', function () {
   describe('Socket disconnection', function () {
     it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1028,7 +1028,7 @@ describe('Integration tests', function () {
 
     it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1106,7 +1106,7 @@ describe('Integration tests', function () {
 
     it('The close event should trigger when the socket loses the connection before the handshake', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1167,7 +1167,7 @@ describe('Integration tests', function () {
 
     it('The close event should trigger when the socket loses the connection after the handshake', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1230,7 +1230,7 @@ describe('Integration tests', function () {
   describe('Socket pub/sub', function () {
     it('Should support subscription batching', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1320,7 +1320,7 @@ describe('Integration tests', function () {
 
     it('Client should not be able to subscribe to a channel before the handshake has completed', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1375,7 +1375,7 @@ describe('Integration tests', function () {
 
     it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish events without crashing', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1479,7 +1479,7 @@ describe('Integration tests', function () {
 
     it('When default SCSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1525,7 +1525,7 @@ describe('Integration tests', function () {
 
     it('When default SCSimpleBroker broker engine is used, scServer.exchange should support consuming data from a channel', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1574,7 +1574,7 @@ describe('Integration tests', function () {
 
     it('When default SCSimpleBroker broker engine is used, scServer.exchange should support publishing data to a channel', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1625,7 +1625,7 @@ describe('Integration tests', function () {
         return resolveAfterTimeout(100, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
@@ -1676,7 +1676,7 @@ describe('Integration tests', function () {
     it('Socket should emit an error when trying to unsubscribe to a channel which it is not subscribed to', async function () {
       portNumber++;
 
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1722,7 +1722,7 @@ describe('Integration tests', function () {
         return resolveAfterTimeout(300, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
@@ -1774,7 +1774,7 @@ describe('Integration tests', function () {
     it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut(channel) is called', async function () {
       portNumber++;
 
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1824,7 +1824,7 @@ describe('Integration tests', function () {
     it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut() is called without arguments', async function () {
       portNumber++;
 
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1876,7 +1876,7 @@ describe('Integration tests', function () {
   describe('Socket destruction', function () {
     it('Server socket destroy should disconnect the socket', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1904,7 +1904,7 @@ describe('Integration tests', function () {
 
     it('Server socket destroy should set the active property on the socket to false', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1937,7 +1937,7 @@ describe('Integration tests', function () {
         portNumber++;
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
-        server = socketClusterServer.listen(portNumber, {
+        server = asyngularServer.listen(portNumber, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
           pingInterval: 2000,
@@ -2002,7 +2002,7 @@ describe('Integration tests', function () {
         portNumber++;
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
-        server = socketClusterServer.listen(portNumber, {
+        server = asyngularServer.listen(portNumber, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
           pingInterval: 2000,
@@ -2069,7 +2069,7 @@ describe('Integration tests', function () {
 
     beforeEach('Launch server without middleware before start', async function () {
       portNumber++;
-      server = socketClusterServer.listen(portNumber, {
+      server = asyngularServer.listen(portNumber, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });

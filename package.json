@@ -1,11 +1,11 @@
 {
-  "name": "socketcluster-server",
+  "name": "asyngular-server",
   "version": "14.3.1",
-  "description": "Server module for SocketCluster",
+  "description": "Server module for Asyngular",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git://github.com/SocketCluster/socketcluster-server.git"
+    "url": "git://github.com/SocketCluster/asyngular-server.git"
   },
   "dependencies": {
     "async": "2.6.1",
@@ -21,9 +21,9 @@
     "ws": "6.1.2"
   },
   "devDependencies": {
+    "asyngular-client": "^1.0.2",
     "localStorage": "^1.0.3",
-    "mocha": "5.2.0",
-    "asyngular-client": "^1.0.1"
+    "mocha": "5.2.0"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 3000 --slow 3000"
@@ -31,7 +31,8 @@
   "keywords": [
     "websocket",
     "realtime",
-    "socketcluster"
+    "socketcluster",
+    "asyngular"
   ],
   "author": "Jonathan Gros-Dubois <grosjona@yahoo.com.au>",
   "license": "MIT"

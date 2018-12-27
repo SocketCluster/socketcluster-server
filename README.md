@@ -59,7 +59,7 @@ Also, see tests from the `asyngular-client` module.
 - Clone this repo: `git clone git@github.com:SocketCluster/asyngular-server.git`
 - Navigate to project directory: `cd asyngular-server`
 - Install all dependencies: `npm install`
-- Run the tests `npm test`
+- Run the tests: `npm test`
 
 \* Note that the ```asyngularServer.attach(httpServer, options);``` takes an optional options argument which can have a ```brokerEngine``` property - By default, asyngular-server
 uses ```sc-simple-broker``` which is a basic single-process in-memory broker. If you want to add your own brokerEngine (for example to scale your asyngular-servers across multiple cores/hosts), then you might want to look at how sc-simple-broker was implemented.

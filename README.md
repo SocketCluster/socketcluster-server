@@ -23,7 +23,7 @@ var agServer = asyngularServer.attach(httpServer);
 
 (async () => {
   // Handle new inbound sockets.
-  for await (let {socket} of server.listener('connection')) {
+  for await (let {socket} of agServer.listener('connection')) {
 
     (async () => {
       // Set up a loop to handle and respond to RPCs for a procedure.

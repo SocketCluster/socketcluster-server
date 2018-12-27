@@ -21,7 +21,6 @@ const InvalidActionError = scErrors.InvalidActionError;
 const BrokerError = scErrors.BrokerError;
 const ServerProtocolError = scErrors.ServerProtocolError;
 
-
 function AGServer(options) {
   AsyncStreamEmitter.call(this);
 

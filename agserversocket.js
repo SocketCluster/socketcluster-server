@@ -10,7 +10,6 @@ const TimeoutError = scErrors.TimeoutError;
 const InvalidActionError = scErrors.InvalidActionError;
 const AuthError = scErrors.AuthError;
 
-
 function AGServerSocket(id, server, socket) {
   AsyncStreamEmitter.call(this);
 

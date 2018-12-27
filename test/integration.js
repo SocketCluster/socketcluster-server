@@ -125,53 +125,51 @@ function connectionHandler(socket) {
   })();
 };
 
-function destroyClients() {
-  if (client) {
-    if (client.state !== client.CLOSED) {
+describe('Integration tests', function () {
+  afterEach('Close server after each test', async function () {
+    portNumber++;
+    if (client) {
       client.closeAllListeners();
       client.disconnect();
     }
-  }
-};
-
-describe('Integration tests', function () {
-  beforeEach('Run the server before start', async function () {
-    clientOptions = {
-      hostname: '127.0.0.1',
-      port: portNumber
-    };
-    serverOptions = {
-      authKey: 'testkey',
-      wsEngine: WS_ENGINE
-    };
-
-    server = asyngularServer.listen(portNumber, serverOptions);
-
-    (async () => {
-      for await (let {socket} of server.listener('connection')) {
-        connectionHandler(socket);
-      }
-    })();
-
-    server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, async function (req) {
-      if (req.authToken.username === 'alice') {
-        let err = new Error('Blocked by MIDDLEWARE_AUTHENTICATE');
-        err.name = 'AuthenticateMiddlewareError';
-        throw err;
-      }
-    });
-
-    await server.listener('ready').once();
-  });
-
-  afterEach('Close server after each test', async function () {
-    portNumber++;
-    destroyClients();
-    server.close();
+    if (server) {
+      server.closeAllListeners();
+      server.close();
+      server.httpServer.close();
+    }
     global.localStorage.removeItem('asyngular.authToken');
   });
 
-  describe('Socket authentication', function () {
+  describe('Client authentication', function () {
+    beforeEach('Run the server before start', async function () {
+      clientOptions = {
+        hostname: '127.0.0.1',
+        port: portNumber
+      };
+      serverOptions = {
+        authKey: 'testkey',
+        wsEngine: WS_ENGINE
+      };
+
+      server = asyngularServer.listen(portNumber, serverOptions);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, async function (req) {
+        if (req.authToken.username === 'alice') {
+          let err = new Error('Blocked by MIDDLEWARE_AUTHENTICATE');
+          err.name = 'AuthenticateMiddlewareError';
+          throw err;
+        }
+      });
+
+      await server.listener('ready').once();
+    });
+
     it('Should not send back error if JWT is not provided in handshake', async function () {
       client = asyngularClient.create(clientOptions);
       let event = await client.listener('connect').once();
@@ -336,7 +334,9 @@ describe('Integration tests', function () {
       assert.notEqual(event.authError, null);
       assert.equal(event.authError.name, 'AuthenticateMiddlewareError');
     });
+  });
 
+  describe('Server authentication', function () {
     it('Token should be available after Promise resolves if token engine signing is synchronous', async function () {
       portNumber++;
       server = asyngularServer.listen(portNumber, {
@@ -1873,64 +1873,6 @@ describe('Integration tests', function () {
     });
   });
 
-  describe('Socket destruction', function () {
-    it('Server socket destroy should disconnect the socket', async function () {
-      portNumber++;
-      server = asyngularServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-
-      (async () => {
-        for await (let {socket} of server.listener('connection')) {
-          await wait(100);
-          socket.destroy(1000, 'Custom reason');
-        }
-      })();
-
-      await server.listener('ready').once();
-
-      client = asyngularClient.create({
-        hostname: clientOptions.hostname,
-        port: portNumber
-      });
-
-      let {code, reason} = await client.listener('disconnect').once();
-      assert.equal(code, 1000);
-      assert.equal(reason, 'Custom reason');
-      assert.equal(server.clientsCount, 0);
-      assert.equal(server.pendingClientsCount, 0);
-    });
-
-    it('Server socket destroy should set the active property on the socket to false', async function () {
-      portNumber++;
-      server = asyngularServer.listen(portNumber, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-
-      let serverSocket;
-
-      (async () => {
-        for await (let {socket} of server.listener('connection')) {
-          serverSocket = socket;
-          assert.equal(socket.active, true);
-          await wait(100);
-          socket.destroy();
-        }
-      })();
-
-      await server.listener('ready').once();
-      client = asyngularClient.create({
-        hostname: clientOptions.hostname,
-        port: portNumber
-      });
-
-      await client.listener('disconnect').once();
-      assert.equal(serverSocket.active, false);
-    });
-  });
-
   describe('Socket Ping/pong', function () {
     describe('When when pingTimeoutDisabled is not set', function () {
       beforeEach('Launch server with ping options before start', async function () {
@@ -1945,11 +1887,6 @@ describe('Integration tests', function () {
         });
 
         await server.listener('ready').once();
-      });
-
-      afterEach('Shut down server afterwards', async function () {
-        destroyClients();
-        server.close();
       });
 
       it('Should disconnect socket if server does not receive a pong from client before timeout', async function () {
@@ -2013,11 +1950,6 @@ describe('Integration tests', function () {
         await server.listener('ready').once();
       });
 
-      afterEach('Shut down server afterwards', async function () {
-        destroyClients();
-        server.close();
-      });
-
       it('Should not disconnect socket if server does not receive a pong from client before timeout', async function () {
         client = asyngularClient.create({
           hostname: clientOptions.hostname,
@@ -2074,11 +2006,6 @@ describe('Integration tests', function () {
         wsEngine: WS_ENGINE
       });
       await server.listener('ready').once();
-    });
-
-    afterEach('Shut down server afterwards', async function () {
-      destroyClients();
-      server.close();
     });
 
     describe('MIDDLEWARE_AUTHENTICATE', function () {

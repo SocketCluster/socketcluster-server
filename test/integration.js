@@ -1208,9 +1208,73 @@ describe('Integration tests', function () {
     });
   });
 
-  describe('Socket invoke', function () {
+  describe('Socket RPC invoke', function () {
     it ('Should support invoking a remote procedure on the server', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
 
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let req of socket.procedure('customProc')) {
+              if (req.data.bad) {
+                let error = new Error('Server failed to execute the procedure');
+                error.name = 'BadCustomError';
+                req.error(error);
+              } else {
+                req.end('Success');
+              }
+            }
+          })();
+        }
+      })();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      let result = await client.invoke('customProc', {good: true});
+      assert.equal(result, 'Success');
+
+      let error;
+      try {
+        result = await client.invoke('customProc', {bad: true});
+      } catch (err) {
+        error = err;
+      }
+      assert.notEqual(error, null);
+      assert.equal(error.name, 'BadCustomError');
+    });
+  });
+
+  describe('Socket transmit', function () {
+    it ('Should support receiving remote transmitted data on the server', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      (async () => {
+        await wait(10);
+
+        client = asyngularClient.create({
+          hostname: clientOptions.hostname,
+          port: PORT_NUMBER
+        });
+
+        client.transmit('customRemoteEvent', 'This is data');
+      })();
+
+      for await (let {socket} of server.listener('connection')) {
+        for await (let data of socket.receiver('customRemoteEvent')) {
+          assert.equal(data, 'This is data');
+          break;
+        }
+        break;
+      }
     });
   });
 

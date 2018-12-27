@@ -2,7 +2,7 @@
 Minimal server module for Asyngular
 
 This is a stand-alone server module for Asyngular (SocketCluster with full async/await support).
-Note that Asyngular's protocol is backwards compatible with the SocketCluster protocol.
+Asyngular's protocol is backwards compatible with the SocketCluster protocol.
 
 ## Setting up
 

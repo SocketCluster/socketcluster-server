@@ -6,7 +6,7 @@ The repository for the full-featured framework is here: https://github.com/Socke
 
 ## Setting up
 
-You will need to install ```socketcluster-server``` and ```socketcluster-client``` (https://github.com/SocketCluster/socketcluster-client) separately.
+You will need to install ```socketcluster-server``` and ```asyngular-client``` (https://github.com/SocketCluster/asyngular-client) separately.
 
 To install this module:
 ```npm install socketcluster-server```
@@ -54,7 +54,7 @@ scServer.on('connection', function (socket) {
 httpServer.listen(8000);
 ```
 
-Note that the full SocketCluster framework (https://github.com/SocketCluster/socketcluster) uses this module behind the scenes so the API is exactly the same and it works with the socketcluster-client out of the box.
+Note that the full SocketCluster framework (https://github.com/SocketCluster/socketcluster) uses this module behind the scenes so the API is exactly the same and it works with the asyngular-client out of the box.
 The main difference with using socketcluster-server is that you won't get features like:
 
 - Automatic scalability across multiple CPU cores.

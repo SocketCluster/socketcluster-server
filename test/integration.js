@@ -1,6 +1,6 @@
 const assert = require('assert');
 const socketClusterServer = require('../');
-const socketClusterClient = require('socketcluster-client');
+const asyngularClient = require('asyngular-client');
 const localStorage = require('localStorage');
 const SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
 
@@ -173,13 +173,13 @@ describe('Integration tests', function () {
 
   describe('Socket authentication', function () {
     it('Should not send back error if JWT is not provided in handshake', async function () {
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
       let event = await client.listener('connect').once();
       assert.equal(event.authError === undefined, true);
     });
 
     it('Should be authenticated on connect if previous JWT token is present', async function () {
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
       await client.listener('connect').once();
       client.invoke('login', {username: 'bob'});
       await client.listener('authenticate').once();
@@ -194,7 +194,7 @@ describe('Integration tests', function () {
     it('Should send back error if JWT is invalid during handshake', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenBob);
 
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
 
       await client.listener('connect').once();
       // Change the setAuthKey to invalidate the current token.
@@ -242,7 +242,7 @@ describe('Integration tests', function () {
       })();
 
       let clientSocketId;
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
       await client.listener('connect').once();
       clientSocketId = client.id;
       client.invoke('login', {username: 'alice'});
@@ -281,7 +281,7 @@ describe('Integration tests', function () {
         }
       })();
 
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
 
       (async () => {
         for await (let event of client.listener('connect')) {
@@ -325,7 +325,7 @@ describe('Integration tests', function () {
     it('Should not authenticate the client if MIDDLEWARE_AUTHENTICATE blocks the authentication', async function () {
       global.localStorage.setItem('socketCluster.authToken', validSignedAuthTokenAlice);
 
-      client = socketClusterClient.create(clientOptions);
+      client = asyngularClient.create(clientOptions);
       // The previous test authenticated us as 'alice', so that token will be passed to the server as
       // part of the handshake.
 
@@ -353,7 +353,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -384,7 +384,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -415,7 +415,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -452,7 +452,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -485,7 +485,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -518,7 +518,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -552,7 +552,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -640,7 +640,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -665,7 +665,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -716,7 +716,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -770,7 +770,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -810,7 +810,7 @@ describe('Integration tests', function () {
       })();
 
       await server.listener('ready').once();
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -853,7 +853,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -884,7 +884,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -972,7 +972,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1049,7 +1049,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1125,7 +1125,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1186,7 +1186,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1274,7 +1274,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1339,7 +1339,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1388,7 +1388,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1489,7 +1489,7 @@ describe('Integration tests', function () {
       (async () => {
         await server.listener('ready').once();
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -1532,7 +1532,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1581,7 +1581,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1635,7 +1635,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -1695,7 +1695,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1742,7 +1742,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1807,7 +1807,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1857,7 +1857,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1890,7 +1890,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1921,7 +1921,7 @@ describe('Integration tests', function () {
       })();
 
       await server.listener('ready').once();
-      client = socketClusterClient.create({
+      client = asyngularClient.create({
         hostname: clientOptions.hostname,
         port: portNumber
       });
@@ -1953,7 +1953,7 @@ describe('Integration tests', function () {
       });
 
       it('Should disconnect socket if server does not receive a pong from client before timeout', async function () {
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2019,7 +2019,7 @@ describe('Integration tests', function () {
       });
 
       it('Should not disconnect socket if server does not receive a pong from client before timeout', async function () {
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber,
           pingTimeoutDisabled: true
@@ -2088,7 +2088,7 @@ describe('Integration tests', function () {
         };
         server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2105,7 +2105,7 @@ describe('Integration tests', function () {
         };
         server.addMiddleware(server.MIDDLEWARE_AUTHENTICATE, middlewareFunction);
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2143,7 +2143,7 @@ describe('Integration tests', function () {
           }
         })();
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2184,7 +2184,7 @@ describe('Integration tests', function () {
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2219,7 +2219,7 @@ describe('Integration tests', function () {
         };
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });
@@ -2248,7 +2248,7 @@ describe('Integration tests', function () {
         server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
 
         createConnectionTime = Date.now();
-        client = socketClusterClient.create({
+        client = asyngularClient.create({
           hostname: clientOptions.hostname,
           port: portNumber
         });

@@ -125,7 +125,7 @@ function connectionHandler(socket) {
   })();
 };
 
-function destroyTestCase() {
+function destroyClients() {
   if (client) {
     if (client.state !== client.CLOSED) {
       client.closeAllListeners();
@@ -166,7 +166,7 @@ describe('Integration tests', function () {
 
   afterEach('Close server after each test', async function () {
     portNumber++;
-    destroyTestCase();
+    destroyClients();
     server.close();
     global.localStorage.removeItem('asyngular.authToken');
   });
@@ -1948,7 +1948,7 @@ describe('Integration tests', function () {
       });
 
       afterEach('Shut down server afterwards', async function () {
-        destroyTestCase();
+        destroyClients();
         server.close();
       });
 
@@ -2014,7 +2014,7 @@ describe('Integration tests', function () {
       });
 
       afterEach('Shut down server afterwards', async function () {
-        destroyTestCase();
+        destroyClients();
         server.close();
       });
 
@@ -2077,7 +2077,7 @@ describe('Integration tests', function () {
     });
 
     afterEach('Shut down server afterwards', async function () {
-      destroyTestCase();
+      destroyClients();
       server.close();
     });
 

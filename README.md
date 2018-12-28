@@ -1,4 +1,4 @@
-# asyngular-server
+# Asyngular server
 Minimal server module for Asyngular
 
 This is a stand-alone server module for Asyngular (SocketCluster with full async/await support).

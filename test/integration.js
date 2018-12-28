@@ -133,8 +133,8 @@ describe('Integration tests', function () {
     }
     if (server) {
       server.closeAllListeners();
-      server.close();
       server.httpServer.close();
+      await server.close();
     }
     global.localStorage.removeItem('asyngular.authToken');
   });

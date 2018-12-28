@@ -9,7 +9,9 @@ Asyngular's protocol is backwards compatible with the SocketCluster protocol.
 You will need to install both ```asyngular-server``` and ```asyngular-client``` (https://github.com/SocketCluster/asyngular-client).
 
 To install this module:
-```npm install asyngular-server```
+```bash
+npm install asyngular-server
+```
 
 ## Usage
 

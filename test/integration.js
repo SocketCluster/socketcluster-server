@@ -126,7 +126,7 @@ function connectionHandler(socket) {
 };
 
 describe('Integration tests', function () {
-  afterEach('Close server after each test', async function () {
+  afterEach('Close server and client after each test', async function () {
     if (client) {
       client.closeAllListeners();
       client.disconnect();

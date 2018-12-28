@@ -70,7 +70,7 @@ See https://github.com/SocketCluster/stream-demux#usage
 
 - **More readable**: Code is written sequentially from top to bottom. Avoids event handler callback hell. It's also much easier to write and read complex integration test scenarios.
 - **More manageable**: No need to remember to unbind listeners with `removeListener(...)`; just `break` out of the `for-await-of` loop to stop consuming. This also encourages a more declarative style of coding.
-- **Safer**: Each event can be processed sequentially without missing any events. On the other hand, with `EventEmitter`, the listener function for the same event can run multiple times in parallel; this can cause unintended side effects.
+- **Safer**: Each event can be processed sequentially without missing any events. On the other hand, with `EventEmitter`, the listener function for the same event cannot be prevented from running multiple times in parallel; this can cause unintended side effects.
 
 ## License
 

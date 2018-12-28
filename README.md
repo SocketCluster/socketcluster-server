@@ -17,11 +17,11 @@ npm install asyngular-server
 
 You need to attach it to an existing Node.js http or https server (example):
 ```js
-var http = require('http');
-var asyngularServer = require('asyngular-server');
+const http = require('http');
+const asyngularServer = require('asyngular-server');
 
-var httpServer = http.createServer();
-var agServer = asyngularServer.attach(httpServer);
+let httpServer = http.createServer();
+let agServer = asyngularServer.attach(httpServer);
 
 (async () => {
   // Handle new inbound sockets.

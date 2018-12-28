@@ -54,6 +54,9 @@ httpServer.listen(8000);
 For more detailed examples of how to use Asyngular, see `test/integration.js`.
 Also, see tests from the `asyngular-client` module.
 
+Asyngular can work without the `for-await-of` loop; a `while` loop with `await` statements can be used instead.
+See https://github.com/SocketCluster/stream-demux#usage
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/asyngular-server.git`
@@ -61,5 +64,8 @@ Also, see tests from the `asyngular-client` module.
 - Install all dependencies: `npm install`
 - Run the tests: `npm test`
 
-\* Note that the ```asyngularServer.attach(httpServer, options);``` takes an optional options argument which can have a ```brokerEngine``` property - By default, asyngular-server
-uses ```sc-simple-broker``` which is a basic single-process in-memory broker. If you want to add your own brokerEngine (for example to scale your asyngular-servers across multiple cores/hosts), then you might want to look at how sc-simple-broker was implemented.
+## Benefits of async `Iterable` over `EventEmitter`
+
+- **More readable**: Code is written sequentially from top to bottom. Avoids event handler callback hell. It's also much easier to write and read complex integration test scenarios.
+- **More manageable**: No need to remember to unbind listeners with `removeEventListener(...)`; just `break` out of the `for-await-of` loop to stop consuming. This also encourages a more declarative style of coding.
+- **Safer**: Each kind of async operation can be declared to run sequentially without missing any events. On the other hand, with `EventEmitter`, the listener function for the same event cannot be prevented from running multiple times in parallel; this can cause unintended side effects.

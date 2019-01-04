@@ -1,6 +1,6 @@
 {
   "name": "asyngular-server",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Server module for Asyngular",
   "main": "index.js",
   "repository": {
@@ -15,7 +15,7 @@
     "sc-auth": "^6.0.0",
     "sc-errors": "^2.0.0",
     "sc-formatter": "^3.0.2",
-    "sc-simple-broker": "^3.1.0",
+    "sc-simple-broker": "^3.2.1",
     "stream-demux": "^4.0.4",
     "uuid": "3.2.1",
     "ws": "6.1.2"

@@ -53,7 +53,7 @@ function AGServerSocket(id, server, socket) {
   });
 
   this.socket.on('close', (code, data) => {
-    this._onSCClose(code, data);
+    this._onClose(code, data);
   });
 
   if (!this.server.pingTimeoutDisabled) {
@@ -195,7 +195,7 @@ AGServerSocket.prototype._resetPongTimeout = function () {
   }
   clearTimeout(this._pingTimeoutTicker);
   this._pingTimeoutTicker = setTimeout(() => {
-    this._onSCClose(4001);
+    this._onClose(4001);
     this.socket.close(4001);
   }, this.server.pingTimeout);
 };
@@ -218,7 +218,7 @@ AGServerSocket.prototype.emitError = function (error) {
   });
 };
 
-AGServerSocket.prototype._onSCClose = function (code, reason) {
+AGServerSocket.prototype._onClose = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
@@ -265,7 +265,7 @@ AGServerSocket.prototype.disconnect = function (code, data) {
   }
 
   if (this.state !== this.CLOSED) {
-    this._onSCClose(code, data);
+    this._onClose(code, data);
     this.socket.close(code, data);
   }
 };
@@ -277,7 +277,7 @@ AGServerSocket.prototype.terminate = function () {
 AGServerSocket.prototype.send = function (data, options) {
   this.socket.send(data, options, (err) => {
     if (err) {
-      this._onSCClose(1006, err.toString());
+      this._onClose(1006, err.toString());
     }
   });
 };
@@ -470,7 +470,7 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
 
   let handleAuthTokenSignFail = (error) => {
     this.emitError(error);
-    this._onSCClose(4002, error.toString());
+    this._onClose(4002, error.toString());
     this.socket.close(4002);
     throw error;
   };

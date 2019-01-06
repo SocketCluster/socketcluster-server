@@ -2085,8 +2085,8 @@ describe('Integration tests', function () {
       });
     });
 
-    describe('MIDDLEWARE_HANDSHAKE_SC', function () {
-      it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_SC blocks with an error', async function () {
+    describe('MIDDLEWARE_HANDSHAKE_AG', function () {
+      it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_AG blocks with an error', async function () {
         let middlewareWasExecuted = false;
         let serverWarnings = [];
         let clientErrors = [];
@@ -2095,11 +2095,11 @@ describe('Integration tests', function () {
         middlewareFunction = async function (req) {
           await wait(100);
           middlewareWasExecuted = true;
-          let err = new Error('SC handshake failed because the server was too lazy');
+          let err = new Error('AG handshake failed because the server was too lazy');
           err.name = 'TooLazyHandshakeError';
           throw err;
         };
-        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_AG, middlewareFunction);
 
         (async () => {
           for await (let {warning} of server.listener('warning')) {
@@ -2134,7 +2134,7 @@ describe('Integration tests', function () {
         assert.notEqual(abortStatus, null);
       });
 
-      it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_SC blocks without providing a status code', async function () {
+      it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_AG blocks without providing a status code', async function () {
         let middlewareWasExecuted = false;
         let abortStatus;
         let abortReason;
@@ -2142,11 +2142,11 @@ describe('Integration tests', function () {
         middlewareFunction = async function (req) {
           await wait(100);
           middlewareWasExecuted = true;
-          let err = new Error('SC handshake failed because the server was too lazy');
+          let err = new Error('AG handshake failed because the server was too lazy');
           err.name = 'TooLazyHandshakeError';
           throw err;
         };
-        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_AG, middlewareFunction);
 
         client = asyngularClient.create({
           hostname: clientOptions.hostname,
@@ -2162,10 +2162,10 @@ describe('Integration tests', function () {
         await wait(200);
         assert.equal(middlewareWasExecuted, true);
         assert.equal(abortStatus, 4008);
-        assert.equal(abortReason, 'TooLazyHandshakeError: SC handshake failed because the server was too lazy');
+        assert.equal(abortReason, 'TooLazyHandshakeError: AG handshake failed because the server was too lazy');
       });
 
-      it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_SC blocks by providing a status code', async function () {
+      it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_AG blocks by providing a status code', async function () {
         let middlewareWasExecuted = false;
         let abortStatus;
         let abortReason;
@@ -2173,7 +2173,7 @@ describe('Integration tests', function () {
         middlewareFunction = async function (req) {
           await wait(100);
           middlewareWasExecuted = true;
-          let err = new Error('SC handshake failed because of invalid query auth parameters');
+          let err = new Error('AG handshake failed because of invalid query auth parameters');
           err.name = 'InvalidAuthQueryHandshakeError';
           // Set custom 4501 status code as a property of the error.
           // We will treat this code as a fatal authentication failure on the front end.
@@ -2181,7 +2181,7 @@ describe('Integration tests', function () {
           err.statusCode = 4501;
           throw err;
         };
-        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_AG, middlewareFunction);
 
         client = asyngularClient.create({
           hostname: clientOptions.hostname,
@@ -2197,7 +2197,7 @@ describe('Integration tests', function () {
         await wait(200);
         assert.equal(middlewareWasExecuted, true);
         assert.equal(abortStatus, 4501);
-        assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: SC handshake failed because of invalid query auth parameters');
+        assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: AG handshake failed because of invalid query auth parameters');
       });
 
       it('Should connect with a delay if next() is called after a timeout inside the middleware function', async function () {
@@ -2209,7 +2209,7 @@ describe('Integration tests', function () {
         middlewareFunction = async function (req) {
           await wait(500);
         };
-        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, middlewareFunction);
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_AG, middlewareFunction);
 
         createConnectionTime = Date.now();
         client = asyngularClient.create({

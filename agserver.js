@@ -48,7 +48,7 @@ function AGServer(options) {
   this.options = Object.assign(opts, options);
 
   this.MIDDLEWARE_HANDSHAKE_WS = 'handshakeWS';
-  this.MIDDLEWARE_HANDSHAKE_SC = 'handshakeSC';
+  this.MIDDLEWARE_HANDSHAKE_AG = 'handshakeAG';
   this.MIDDLEWARE_TRANSMIT = 'transmit';
   this.MIDDLEWARE_INVOKE = 'invoke';
   this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
@@ -61,7 +61,7 @@ function AGServer(options) {
 
   this._middleware = {};
   this._middleware[this.MIDDLEWARE_HANDSHAKE_WS] = [];
-  this._middleware[this.MIDDLEWARE_HANDSHAKE_SC] = [];
+  this._middleware[this.MIDDLEWARE_HANDSHAKE_AG] = [];
   this._middleware[this.MIDDLEWARE_TRANSMIT] = [];
   this._middleware[this.MIDDLEWARE_INVOKE] = [];
   this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
@@ -604,7 +604,7 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       let signedAuthToken = data.authToken || null;
       clearTimeout(scSocket._handshakeTimeoutRef);
 
-      this._passThroughHandshakeSCMiddleware({
+      this._passThroughHandshakeAGMiddleware({
         socket: scSocket
       }, (err, statusCode) => {
         if (err) {
@@ -1056,19 +1056,19 @@ AGServer.prototype._passThroughAuthenticateMiddleware = function (options, callb
   );
 };
 
-AGServer.prototype._passThroughHandshakeSCMiddleware = function (options, callback) {
+AGServer.prototype._passThroughHandshakeAGMiddleware = function (options, callback) {
   let callbackInvoked = false;
 
   let request = {
     socket: options.socket
   };
 
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_AG], request,
     (err, results) => {
       if (callbackInvoked) {
         this.emitWarning(
           new InvalidActionError(
-            `Callback for ${this.MIDDLEWARE_HANDSHAKE_SC} middleware was already invoked`
+            `Callback for ${this.MIDDLEWARE_HANDSHAKE_AG} middleware was already invoked`
           )
         );
       } else {
@@ -1085,8 +1085,8 @@ AGServer.prototype._passThroughHandshakeSCMiddleware = function (options, callba
           }
           if (err === true || err.silent) {
             err = new SilentMiddlewareBlockedError(
-              `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_SC} middleware`,
-              this.MIDDLEWARE_HANDSHAKE_SC
+              `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_AG} middleware`,
+              this.MIDDLEWARE_HANDSHAKE_AG
             );
           } else if (this.middlewareEmitWarnings) {
             this.emitWarning(err);

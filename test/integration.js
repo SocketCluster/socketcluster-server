@@ -1717,8 +1717,7 @@ describe('Integration tests', function () {
       assert.equal(eventList[1].channel, 'foo');
     });
 
-    it('Socket should emit an error when trying to unsubscribe to a channel which it is not subscribed to', async function () {
-
+    it('Socket should emit an error when trying to unsubscribe from a channel which it is not subscribed to', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
@@ -1965,7 +1964,7 @@ describe('Integration tests', function () {
         await wait(1000);
         assert.notEqual(clientError, null);
         assert.equal(clientError.name, 'SocketProtocolError');
-        assert.equal(clientDisconnectCode, 4001);
+        assert.equal(clientDisconnectCode, 4000);
 
         assert.notEqual(serverWarning, null);
         assert.equal(serverWarning.name, 'SocketProtocolError');

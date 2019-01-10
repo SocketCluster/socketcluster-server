@@ -8,16 +8,16 @@
     "url": "git://github.com/SocketCluster/asyngular-server.git"
   },
   "dependencies": {
-    "async": "2.6.1",
+    "ag-auth": "^1.0.0",
+    "ag-simple-broker": "^1.1.0",
     "async-stream-emitter": "^1.1.0",
     "base64id": "1.0.0",
     "lodash.clonedeep": "4.5.0",
-    "sc-auth": "^6.0.0",
     "sc-errors": "^2.0.0",
     "sc-formatter": "^3.0.2",
-    "sc-simple-broker": "^3.2.2",
     "stream-demux": "^4.0.4",
     "uuid": "3.2.1",
+    "writable-async-iterable-stream": "^4.0.1",
     "ws": "6.1.2"
   },
   "devDependencies": {

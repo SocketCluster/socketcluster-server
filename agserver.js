@@ -1,19 +1,16 @@
 const AGServerSocket = require('./agserversocket');
-const AuthEngine = require('sc-auth').AuthEngine;
+const AuthEngine = require('ag-auth');
 const formatter = require('sc-formatter');
 const base64id = require('base64id');
-const async = require('async');
 const url = require('url');
 const crypto = require('crypto');
 const uuid = require('uuid');
-const SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
+const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
+const WritableAsyncIterableStream = require('writable-async-iterable-stream');
+const Action = require('./action');
 
 const scErrors = require('sc-errors');
-const AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
-const AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
-const AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
-const AuthTokenError = scErrors.AuthTokenError;
 const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
 const InvalidArgumentsError = scErrors.InvalidArgumentsError;
 const InvalidOptionsError = scErrors.InvalidOptionsError;
@@ -21,11 +18,13 @@ const InvalidActionError = scErrors.InvalidActionError;
 const BrokerError = scErrors.BrokerError;
 const ServerProtocolError = scErrors.ServerProtocolError;
 
+const HANDSHAKE_REJECTION_STATUS_CODE = 4008;
+
 function AGServer(options) {
   AsyncStreamEmitter.call(this);
 
   let opts = {
-    brokerEngine: new SCSimpleBroker(),
+    brokerEngine: new AGSimpleBroker(),
     wsEngine: 'ws',
     wsEngineServerOptions: {},
     maxPayload: null,
@@ -39,35 +38,13 @@ function AGServer(options) {
     appName: uuid.v4(),
     path: '/socketcluster/',
     authDefaultExpiry: 86400,
-    authSignAsync: false,
-    authVerifyAsync: true,
     pubSubBatchDuration: null,
-    middlewareEmitWarnings: true
+    middlewareEmitFailures: true
   };
 
   this.options = Object.assign(opts, options);
 
-  this.MIDDLEWARE_HANDSHAKE_WS = 'handshakeWS';
-  this.MIDDLEWARE_HANDSHAKE_AG = 'handshakeAG';
-  this.MIDDLEWARE_TRANSMIT = 'transmit';
-  this.MIDDLEWARE_INVOKE = 'invoke';
-  this.MIDDLEWARE_SUBSCRIBE = 'subscribe';
-  this.MIDDLEWARE_PUBLISH_IN = 'publishIn';
-  this.MIDDLEWARE_PUBLISH_OUT = 'publishOut';
-  this.MIDDLEWARE_AUTHENTICATE = 'authenticate';
-
-  // Deprecated
-  this.MIDDLEWARE_PUBLISH = this.MIDDLEWARE_PUBLISH_IN;
-
   this._middleware = {};
-  this._middleware[this.MIDDLEWARE_HANDSHAKE_WS] = [];
-  this._middleware[this.MIDDLEWARE_HANDSHAKE_AG] = [];
-  this._middleware[this.MIDDLEWARE_TRANSMIT] = [];
-  this._middleware[this.MIDDLEWARE_INVOKE] = [];
-  this._middleware[this.MIDDLEWARE_SUBSCRIBE] = [];
-  this._middleware[this.MIDDLEWARE_PUBLISH_IN] = [];
-  this._middleware[this.MIDDLEWARE_PUBLISH_OUT] = [];
-  this._middleware[this.MIDDLEWARE_AUTHENTICATE] = [];
 
   this.origins = opts.origins;
   this._allowAllOrigins = this.origins.indexOf('*:*') !== -1;
@@ -84,10 +61,16 @@ function AGServer(options) {
 
   this.brokerEngine = opts.brokerEngine;
   this.appName = opts.appName || '';
-  this.middlewareEmitWarnings = opts.middlewareEmitWarnings;
+  this.middlewareEmitFailures = opts.middlewareEmitFailures;
 
   // Make sure there is always a leading and a trailing slash in the WS path.
   this._path = opts.path.replace(/\/?$/, '/').replace(/^\/?/, '/');
+
+  (async () => {
+    for await (let {error} of this.brokerEngine.listener('error')) {
+      this.emitWarning(error);
+    }
+  })();
 
   if (this.brokerEngine.isReady) {
     this.isReady = true;
@@ -130,12 +113,7 @@ function AGServer(options) {
     this.verificationKey = opts.authKey;
   }
 
-  this.authVerifyAsync = opts.authVerifyAsync;
-  this.authSignAsync = opts.authSignAsync;
-
-  this.defaultVerificationOptions = {
-    async: this.authVerifyAsync
-  };
+  this.defaultVerificationOptions = {};
   if (opts.authVerifyAlgorithms != null) {
     this.defaultVerificationOptions.algorithms = opts.authVerifyAlgorithms;
   } else if (opts.authAlgorithm != null) {
@@ -143,8 +121,7 @@ function AGServer(options) {
   }
 
   this.defaultSignatureOptions = {
-    expiresIn: opts.authDefaultExpiry,
-    async: this.authSignAsync
+    expiresIn: opts.authDefaultExpiry
   };
   if (opts.authAlgorithm != null) {
     this.defaultSignatureOptions.algorithm = opts.authAlgorithm;
@@ -163,14 +140,14 @@ function AGServer(options) {
     // Default codec engine
     this.codec = formatter;
   }
+  this.brokerEngine.setCodecEngine(this.codec);
+  this.exchange = this.brokerEngine.exchange();
 
   this.clients = {};
   this.clientsCount = 0;
 
   this.pendingClients = {};
   this.pendingClientsCount = 0;
-
-  this.exchange = this.brokerEngine.exchange();
 
   let wsServerOptions = opts.wsEngineServerOptions || {};
   wsServerOptions.server = this.httpServer;
@@ -200,12 +177,29 @@ function AGServer(options) {
 
 AGServer.prototype = Object.create(AsyncStreamEmitter.prototype);
 
+AGServer.prototype.SYMBOL_MIDDLEWARE_INBOUND_STREAM = AGServer.SYMBOL_MIDDLEWARE_INBOUND_STREAM = Symbol('inboundStream');
+AGServer.prototype.SYMBOL_MIDDLEWARE_OUTBOUND_STREAM = AGServer.SYMBOL_MIDDLEWARE_OUTBOUND_STREAM = Symbol('outboundStream');
+
+AGServer.prototype.MIDDLEWARE_INBOUND = AGServer.MIDDLEWARE_INBOUND = 'inbound';
+AGServer.prototype.MIDDLEWARE_OUTBOUND = AGServer.MIDDLEWARE_OUTBOUND = 'outbound';
+
+AGServer.prototype.ACTION_HANDSHAKE_WS = AGServer.ACTION_HANDSHAKE_WS = 'handshakeWS';
+AGServer.prototype.ACTION_HANDSHAKE_AG = AGServer.ACTION_HANDSHAKE_AG = 'handshakeAG';
+
+AGServer.prototype.ACTION_TRANSMIT = AGServer.ACTION_TRANSMIT = 'transmit';
+AGServer.prototype.ACTION_INVOKE = AGServer.ACTION_INVOKE = 'invoke';
+AGServer.prototype.ACTION_SUBSCRIBE = AGServer.ACTION_SUBSCRIBE = 'subscribe';
+AGServer.prototype.ACTION_PUBLISH_IN = AGServer.ACTION_PUBLISH_IN = 'publishIn';
+AGServer.prototype.ACTION_PUBLISH_OUT = AGServer.ACTION_PUBLISH_OUT = 'publishOut';
+AGServer.prototype.ACTION_AUTHENTICATE = AGServer.ACTION_AUTHENTICATE = 'authenticate';
+
 AGServer.prototype.setAuthEngine = function (authEngine) {
   this.auth = authEngine;
 };
 
 AGServer.prototype.setCodecEngine = function (codecEngine) {
   this.codec = codecEngine;
+  this.brokerEngine.setCodecEngine(codecEngine);
 };
 
 AGServer.prototype.emitError = function (error) {
@@ -223,19 +217,12 @@ AGServer.prototype._handleServerError = function (error) {
   this.emitError(error);
 };
 
-AGServer.prototype._handleSocketErrors = async function (socket) {
-  // A socket error will show up as a warning on the server.
-  for await (let event of socket.listener('error')) {
-    this.emitWarning(event.error);
-  }
+AGServer.prototype._handleHandshakeTimeout = function (agSocket) {
+  agSocket.disconnect(4005);
 };
 
-AGServer.prototype._handleHandshakeTimeout = function (scSocket) {
-  scSocket.disconnect(4005);
-};
-
-AGServer.prototype._subscribeSocket = async function (socket, channelOptions) {
-  if (!channelOptions) {
+AGServer.prototype._subscribeSocket = async function (socket, channelName, subscriptionOptions) {
+  if (channelName === undefined || !subscriptionOptions) {
     throw new InvalidActionError(`Socket ${socket.id} provided a malformated channel payload`);
   }
 
@@ -244,8 +231,6 @@ AGServer.prototype._subscribeSocket = async function (socket, channelOptions) {
       `Socket ${socket.id} tried to exceed the channel subscription limit of ${this.socketChannelLimit}`
     );
   }
-
-  let channelName = channelOptions.channel;
 
   if (typeof channelName !== 'string') {
     throw new InvalidActionError(`Socket ${socket.id} provided an invalid channel name`);
@@ -268,12 +253,12 @@ AGServer.prototype._subscribeSocket = async function (socket, channelOptions) {
   }
   socket.emit('subscribe', {
     channel: channelName,
-    subscribeOptions: channelOptions
+    subscriptionOptions
   });
   this.emit('subscription', {
     socket,
     channel: channelName,
-    subscribeOptions: channelOptions
+    subscriptionOptions
   });
 };
 
@@ -306,204 +291,86 @@ AGServer.prototype._unsubscribeSocket = function (socket, channel) {
   this.emit('unsubscription', {socket, channel});
 };
 
-AGServer.prototype._processTokenError = function (err) {
-  let authError = null;
-  let isBadToken = true;
-
-  if (err) {
-    if (err.name === 'TokenExpiredError') {
-      authError = new AuthTokenExpiredError(err.message, err.expiredAt);
-    } else if (err.name === 'JsonWebTokenError') {
-      authError = new AuthTokenInvalidError(err.message);
-    } else if (err.name === 'NotBeforeError') {
-      authError = new AuthTokenNotBeforeError(err.message, err.date);
-      // In this case, the token is good; it's just not active yet.
-      isBadToken = false;
-    } else {
-      authError = new AuthTokenError(err.message);
-    }
-  }
-
-  return {
-    authError: authError,
-    isBadToken: isBadToken
-  };
-};
-
-AGServer.prototype._emitBadAuthTokenError = function (scSocket, error, signedAuthToken) {
-  let badAuthStatus = {
-    authError: error,
-    signedAuthToken: signedAuthToken
-  };
-  scSocket.emit('badAuthToken', {
-    authError: error,
-    signedAuthToken: signedAuthToken
-  });
-  this.emit('badSocketAuthToken', {
-    socket: scSocket,
-    authError: error,
-    signedAuthToken: signedAuthToken
-  });
-};
-
-AGServer.prototype._processAuthToken = function (scSocket, signedAuthToken, callback) {
-  let verificationOptions = Object.assign({socket: scSocket}, this.defaultVerificationOptions);
-
-  let handleVerifyTokenResult = (result) => {
-    let err = result.error;
-    let token = result.token;
-
-    let oldAuthState = scSocket.authState;
-    if (token) {
-      scSocket.signedAuthToken = signedAuthToken;
-      scSocket.authToken = token;
-      scSocket.authState = scSocket.AUTHENTICATED;
-    } else {
-      scSocket.signedAuthToken = null;
-      scSocket.authToken = null;
-      scSocket.authState = scSocket.UNAUTHENTICATED;
-    }
-
-    // If the socket is authenticated, pass it through the MIDDLEWARE_AUTHENTICATE middleware.
-    // If the token is bad, we will tell the client to remove it.
-    // If there is an error but the token is good, then we will send back a 'quiet' error instead
-    // (as part of the status object only).
-    if (scSocket.authToken) {
-      this._passThroughAuthenticateMiddleware({
-        socket: scSocket,
-        signedAuthToken: scSocket.signedAuthToken,
-        authToken: scSocket.authToken
-      }, (middlewareError, isBadToken) => {
-        if (middlewareError) {
-          scSocket.authToken = null;
-          scSocket.authState = scSocket.UNAUTHENTICATED;
-          if (isBadToken) {
-            this._emitBadAuthTokenError(scSocket, middlewareError, signedAuthToken);
-          }
-        }
-        // If an error is passed back from the authenticate middleware, it will be treated as a
-        // server warning and not a socket error.
-        callback(middlewareError, isBadToken || false, oldAuthState);
-      });
-    } else {
-      let errorData = this._processTokenError(err);
-
-      // If the error is related to the JWT being badly formatted, then we will
-      // treat the error as a socket error.
-      if (err && signedAuthToken != null) {
-        scSocket.emitError(errorData.authError);
-        if (errorData.isBadToken) {
-          this._emitBadAuthTokenError(scSocket, errorData.authError, signedAuthToken);
-        }
-      }
-      callback(errorData.authError, errorData.isBadToken, oldAuthState);
-    }
-  };
-
-  let verifyTokenResult;
-  let verifyTokenError;
-
-  try {
-    verifyTokenResult = this.auth.verifyToken(signedAuthToken, this.verificationKey, verificationOptions);
-  } catch (err) {
-    verifyTokenError = err;
-  }
-
-  if (verifyTokenResult instanceof Promise) {
-    (async () => {
-      let result = {};
-      try {
-        result.token = await verifyTokenResult;
-      } catch (err) {
-        result.error = err;
-      }
-      handleVerifyTokenResult(result);
-    })();
-  } else {
-    let result = {
-      token: verifyTokenResult,
-      error: verifyTokenError
-    };
-    handleVerifyTokenResult(result);
-  }
-};
-
 AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   if (!wsSocket.upgradeReq) {
     // Normalize ws modules to match.
     wsSocket.upgradeReq = upgradeReq;
   }
 
-  let id = this.generateId();
+  let socketId = this.generateId();
 
-  let scSocket = new AGServerSocket(id, this, wsSocket);
-  scSocket.exchange = this.exchange;
+  let agSocket = new AGServerSocket(socketId, this, wsSocket);
+  agSocket.exchange = this.exchange;
 
-  this._handleSocketErrors(scSocket);
+  let socketOutboundMiddleware = this._middleware[this.MIDDLEWARE_OUTBOUND];
+  if (socketOutboundMiddleware) {
+    socketOutboundMiddleware(agSocket._middlewareOutboundStream);
+  }
 
-  this.pendingClients[id] = scSocket;
+  this.pendingClients[socketId] = agSocket;
   this.pendingClientsCount++;
 
   let handleSocketAuthenticate = async () => {
-    for await (let rpc of scSocket.procedure('#authenticate')) {
+    for await (let rpc of agSocket.procedure('#authenticate')) {
       let signedAuthToken = rpc.data;
+      let oldAuthState = agSocket.authState;
+      try {
+        await agSocket._processAuthToken(signedAuthToken);
+      } catch (error) {
+        if (error.isBadToken) {
+          agSocket.deauthenticate();
+          rpc.error(error);
 
-      this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldAuthState) => {
-        if (err) {
-          if (isBadToken) {
-            scSocket.deauthenticate();
-          }
-        } else {
-          scSocket.triggerAuthenticationEvents(oldAuthState);
+          return;
         }
-        if (err && isBadToken) {
-          rpc.error(err);
-        } else {
-          let authStatus = {
-            isAuthenticated: !!scSocket.authToken,
-            authError: scErrors.dehydrateError(err)
-          };
-          rpc.end(authStatus);
-        }
+
+        rpc.end({
+          isAuthenticated: !!agSocket.authToken,
+          authError: signedAuthToken == null ? null : scErrors.dehydrateError(error)
+        });
+
+        return;
+      }
+      agSocket.triggerAuthenticationEvents(oldAuthState);
+      rpc.end({
+        isAuthenticated: !!agSocket.authToken,
+        authError: null
       });
     }
   };
   handleSocketAuthenticate();
 
   let handleSocketRemoveAuthToken = async () => {
-    for await (let data of scSocket.receiver('#removeAuthToken')) {
-      scSocket.deauthenticateSelf();
+    for await (let data of agSocket.receiver('#removeAuthToken')) {
+      agSocket.deauthenticateSelf();
     }
   };
   handleSocketRemoveAuthToken();
 
   let handleSocketSubscribe = async () => {
-    for await (let rpc of scSocket.procedure('#subscribe')) {
-      let channelOptions = rpc.data;
-
-      if (!channelOptions) {
-        channelOptions = {};
-      } else if (typeof channelOptions === 'string') {
-        channelOptions = {
-          channel: channelOptions
-        };
-      }
+    for await (let rpc of agSocket.procedure('#subscribe')) {
+      let subscriptionOptions = Object.assign({}, rpc.data);
+      let channelName = subscriptionOptions.channel;
+      delete subscriptionOptions.channel;
 
       (async () => {
-        if (scSocket.state === scSocket.OPEN) {
+        if (agSocket.state === agSocket.OPEN) {
           try {
-            await this._subscribeSocket(scSocket, channelOptions);
+            await this._subscribeSocket(agSocket, channelName, subscriptionOptions);
           } catch (err) {
-            let error = new BrokerError(`Failed to subscribe socket to the ${channelOptions.channel} channel - ${err}`);
+            let error = new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`);
             rpc.error(error);
-            scSocket.emitError(error);
+            agSocket.emitError(error);
+
             return;
           }
-          if (channelOptions.batch) {
+          if (subscriptionOptions.batch) {
             rpc.end(undefined, {batch: true});
+
             return;
           }
           rpc.end();
+
           return;
         }
         // This is an invalid state; it means the client tried to subscribe before
@@ -517,11 +384,11 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   handleSocketSubscribe();
 
   let handleSocketUnsubscribe = async () => {
-    for await (let rpc of scSocket.procedure('#unsubscribe')) {
+    for await (let rpc of agSocket.procedure('#unsubscribe')) {
       let channel = rpc.data;
       let error;
       try {
-        this._unsubscribeSocket(scSocket, channel);
+        this._unsubscribeSocket(agSocket, channel);
       } catch (err) {
         error = new BrokerError(
           `Failed to unsubscribe socket from the ${channel} channel - ${err}`
@@ -529,7 +396,7 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       }
       if (error) {
         rpc.error(error);
-        scSocket.emitError(error);
+        agSocket.emitError(error);
       } else {
         rpc.end();
       }
@@ -538,143 +405,148 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   handleSocketUnsubscribe();
 
   let cleanupSocket = (type, code, reason) => {
-    clearTimeout(scSocket._handshakeTimeoutRef);
+    clearTimeout(agSocket._handshakeTimeoutRef);
 
-    scSocket.closeProcedure('#handshake');
-    scSocket.closeProcedure('#authenticate');
-    scSocket.closeProcedure('#subscribe');
-    scSocket.closeProcedure('#unsubscribe');
-    scSocket.closeReceiver('#removeAuthToken');
-    scSocket.closeListener('authenticate');
-    scSocket.closeListener('authStateChange');
-    scSocket.closeListener('deauthenticate');
+    agSocket.closeProcedure('#handshake');
+    agSocket.closeProcedure('#authenticate');
+    agSocket.closeProcedure('#subscribe');
+    agSocket.closeProcedure('#unsubscribe');
+    agSocket.closeReceiver('#removeAuthToken');
+    agSocket.closeListener('authenticate');
+    agSocket.closeListener('authStateChange');
+    agSocket.closeListener('deauthenticate');
+    agSocket._middlewareOutboundStream.close();
+    agSocket._middlewareInboundStream.close();
 
-    let isClientFullyConnected = !!this.clients[id];
+    let isClientFullyConnected = !!this.clients[socketId];
 
     if (isClientFullyConnected) {
-      delete this.clients[id];
+      delete this.clients[socketId];
       this.clientsCount--;
     }
 
-    let isClientPending = !!this.pendingClients[id];
+    let isClientPending = !!this.pendingClients[socketId];
     if (isClientPending) {
-      delete this.pendingClients[id];
+      delete this.pendingClients[socketId];
       this.pendingClientsCount--;
     }
 
     if (type === 'disconnect') {
       this.emit('disconnection', {
-        socket: scSocket,
+        socket: agSocket,
         code,
         reason
       });
     } else if (type === 'abort') {
       this.emit('connectionAbort', {
-        socket: scSocket,
+        socket: agSocket,
         code,
         reason
       });
     }
     this.emit('closure', {
-      socket: scSocket,
+      socket: agSocket,
       code,
       reason
     });
 
-    this._unsubscribeSocketFromAllChannels(scSocket);
+    this._unsubscribeSocketFromAllChannels(agSocket);
   };
 
   let handleSocketDisconnect = async () => {
-    let event = await scSocket.listener('disconnect').once();
+    let event = await agSocket.listener('disconnect').once();
     cleanupSocket('disconnect', event.code, event.data);
   };
   handleSocketDisconnect();
 
   let handleSocketAbort = async () => {
-    let event = await scSocket.listener('connectAbort').once();
+    let event = await agSocket.listener('connectAbort').once();
     cleanupSocket('abort', event.code, event.data);
   };
   handleSocketAbort();
 
-  scSocket._handshakeTimeoutRef = setTimeout(this._handleHandshakeTimeout.bind(this, scSocket), this.handshakeTimeout);
+  agSocket._handshakeTimeoutRef = setTimeout(this._handleHandshakeTimeout.bind(this, agSocket), this.handshakeTimeout);
 
   let handleSocketHandshake = async () => {
-    for await (let rpc of scSocket.procedure('#handshake')) {
+    for await (let rpc of agSocket.procedure('#handshake')) {
       let data = rpc.data || {};
       let signedAuthToken = data.authToken || null;
-      clearTimeout(scSocket._handshakeTimeoutRef);
+      clearTimeout(agSocket._handshakeTimeoutRef);
 
-      this._passThroughHandshakeAGMiddleware({
-        socket: scSocket
-      }, (err, statusCode) => {
-        if (err) {
-          if (err.statusCode == null) {
-            err.statusCode = statusCode;
-          }
-          rpc.error(err);
-          scSocket.disconnect(err.statusCode);
+      let action = new Action();
+      action.type = this.ACTION_HANDSHAKE_AG;
+      action.socket = agSocket;
+
+      try {
+        await this._processMiddlewareAction(agSocket._middlewareInboundStream, action);
+      } catch (error) {
+        if (error.statusCode == null) {
+          error.statusCode = HANDSHAKE_REJECTION_STATUS_CODE;
+        }
+        rpc.error(error);
+        agSocket.disconnect(error.statusCode);
+        return;
+      }
+
+      let clientSocketStatus = {
+        id: socketId,
+        pingTimeout: this.pingTimeout
+      };
+      let serverSocketStatus = {
+        id: socketId,
+        pingTimeout: this.pingTimeout
+      };
+
+      let oldAuthState = agSocket.authState;
+      try {
+        await agSocket._processAuthToken(signedAuthToken);
+        if (agSocket.state === agSocket.CLOSED) {
           return;
         }
-        this._processAuthToken(scSocket, signedAuthToken, (err, isBadToken, oldAuthState) => {
-          if (scSocket.state === scSocket.CLOSED) {
-            return;
+      } catch (error) {
+        if (signedAuthToken != null) {
+          // Because the token is optional as part of the handshake, we don't count
+          // it as an error if the token wasn't provided.
+          clientSocketStatus.authError = scErrors.dehydrateError(error);
+          serverSocketStatus.authError = error;
+
+          if (error.isBadToken) {
+            agSocket.deauthenticate();
           }
+        }
+      }
+      clientSocketStatus.isAuthenticated = !!agSocket.authToken;
+      serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
 
-          let clientSocketStatus = {
-            id: scSocket.id,
-            pingTimeout: this.pingTimeout
-          };
-          let serverSocketStatus = {
-            id: scSocket.id,
-            pingTimeout: this.pingTimeout
-          };
+      if (this.pendingClients[socketId]) {
+        delete this.pendingClients[socketId];
+        this.pendingClientsCount--;
+      }
+      this.clients[socketId] = agSocket;
+      this.clientsCount++;
 
-          if (err) {
-            if (signedAuthToken != null) {
-              // Because the token is optional as part of the handshake, we don't count
-              // it as an error if the token wasn't provided.
-              clientSocketStatus.authError = scErrors.dehydrateError(err);
-              serverSocketStatus.authError = err;
+      agSocket.state = agSocket.OPEN;
 
-              if (isBadToken) {
-                scSocket.deauthenticate();
-              }
-            }
-          }
-          clientSocketStatus.isAuthenticated = !!scSocket.authToken;
-          serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
+      if (clientSocketStatus.isAuthenticated) {
+        // Needs to be executed after the connection event to allow
+        // consumers to be setup from inside the connection loop.
+        (async () => {
+          await this.listener('connection').once();
+          agSocket.triggerAuthenticationEvents(oldAuthState);
+        })();
+      }
 
-          if (this.pendingClients[id]) {
-            delete this.pendingClients[id];
-            this.pendingClientsCount--;
-          }
-          this.clients[id] = scSocket;
-          this.clientsCount++;
+      agSocket.emit('connect', serverSocketStatus);
+      this.emit('connection', {socket: agSocket, ...serverSocketStatus});
 
-          scSocket.state = scSocket.OPEN;
-
-          if (clientSocketStatus.isAuthenticated) {
-            // Needs to be executed after the connection event to allow
-            // consumers to be setup from inside the connection loop.
-            (async () => {
-              await this.listener('connection').once();
-              scSocket.triggerAuthenticationEvents(oldAuthState);
-            })();
-          }
-
-          scSocket.emit('connect', serverSocketStatus);
-          this.emit('connection', {socket: scSocket, ...serverSocketStatus});
-
-          // Treat authentication failure as a 'soft' error
-          rpc.end(clientSocketStatus);
-        });
-      });
+      // Treat authentication failure as a 'soft' error
+      rpc.end(clientSocketStatus);
     }
   };
   handleSocketHandshake();
 
   // Emit event to signal that a socket handshake has been initiated.
-  this.emit('handshake', {socket: scSocket});
+  this.emit('handshake', {socket: agSocket});
 };
 
 AGServer.prototype.close = function () {
@@ -698,23 +570,71 @@ AGServer.prototype.generateId = function () {
   return base64id.generateId();
 };
 
-AGServer.prototype.addMiddleware = function (type, middleware) {
-  if (!this._middleware[type]) {
-    throw new InvalidArgumentsError(`Middleware type "${type}" is not supported`);
-    // Read more: https://socketcluster.io/#!/docs/middleware-and-authorization
+AGServer.prototype.setMiddleware = function (type, middleware) {
+  if (
+    type !== this.MIDDLEWARE_INBOUND &&
+    type !== this.MIDDLEWARE_OUTBOUND
+  ) {
+    throw new InvalidArgumentsError(
+      `Middleware type "${type}" is not supported`
+    );
   }
-  this._middleware[type].push(middleware);
+  if (this._middleware[type]) {
+    throw new InvalidActionError(`Middleware type "${type}" has already been set`);
+  }
+  this._middleware[type] = middleware;
 };
 
-AGServer.prototype.removeMiddleware = function (type, middleware) {
-  let middlewareFunctions = this._middleware[type];
-
-  this._middleware[type] = middlewareFunctions.filter((fn) => {
-    return fn !== middleware;
-  });
+AGServer.prototype.removeMiddleware = function (type) {
+  delete this._middleware[type];
 };
 
-AGServer.prototype.verifyHandshake = function (info, callback) {
+AGServer.prototype.hasMiddleware = function (type) {
+  return !!this._middleware[type];
+};
+
+AGServer.prototype._processMiddlewareAction = async function (middlewareStream, action, socket) {
+  if (!this.hasMiddleware(middlewareStream.type)) {
+    return {data: action.data, options: null};
+  }
+  middlewareStream.write(action);
+
+  let newData;
+  let options = null;
+  try {
+    let result = await action.promise;
+    if (result) {
+      newData = result.data;
+      options = result.options;
+    }
+  } catch (error) {
+    let clientError;
+    if (error.silent) {
+      clientError = new SilentMiddlewareBlockedError(
+        `Action was blocked by ${action.name} middleware`,
+        action.name
+      );
+    } else {
+      clientError = error;
+    }
+    if (this.middlewareEmitFailures) {
+      if (socket) {
+        socket.emitError(error);
+      } else {
+        this.emitWarning(error);
+      }
+    }
+    throw clientError;
+  }
+
+  if (newData === undefined) {
+    newData = action.data;
+  }
+
+  return {data: newData, options};
+};
+
+AGServer.prototype.verifyHandshake = async function (info, callback) {
   let req = info.req;
   let origin = info.origin;
   if (origin === 'null' || origin == null) {
@@ -735,413 +655,32 @@ AGServer.prototype.verifyHandshake = function (info, callback) {
   }
 
   if (ok) {
-    let handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE_WS];
-    if (handshakeMiddleware.length) {
-      let callbackInvoked = false;
-      async.applyEachSeries(handshakeMiddleware, req, (err) => {
-        if (callbackInvoked) {
-          this.emitWarning(
-            new InvalidActionError(
-              `Callback for ${this.MIDDLEWARE_HANDSHAKE_WS} middleware was already invoked`
-            )
-          );
-        } else {
-          callbackInvoked = true;
-          if (err) {
-            if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError(
-                `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_WS} middleware`,
-                this.MIDDLEWARE_HANDSHAKE_WS
-              );
-            } else if (this.middlewareEmitWarnings) {
-              this.emitWarning(err);
-            }
-            callback(false, 401, typeof err === 'string' ? err : err.message);
-          } else {
-            callback(true);
-          }
-        }
-      });
-    } else {
-      callback(true);
+    let middlewareInboundStream = new WritableAsyncIterableStream();
+    middlewareInboundStream.type = this.MIDDLEWARE_INBOUND;
+    req[this.SYMBOL_MIDDLEWARE_INBOUND_STREAM] = middlewareInboundStream;
+
+    let serverInboundMiddleware = this._middleware[this.MIDDLEWARE_INBOUND];
+    if (serverInboundMiddleware) {
+      serverInboundMiddleware(middlewareInboundStream);
     }
-  } else {
-    let err = new ServerProtocolError(
-      `Failed to authorize socket handshake - Invalid origin: ${origin}`
-    );
-    this.emitWarning(err);
-    callback(false, 403, err.message);
-  }
-};
+    let action = new Action();
+    action.type = this.ACTION_HANDSHAKE_WS;
+    action.request = req;
 
-AGServer.prototype._isReservedRemoteEvent = function (event) {
-  return typeof event === 'string' && event.indexOf('#') === 0;
-};
-
-AGServer.prototype.verifyInboundRemoteEvent = function (requestOptions, callback) {
-  let socket = requestOptions.socket;
-  let token = socket.getAuthToken();
-  if (this.isAuthTokenExpired(token)) {
-    requestOptions.authTokenExpiredError = new AuthTokenExpiredError(
-      'The socket auth token has expired',
-      token.exp
-    );
-
-    socket.deauthenticate();
-  }
-
-  this._passThroughMiddleware(requestOptions, callback);
-};
-
-AGServer.prototype.isAuthTokenExpired = function (token) {
-  if (token && token.exp != null) {
-    let currentTime = Date.now();
-    let expiryMilliseconds = token.exp * 1000;
-    return currentTime > expiryMilliseconds;
-  }
-  return false;
-};
-
-AGServer.prototype._processPublishAction = function (options, request, callback) {
-  let callbackInvoked = false;
-
-  if (this.allowClientPublish) {
-    let eventData = options.data || {};
-    request.channel = eventData.channel;
-    request.data = eventData.data;
-
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
-      (err) => {
-        if (callbackInvoked) {
-          this.emitWarning(
-            new InvalidActionError(
-              `Callback for ${this.MIDDLEWARE_PUBLISH_IN} middleware was already invoked`
-            )
-          );
-        } else {
-          callbackInvoked = true;
-          if (request.data !== undefined) {
-            eventData.data = request.data;
-          }
-          if (err) {
-            if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError(
-                `Action was silently blocked by ${this.MIDDLEWARE_PUBLISH_IN} middleware`,
-                this.MIDDLEWARE_PUBLISH_IN
-              );
-            } else if (this.middlewareEmitWarnings) {
-              this.emitWarning(err);
-            }
-            callback(err, eventData, request.ackData);
-          } else {
-            if (typeof request.channel !== 'string') {
-              err = new BrokerError(
-                `Socket ${request.socket.id} tried to publish to an invalid ${request.channel} channel`
-              );
-              this.emitWarning(err);
-              callback(err, eventData, request.ackData);
-              return;
-            }
-            (async () => {
-              let error;
-              try {
-                await this.exchange.publish(request.channel, request.data);
-              } catch (err) {
-                error = err;
-                this.emitWarning(error);
-              }
-              callback(error, eventData, request.ackData);
-            })();
-          }
-        }
-      }
-    );
-  } else {
-    let noPublishError = new InvalidActionError('Client publish feature is disabled');
-    this.emitWarning(noPublishError);
-    callback(noPublishError);
-  }
-};
-
-AGServer.prototype._processSubscribeAction = function (options, request, callback) {
-  let callbackInvoked = false;
-
-  let eventData = options.data || {};
-  request.channel = eventData.channel;
-  request.waitForAuth = eventData.waitForAuth;
-  request.data = eventData.data;
-
-  if (request.waitForAuth && request.authTokenExpiredError) {
-    // If the channel has the waitForAuth flag set, then we will handle the expiry quietly
-    // and we won't pass this request through the subscribe middleware.
-    callback(request.authTokenExpiredError, eventData);
-  } else {
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
-      (err) => {
-        if (callbackInvoked) {
-          this.emitWarning(
-            new InvalidActionError(
-              `Callback for ${this.MIDDLEWARE_SUBSCRIBE} middleware was already invoked`
-            )
-          );
-        } else {
-          callbackInvoked = true;
-          if (err) {
-            if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError(
-                `Action was silently blocked by ${this.MIDDLEWARE_SUBSCRIBE} middleware`,
-                this.MIDDLEWARE_SUBSCRIBE
-              );
-            } else if (this.middlewareEmitWarnings) {
-              this.emitWarning(err);
-            }
-          }
-          if (request.data !== undefined) {
-            eventData.data = request.data;
-          }
-          callback(err, eventData);
-        }
-      }
-    );
-  }
-};
-
-AGServer.prototype._processTransmitAction = function (options, request, callback) {
-  let callbackInvoked = false;
-
-  request.event = options.event;
-  request.data = options.data;
-
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_TRANSMIT], request,
-    (err) => {
-      if (callbackInvoked) {
-        this.emitWarning(
-          new InvalidActionError(
-            `Callback for ${this.MIDDLEWARE_TRANSMIT} middleware was already invoked`
-          )
-        );
-      } else {
-        callbackInvoked = true;
-        if (err) {
-          if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError(
-              `Action was silently blocked by ${this.MIDDLEWARE_TRANSMIT} middleware`,
-              this.MIDDLEWARE_TRANSMIT
-            );
-          } else if (this.middlewareEmitWarnings) {
-            this.emitWarning(err);
-          }
-        }
-        callback(err, request.data);
-      }
+    try {
+      await this._processMiddlewareAction(middlewareInboundStream, action);
+    } catch (error) {
+      callback(false, 401, typeof error === 'string' ? error : error.message);
+      return;
     }
+    callback(true);
+    return;
+  }
+  let error = new ServerProtocolError(
+    `Failed to authorize socket handshake - Invalid origin: ${origin}`
   );
-};
-
-AGServer.prototype._processInvokeAction = function (options, request, callback) {
-  let callbackInvoked = false;
-
-  request.event = options.event;
-  request.data = options.data;
-
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_INVOKE], request,
-    (err) => {
-      if (callbackInvoked) {
-        this.emitWarning(
-          new InvalidActionError(
-            `Callback for ${this.MIDDLEWARE_INVOKE} middleware was already invoked`
-          )
-        );
-      } else {
-        callbackInvoked = true;
-        if (err) {
-          if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError(
-              `Action was silently blocked by ${this.MIDDLEWARE_INVOKE} middleware`,
-              this.MIDDLEWARE_INVOKE
-            );
-          } else if (this.middlewareEmitWarnings) {
-            this.emitWarning(err);
-          }
-        }
-        callback(err, request.data);
-      }
-    }
-  );
-};
-
-AGServer.prototype._passThroughMiddleware = function (options, callback) {
-  let request = {
-    socket: options.socket
-  };
-
-  if (options.authTokenExpiredError != null) {
-    request.authTokenExpiredError = options.authTokenExpiredError;
-  }
-
-  let event = options.event;
-
-  if (options.cid == null) {
-    // If transmit.
-    if (this._isReservedRemoteEvent(event)) {
-      if (event === '#publish') {
-        this._processPublishAction(options, request, callback);
-      } else if (event === '#removeAuthToken') {
-        callback(null, options.data);
-      } else {
-        let error = new InvalidActionError(`The reserved transmitted event ${event} is not supported`);
-        callback(error);
-      }
-    } else {
-      this._processTransmitAction(options, request, callback);
-    }
-  } else {
-    // If invoke/RPC.
-    if (this._isReservedRemoteEvent(event)) {
-      if (event === '#subscribe') {
-        this._processSubscribeAction(options, request, callback);
-      } else if (event === '#publish') {
-        this._processPublishAction(options, request, callback);
-      } else if (
-        event === '#handshake' ||
-        event === '#authenticate' ||
-        event === '#unsubscribe'
-      ) {
-        callback(null, options.data);
-      } else {
-        let error = new InvalidActionError(`The reserved invoked event ${event} is not supported`);
-        callback(error);
-      }
-    } else {
-      this._processInvokeAction(options, request, callback);
-    }
-  }
-};
-
-AGServer.prototype._passThroughAuthenticateMiddleware = function (options, callback) {
-  let callbackInvoked = false;
-
-  let request = {
-    socket: options.socket,
-    authToken: options.authToken
-  };
-
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
-    (err, results) => {
-      if (callbackInvoked) {
-        this.emitWarning(
-          new InvalidActionError(
-            `Callback for ${this.MIDDLEWARE_AUTHENTICATE} middleware was already invoked`
-          )
-        );
-      } else {
-        callbackInvoked = true;
-        let isBadToken = false;
-        if (results.length) {
-          isBadToken = results[results.length - 1] || false;
-        }
-        if (err) {
-          if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError(
-              `Action was silently blocked by ${this.MIDDLEWARE_AUTHENTICATE} middleware`,
-              this.MIDDLEWARE_AUTHENTICATE
-            );
-          } else if (this.middlewareEmitWarnings) {
-            this.emitWarning(err);
-          }
-        }
-        callback(err, isBadToken);
-      }
-    }
-  );
-};
-
-AGServer.prototype._passThroughHandshakeAGMiddleware = function (options, callback) {
-  let callbackInvoked = false;
-
-  let request = {
-    socket: options.socket
-  };
-
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_AG], request,
-    (err, results) => {
-      if (callbackInvoked) {
-        this.emitWarning(
-          new InvalidActionError(
-            `Callback for ${this.MIDDLEWARE_HANDSHAKE_AG} middleware was already invoked`
-          )
-        );
-      } else {
-        callbackInvoked = true;
-        let statusCode;
-        if (results.length) {
-          statusCode = results[results.length - 1] || 4008;
-        } else {
-          statusCode = 4008;
-        }
-        if (err) {
-          if (err.statusCode != null) {
-            statusCode = err.statusCode;
-          }
-          if (err === true || err.silent) {
-            err = new SilentMiddlewareBlockedError(
-              `Action was silently blocked by ${this.MIDDLEWARE_HANDSHAKE_AG} middleware`,
-              this.MIDDLEWARE_HANDSHAKE_AG
-            );
-          } else if (this.middlewareEmitWarnings) {
-            this.emitWarning(err);
-          }
-        }
-        callback(err, statusCode);
-      }
-    }
-  );
-};
-
-AGServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData, options, callback) {
-  let callbackInvoked = false;
-
-  if (eventName === '#publish') {
-    let request = {
-      socket: socket,
-      channel: eventData.channel,
-      data: eventData.data
-    };
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
-      (err) => {
-        if (callbackInvoked) {
-          this.emitWarning(
-            new InvalidActionError(
-              `Callback for ${this.MIDDLEWARE_PUBLISH_OUT} middleware was already invoked`
-            )
-          );
-        } else {
-          callbackInvoked = true;
-          if (request.data !== undefined) {
-            eventData.data = request.data;
-          }
-          if (err) {
-            if (err === true || err.silent) {
-              err = new SilentMiddlewareBlockedError(
-                `Action was silently blocked by ${this.MIDDLEWARE_PUBLISH_OUT} middleware`,
-                this.MIDDLEWARE_PUBLISH_OUT
-              );
-            } else if (this.middlewareEmitWarnings) {
-              this.emitWarning(err);
-            }
-            callback(err, eventData);
-          } else {
-            if (options && request.useCache) {
-              options.useCache = true;
-            }
-            callback(null, eventData);
-          }
-        }
-      }
-    );
-  } else {
-    callback(null, eventData);
-  }
+  this.emitWarning(error);
+  callback(false, 403, error.message);
 };
 
 module.exports = AGServer;

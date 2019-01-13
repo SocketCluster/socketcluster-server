@@ -9,6 +9,7 @@ const scErrors = require('sc-errors');
 const InvalidArgumentsError = scErrors.InvalidArgumentsError;
 const SocketProtocolError = scErrors.SocketProtocolError;
 const TimeoutError = scErrors.TimeoutError;
+const BadConnectionError = scErrors.BadConnectionError;
 const InvalidActionError = scErrors.InvalidActionError;
 const AuthError = scErrors.AuthError;
 const AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
@@ -31,8 +32,12 @@ function AGServerSocket(id, server, socket) {
 
   this.request = this.socket.upgradeReq;
 
-  // TODO 2: Add MIDDLEWARE_INBOUND_RAW for applying middleware on raw messages.
-  this._middlewareInboundStream = this.request[this.server.SYMBOL_MIDDLEWARE_INBOUND_STREAM];
+  this._middlewareInboundRawStream = new WritableAsyncIterableStream();
+  this._middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
+
+  this._middlewareInboundStream = new WritableAsyncIterableStream();
+  this._middlewareInboundStream.type = this.server.MIDDLEWARE_INBOUND;
+
   this._middlewareOutboundStream = new WritableAsyncIterableStream();
   this._middlewareOutboundStream.type = this.server.MIDDLEWARE_OUTBOUND;
 
@@ -70,8 +75,23 @@ function AGServerSocket(id, server, socket) {
   this._resetPongTimeout();
 
   // Receive incoming raw messages
-  this.socket.on('message', (message, flags) => {
+  this.socket.on('message', async (message, flags) => {
     this._resetPongTimeout();
+
+    if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
+      let action = new Action();
+      action.socket = this;
+      action.type = this.server.ACTION_MESSAGE;
+      action.data = message;
+
+      try {
+        let {data} = await this.server._processMiddlewareAction(this._middlewareInboundRawStream, action, this);
+        message = data;
+      } catch (error) {
+
+        return;
+      }
+    }
 
     this.emit('message', {message});
 
@@ -317,17 +337,38 @@ AGServerSocket.prototype.emitError = function (error) {
   this.server.emitWarning(error);
 };
 
+AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
+  Object.keys(this._callbackMap || {}).forEach((i) => {
+    let eventObject = this._callbackMap[i];
+    delete this._callbackMap[i];
+
+    clearTimeout(eventObject.timeout);
+    delete eventObject.timeout;
+
+    let errorMessage = `Event "${eventObject.event}" was aborted due to a bad connection`;
+    let badConnectionError = new BadConnectionError(errorMessage, failureType);
+
+    let callback = eventObject.callback;
+    delete eventObject.callback;
+
+    callback.call(eventObject, badConnectionError, eventObject);
+  });
+};
+
 AGServerSocket.prototype._onClose = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
-  if (this.state !== this.CLOSED) {
+  if (this.state === this.CLOSED) {
+    this._abortAllPendingEventsDueToBadConnection('connectAbort');
+  } else {
     let prevState = this.state;
     this.state = this.CLOSED;
-
     if (prevState === this.CONNECTING) {
+      this._abortAllPendingEventsDueToBadConnection('connectAbort');
       this.emit('connectAbort', {code, reason});
     } else {
+      this._abortAllPendingEventsDueToBadConnection('disconnect');
       this.emit('disconnect', {code, reason});
     }
     this.emit('close', {code, reason});
@@ -495,6 +536,7 @@ AGServerSocket.prototype.invoke = function (event, data, options) {
     }, this.server.ackTimeout);
 
     this._callbackMap[eventObject.cid] = {
+      event,
       callback: (err, result) => {
         if (err) {
           reject(err);

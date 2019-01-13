@@ -2055,57 +2055,7 @@ describe('Integration tests', function () {
       await server.listener('ready').once();
     });
 
-    describe('MIDDLEWARE_INBOUND', function () {
-      describe('ACTION_AUTHENTICATE', function () {
-        it('Should not run ACTION_AUTHENTICATE middleware action if JWT token does not exist', async function () {
-          middlewareFunction = async function (middlewareStream) {
-            for await (let {type, allow} of middlewareStream) {
-              if (type === server.ACTION_AUTHENTICATE) {
-                middlewareWasExecuted = true;
-              }
-              allow();
-            }
-          };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
-
-          client = asyngularClient.create({
-            hostname: clientOptions.hostname,
-            port: PORT_NUMBER
-          });
-
-          await client.listener('connect').once();
-          assert.notEqual(middlewareWasExecuted, true);
-        });
-
-        it('Should run ACTION_AUTHENTICATE middleware action if JWT token exists', async function () {
-          global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
-
-          middlewareFunction = async function (middlewareStream) {
-            for await (let {type, allow} of middlewareStream) {
-              if (type === server.ACTION_AUTHENTICATE) {
-                middlewareWasExecuted = true;
-              }
-              allow();
-            }
-          };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
-
-          client = asyngularClient.create({
-            hostname: clientOptions.hostname,
-            port: PORT_NUMBER
-          });
-
-          (async () => {
-            try {
-              await client.invoke('login', {username: 'bob'});
-            } catch (err) {}
-          })();
-
-          await client.listener('authenticate').once();
-          assert.equal(middlewareWasExecuted, true);
-        });
-      });
-
+    describe('MIDDLEWARE_HANDSHAKE', function () {
       describe('ACTION_HANDSHAKE_AG', function () {
         it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_AG blocks with an error', async function () {
           let middlewareWasExecuted = false;
@@ -2126,7 +2076,7 @@ describe('Integration tests', function () {
               allow();
             }
           };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
           (async () => {
             for await (let {warning} of server.listener('warning')) {
@@ -2179,7 +2129,7 @@ describe('Integration tests', function () {
               allow();
             }
           };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
           client = asyngularClient.create({
             hostname: clientOptions.hostname,
@@ -2220,7 +2170,7 @@ describe('Integration tests', function () {
               allow();
             }
           };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
           client = asyngularClient.create({
             hostname: clientOptions.hostname,
@@ -2253,7 +2203,7 @@ describe('Integration tests', function () {
               allow();
             }
           };
-          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
           createConnectionTime = Date.now();
           client = asyngularClient.create({
@@ -2270,6 +2220,58 @@ describe('Integration tests', function () {
           await client.listener('connect').once();
           connectEventTime = Date.now();
           assert.equal(connectEventTime - createConnectionTime > 400, true);
+        });
+      });
+    });
+
+    describe('MIDDLEWARE_INBOUND', function () {
+      describe('ACTION_AUTHENTICATE', function () {
+        it('Should not run ACTION_AUTHENTICATE middleware action if JWT token does not exist', async function () {
+          middlewareFunction = async function (middlewareStream) {
+            for await (let {type, allow} of middlewareStream) {
+              if (type === server.ACTION_AUTHENTICATE) {
+                middlewareWasExecuted = true;
+              }
+              allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          await client.listener('connect').once();
+          assert.notEqual(middlewareWasExecuted, true);
+        });
+
+        it('Should run ACTION_AUTHENTICATE middleware action if JWT token exists', async function () {
+          global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+
+          middlewareFunction = async function (middlewareStream) {
+            for await (let {type, allow} of middlewareStream) {
+              if (type === server.ACTION_AUTHENTICATE) {
+                middlewareWasExecuted = true;
+              }
+              allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          (async () => {
+            try {
+              await client.invoke('login', {username: 'bob'});
+            } catch (err) {}
+          })();
+
+          await client.listener('authenticate').once();
+          assert.equal(middlewareWasExecuted, true);
         });
       });
     });

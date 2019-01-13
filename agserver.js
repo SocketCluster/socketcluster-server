@@ -177,14 +177,17 @@ function AGServer(options) {
 
 AGServer.prototype = Object.create(AsyncStreamEmitter.prototype);
 
-AGServer.prototype.SYMBOL_MIDDLEWARE_INBOUND_STREAM = AGServer.SYMBOL_MIDDLEWARE_INBOUND_STREAM = Symbol('inboundStream');
-AGServer.prototype.SYMBOL_MIDDLEWARE_OUTBOUND_STREAM = AGServer.SYMBOL_MIDDLEWARE_OUTBOUND_STREAM = Symbol('outboundStream');
+AGServer.prototype.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM = AGServer.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM = Symbol('handshakeStream');
 
+AGServer.prototype.MIDDLEWARE_HANDSHAKE = AGServer.MIDDLEWARE_HANDSHAKE = 'handshake';
+AGServer.prototype.MIDDLEWARE_INBOUND_RAW = AGServer.MIDDLEWARE_INBOUND_RAW = 'inboundRaw';
 AGServer.prototype.MIDDLEWARE_INBOUND = AGServer.MIDDLEWARE_INBOUND = 'inbound';
 AGServer.prototype.MIDDLEWARE_OUTBOUND = AGServer.MIDDLEWARE_OUTBOUND = 'outbound';
 
 AGServer.prototype.ACTION_HANDSHAKE_WS = AGServer.ACTION_HANDSHAKE_WS = 'handshakeWS';
 AGServer.prototype.ACTION_HANDSHAKE_AG = AGServer.ACTION_HANDSHAKE_AG = 'handshakeAG';
+
+AGServer.prototype.ACTION_MESSAGE = AGServer.ACTION_MESSAGE = 'message';
 
 AGServer.prototype.ACTION_TRANSMIT = AGServer.ACTION_TRANSMIT = 'transmit';
 AGServer.prototype.ACTION_INVOKE = AGServer.ACTION_INVOKE = 'invoke';
@@ -218,6 +221,7 @@ AGServer.prototype._handleServerError = function (error) {
 };
 
 AGServer.prototype._handleHandshakeTimeout = function (agSocket) {
+  let middlewareHandshakeStream = agSocket.request[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
   agSocket.disconnect(4005);
 };
 
@@ -302,9 +306,19 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   let agSocket = new AGServerSocket(socketId, this, wsSocket);
   agSocket.exchange = this.exchange;
 
-  let socketOutboundMiddleware = this._middleware[this.MIDDLEWARE_OUTBOUND];
-  if (socketOutboundMiddleware) {
-    socketOutboundMiddleware(agSocket._middlewareOutboundStream);
+  let inboundRawMiddleware = this._middleware[this.MIDDLEWARE_INBOUND_RAW];
+  if (inboundRawMiddleware) {
+    inboundRawMiddleware(agSocket._middlewareInboundRawStream);
+  }
+
+  let inboundMiddleware = this._middleware[this.MIDDLEWARE_INBOUND];
+  if (inboundMiddleware) {
+    inboundMiddleware(agSocket._middlewareInboundStream);
+  }
+
+  let outboundMiddleware = this._middleware[this.MIDDLEWARE_OUTBOUND];
+  if (outboundMiddleware) {
+    outboundMiddleware(agSocket._middlewareOutboundStream);
   }
 
   this.pendingClients[socketId] = agSocket;
@@ -412,11 +426,12 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
     agSocket.closeProcedure('#subscribe');
     agSocket.closeProcedure('#unsubscribe');
     agSocket.closeReceiver('#removeAuthToken');
-    agSocket.closeListener('authenticate');
-    agSocket.closeListener('authStateChange');
-    agSocket.closeListener('deauthenticate');
-    agSocket._middlewareOutboundStream.close();
+
+    let middlewareHandshakeStream = agSocket.request[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+    middlewareHandshakeStream.close();
+    agSocket._middlewareInboundRawStream.close();
     agSocket._middlewareInboundStream.close();
+    agSocket._middlewareOutboundStream.close();
 
     let isClientFullyConnected = !!this.clients[socketId];
 
@@ -475,10 +490,13 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
       let action = new Action();
       action.type = this.ACTION_HANDSHAKE_AG;
+      action.request = agSocket.request;
       action.socket = agSocket;
 
+      let middlewareHandshakeStream = agSocket.request[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+
       try {
-        await this._processMiddlewareAction(agSocket._middlewareInboundStream, action);
+        await this._processMiddlewareAction(middlewareHandshakeStream, action);
       } catch (error) {
         if (error.statusCode == null) {
           error.statusCode = HANDSHAKE_REJECTION_STATUS_CODE;
@@ -541,6 +559,8 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
       // Treat authentication failure as a 'soft' error
       rpc.end(clientSocketStatus);
+
+      middlewareHandshakeStream.close();
     }
   };
   handleSocketHandshake();
@@ -572,6 +592,8 @@ AGServer.prototype.generateId = function () {
 
 AGServer.prototype.setMiddleware = function (type, middleware) {
   if (
+    type !== this.MIDDLEWARE_HANDSHAKE &&
+    type !== this.MIDDLEWARE_INBOUND_RAW &&
     type !== this.MIDDLEWARE_INBOUND &&
     type !== this.MIDDLEWARE_OUTBOUND
   ) {
@@ -654,32 +676,39 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
     } catch (e) {}
   }
 
+  let middlewareHandshakeStream = new WritableAsyncIterableStream();
+  middlewareHandshakeStream.type = this.MIDDLEWARE_HANDSHAKE;
+
+  req[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM] = middlewareHandshakeStream;
+
+  let handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE];
+  if (handshakeMiddleware) {
+    handshakeMiddleware(middlewareHandshakeStream);
+  }
+
+  let action = new Action();
+  action.type = this.ACTION_HANDSHAKE_WS;
+  action.request = req;
+
+  try {
+    await this._processMiddlewareAction(middlewareHandshakeStream, action);
+  } catch (error) {
+    middlewareHandshakeStream.close();
+    callback(false, 401, typeof error === 'string' ? error : error.message);
+    return;
+  }
+
   if (ok) {
-    let middlewareInboundStream = new WritableAsyncIterableStream();
-    middlewareInboundStream.type = this.MIDDLEWARE_INBOUND;
-    req[this.SYMBOL_MIDDLEWARE_INBOUND_STREAM] = middlewareInboundStream;
-
-    let serverInboundMiddleware = this._middleware[this.MIDDLEWARE_INBOUND];
-    if (serverInboundMiddleware) {
-      serverInboundMiddleware(middlewareInboundStream);
-    }
-    let action = new Action();
-    action.type = this.ACTION_HANDSHAKE_WS;
-    action.request = req;
-
-    try {
-      await this._processMiddlewareAction(middlewareInboundStream, action);
-    } catch (error) {
-      callback(false, 401, typeof error === 'string' ? error : error.message);
-      return;
-    }
     callback(true);
     return;
   }
+
   let error = new ServerProtocolError(
     `Failed to authorize socket handshake - Invalid origin: ${origin}`
   );
   this.emitWarning(error);
+
+  middlewareHandshakeStream.close();
   callback(false, 403, error.message);
 };
 

@@ -36,7 +36,7 @@ module.exports.listen = function (port, options, fn) {
     options = {};
   }
 
-  let server = http.createServer(function (req, res) {
+  let server = http.createServer((req, res) => {
     res.writeHead(501);
     res.end('Not Implemented');
   });

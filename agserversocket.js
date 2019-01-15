@@ -159,6 +159,20 @@ AGServerSocket.prototype._sendPing = function () {
   }
 };
 
+AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {
+  if (typeof packet.channel !== 'string') {
+    let error = new InvalidActionError(`Socket ${this.id} tried to publish to an invalid "${publishPacket.channel}" channel`);
+    this.emitError(error);
+    throw error;
+  }
+  try {
+    await this.server.exchange.publish(packet.channel, packet.data);
+  } catch (error) {
+    this.emitError(error);
+    throw error;
+  }
+};
+
 AGServerSocket.prototype._processInboundPacket = async function (packet, message) {
   if (packet && packet.event != null) {
     let eventName = packet.event;
@@ -177,10 +191,14 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       return;
     }
 
-    let tokenExpiredError = this._processAuthTokenExpiry();
 
     let action = new Action();
     action.socket = this;
+
+    let tokenExpiredError = this._processAuthTokenExpiry();
+    if (tokenExpiredError) {
+      action.authTokenExpiredError = tokenExpiredError;
+    }
 
     let isPublish = eventName === '#publish';
     let isSubscribe = eventName === '#subscribe';
@@ -231,10 +249,6 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
 
     let newData;
 
-    if (tokenExpiredError) {
-      action.authTokenExpiredError = tokenExpiredError;
-    }
-
     if (isRPC) {
       let request = new Request(this, packet.cid, eventName, packet.data);
       try {
@@ -246,34 +260,25 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         return;
       }
 
-      if (isPublish || isSubscribe) {
-        request.data = request.data || {};
-        request.data.data = newData;
-      } else {
-        request.data = newData;
-      }
-      if (isPublish) {
-        let publishPacket = request.data || {};
-
-        if (typeof publishPacket.channel !== 'string') {
-          let error = new InvalidActionError(`Socket ${this.id} tried to publish to an invalid "${publishPacket.channel}" channel`);
-          this.emitError(error);
-          request.error(error);
-
-          return;
+      if (isSubscribe) {
+        if (!request.data) {
+          request.data = {};
         }
-
+        request.data.data = newData;
+      } else if (isPublish) {
+        if (!request.data) {
+          request.data = {};
+        }
+        request.data.data = newData;
         try {
-          await this.server.exchange.publish(publishPacket.channel, publishPacket.data);
+          await this._processInboundPublishPacket(request.data || {});
         } catch (error) {
-          this.emitError(error);
           request.error(error);
-
           return;
         }
         request.end();
-
-        return;
+      } else {
+        request.data = newData;
       }
 
       this._procedureDemux.write(eventName, request);
@@ -287,6 +292,14 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     } catch (error) {
 
       return;
+    }
+
+    if (isPublish) {
+      try {
+        await this._processInboundPublishPacket(packet.data || {});
+      } catch (error) {
+        return;
+      }
     }
 
     this._receiverDemux.write(eventName, newData);

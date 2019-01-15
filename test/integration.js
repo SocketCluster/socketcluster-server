@@ -1,5 +1,6 @@
 const assert = require('assert');
 const asyngularServer = require('../');
+const Action = require('../action');
 const asyngularClient = require('asyngular-client');
 const localStorage = require('localStorage');
 const AGSimpleBroker = require('ag-simple-broker');
@@ -177,7 +178,7 @@ describe('Integration tests', function () {
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
         for await (let action of middlewareStream) {
           if (
-            action.type === server.ACTION_AUTHENTICATE &&
+            action.type === Action.AUTHENTICATE &&
             (!action.authToken || action.authToken.username === 'alice')
           ) {
             let err = new Error('Blocked by MIDDLEWARE_INBOUND');
@@ -1354,7 +1355,7 @@ describe('Integration tests', function () {
       // though they were sent as a batch/array.
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async function (middlewareStream) {
         for await (let action of middlewareStream) {
-          if (action.type === server.ACTION_SUBSCRIBE) {
+          if (action.type === Action.SUBSCRIBE) {
             subscribeMiddlewareCounter++;
             assert.equal(action.channel.indexOf('my-channel-'), 0);
             if (action.channel === 'my-channel-10') {
@@ -1406,7 +1407,7 @@ describe('Integration tests', function () {
 
       (async () => {
         for await (let event of channelList[19].listener('subscribe')) {
-          client.publish('my-channel-19', 'Hello!');
+          client.transmitPublish('my-channel-19', 'Hello!');
         }
       })();
 
@@ -1639,9 +1640,9 @@ describe('Integration tests', function () {
       (async () => {
         await client.listener('connect').once();
 
-        client.publish('foo', 'hi1');
+        client.transmitPublish('foo', 'hi1');
         await wait(10);
-        client.publish('foo', 'hi2');
+        client.transmitPublish('foo', 'hi2');
       })();
 
       let receivedSubscribedData = [];
@@ -1687,9 +1688,9 @@ describe('Integration tests', function () {
 
       (async () => {
         await client.listener('subscribe').once();
-        server.exchange.publish('bar', 'hello1');
+        server.exchange.transmitPublish('bar', 'hello1');
         await wait(10);
-        server.exchange.publish('bar', 'hello2');
+        server.exchange.transmitPublish('bar', 'hello2');
       })();
 
       let receivedSubscribedData = [];
@@ -1831,7 +1832,7 @@ describe('Integration tests', function () {
           (async () => {
             for await (let event of socket.listener('unsubscribe')) {
               if (event.channel === 'foo') {
-                server.exchange.publish('foo', 'hello');
+                server.exchange.transmitPublish('foo', 'hello');
               }
             }
           })();
@@ -2056,8 +2057,8 @@ describe('Integration tests', function () {
     });
 
     describe('MIDDLEWARE_HANDSHAKE', function () {
-      describe('ACTION_HANDSHAKE_AG', function () {
-        it('Should trigger correct events if MIDDLEWARE_HANDSHAKE_AG blocks with an error', async function () {
+      describe('HANDSHAKE_AG action', function () {
+        it('Should trigger correct events if MIDDLEWARE_HANDSHAKE blocks with an error', async function () {
           let middlewareWasExecuted = false;
           let serverWarnings = [];
           let clientErrors = [];
@@ -2065,7 +2066,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === server.ACTION_HANDSHAKE_AG) {
+              if (type === Action.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2111,14 +2112,14 @@ describe('Integration tests', function () {
           assert.notEqual(abortStatus, null);
         });
 
-        it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE_AG blocks without providing a status code', async function () {
+        it('Should send back default 4008 status code if MIDDLEWARE_HANDSHAKE blocks without providing a status code', async function () {
           let middlewareWasExecuted = false;
           let abortStatus;
           let abortReason;
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === server.ACTION_HANDSHAKE_AG) {
+              if (type === Action.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2148,14 +2149,14 @@ describe('Integration tests', function () {
           assert.equal(abortReason, 'TooLazyHandshakeError: AG handshake failed because the server was too lazy');
         });
 
-        it('Should send back custom status code if MIDDLEWARE_HANDSHAKE_AG blocks by providing a status code', async function () {
+        it('Should send back custom status code if MIDDLEWARE_HANDSHAKE blocks by providing a status code', async function () {
           let middlewareWasExecuted = false;
           let abortStatus;
           let abortReason;
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === server.ACTION_HANDSHAKE_AG) {
+              if (type === Action.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because of invalid query auth parameters');
@@ -2197,7 +2198,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === server.ACTION_HANDSHAKE_AG) {
+              if (type === Action.HANDSHAKE_AG) {
                 await wait(500);
               }
               allow();
@@ -2225,11 +2226,11 @@ describe('Integration tests', function () {
     });
 
     describe('MIDDLEWARE_INBOUND', function () {
-      describe('ACTION_AUTHENTICATE', function () {
-        it('Should not run ACTION_AUTHENTICATE middleware action if JWT token does not exist', async function () {
+      describe('AUTHENTICATE action', function () {
+        it('Should not run AUTHENTICATE action in middleware if JWT token does not exist', async function () {
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === server.ACTION_AUTHENTICATE) {
+              if (type === Action.AUTHENTICATE) {
                 middlewareWasExecuted = true;
               }
               allow();
@@ -2246,12 +2247,12 @@ describe('Integration tests', function () {
           assert.notEqual(middlewareWasExecuted, true);
         });
 
-        it('Should run ACTION_AUTHENTICATE middleware action if JWT token exists', async function () {
+        it('Should run AUTHENTICATE action in middleware if JWT token exists', async function () {
           global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === server.ACTION_AUTHENTICATE) {
+              if (type === Action.AUTHENTICATE) {
                 middlewareWasExecuted = true;
               }
               allow();

@@ -81,7 +81,7 @@ function AGServerSocket(id, server, socket) {
     if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
       let action = new Action();
       action.socket = this;
-      action.type = this.server.ACTION_MESSAGE;
+      action.type = Action.MESSAGE;
       action.data = message;
 
       try {
@@ -166,7 +166,7 @@ AGServerSocket.prototype._processInboundPublishPacket = async function (packet) 
     throw error;
   }
   try {
-    await this.server.exchange.publish(packet.channel, packet.data);
+    await this.server.exchange.invokePublish(packet.channel, packet.data);
   } catch (error) {
     this.emitError(error);
     throw error;
@@ -214,13 +214,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         }
         return;
       }
-      action.type = this.server.ACTION_PUBLISH_IN;
+      action.type = Action.PUBLISH_IN;
       if (packet.data) {
         action.channel = packet.data.channel;
         action.data = packet.data.data;
       }
     } else if (isSubscribe) {
-      action.type = this.server.ACTION_SUBSCRIBE;
+      action.type = Action.SUBSCRIBE;
       if (packet.data) {
         action.channel = packet.data.channel;
         action.data = packet.data.data;
@@ -233,13 +233,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       return;
     } else {
       if (isRPC) {
-        action.type = this.server.ACTION_INVOKE;
+        action.type = Action.INVOKE;
         action.procedure = packet.event;
         if (packet.data !== undefined) {
           action.data = packet.data;
         }
       } else {
-        action.type = this.server.ACTION_TRANSMIT;
+        action.type = Action.TRANSMIT;
         action.receiver = packet.event;
         if (packet.data !== undefined) {
           action.data = packet.data;
@@ -493,7 +493,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   let isPublish = event === '#publish';
   if (isPublish) {
     let action = new Action();
-    action.type = this.server.ACTION_PUBLISH_OUT;
+    action.type = Action.PUBLISH_OUT;
     action.socket = this;
 
     if (data !== undefined) {
@@ -532,7 +532,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   }
 };
 
-AGServerSocket.prototype.invoke = function (event, data, options) {
+AGServerSocket.prototype.invoke = async function (event, data, options) {
   return new Promise((resolve, reject) => {
     let eventObject = {
       event,
@@ -813,7 +813,7 @@ AGServerSocket.prototype._processAuthToken = async function (signedAuthToken) {
   this.authState = this.AUTHENTICATED;
 
   let action = new Action();
-  action.type = this.server.ACTION_AUTHENTICATE;
+  action.type = Action.AUTHENTICATE;
   action.socket = this;
   action.signedAuthToken = this.signedAuthToken;
   action.authToken = this.authToken;

@@ -184,18 +184,6 @@ AGServer.prototype.MIDDLEWARE_INBOUND_RAW = AGServer.MIDDLEWARE_INBOUND_RAW = 'i
 AGServer.prototype.MIDDLEWARE_INBOUND = AGServer.MIDDLEWARE_INBOUND = 'inbound';
 AGServer.prototype.MIDDLEWARE_OUTBOUND = AGServer.MIDDLEWARE_OUTBOUND = 'outbound';
 
-AGServer.prototype.ACTION_HANDSHAKE_WS = AGServer.ACTION_HANDSHAKE_WS = 'handshakeWS';
-AGServer.prototype.ACTION_HANDSHAKE_AG = AGServer.ACTION_HANDSHAKE_AG = 'handshakeAG';
-
-AGServer.prototype.ACTION_MESSAGE = AGServer.ACTION_MESSAGE = 'message';
-
-AGServer.prototype.ACTION_TRANSMIT = AGServer.ACTION_TRANSMIT = 'transmit';
-AGServer.prototype.ACTION_INVOKE = AGServer.ACTION_INVOKE = 'invoke';
-AGServer.prototype.ACTION_SUBSCRIBE = AGServer.ACTION_SUBSCRIBE = 'subscribe';
-AGServer.prototype.ACTION_PUBLISH_IN = AGServer.ACTION_PUBLISH_IN = 'publishIn';
-AGServer.prototype.ACTION_PUBLISH_OUT = AGServer.ACTION_PUBLISH_OUT = 'publishOut';
-AGServer.prototype.ACTION_AUTHENTICATE = AGServer.ACTION_AUTHENTICATE = 'authenticate';
-
 AGServer.prototype.setAuthEngine = function (authEngine) {
   this.auth = authEngine;
 };
@@ -489,7 +477,7 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       clearTimeout(agSocket._handshakeTimeoutRef);
 
       let action = new Action();
-      action.type = this.ACTION_HANDSHAKE_AG;
+      action.type = Action.HANDSHAKE_AG;
       action.request = agSocket.request;
       action.socket = agSocket;
 
@@ -687,7 +675,7 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
   }
 
   let action = new Action();
-  action.type = this.ACTION_HANDSHAKE_WS;
+  action.type = Action.HANDSHAKE_WS;
   action.request = req;
 
   try {

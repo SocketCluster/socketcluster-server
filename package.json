@@ -1,6 +1,6 @@
 {
   "name": "asyngular-server",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "Server module for Asyngular",
   "main": "index.js",
   "repository": {

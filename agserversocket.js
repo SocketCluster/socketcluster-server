@@ -2,8 +2,8 @@ const cloneDeep = require('lodash.clonedeep');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
 const StreamDemux = require('stream-demux');
 const AsyncStreamEmitter = require('async-stream-emitter');
-const Action = require('./action');
-const Request = require('./request');
+const AGAction = require('./agaction');
+const AGRequest = require('ag-request');
 
 const scErrors = require('sc-errors');
 const InvalidArgumentsError = scErrors.InvalidArgumentsError;
@@ -79,9 +79,9 @@ function AGServerSocket(id, server, socket) {
     this._resetPongTimeout();
 
     if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
-      let action = new Action();
+      let action = new AGAction();
       action.socket = this;
-      action.type = Action.MESSAGE;
+      action.type = AGAction.MESSAGE;
       action.data = message;
 
       try {
@@ -180,7 +180,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
 
     if (eventName === '#handshake' || eventName === '#authenticate') {
       // Let AGServer handle these events.
-      let request = new Request(this, packet.cid, eventName, packet.data);
+      let request = new AGRequest(this, packet.cid, eventName, packet.data);
       this._procedureDemux.write(eventName, request);
 
       return;
@@ -192,7 +192,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
 
-    let action = new Action();
+    let action = new AGAction();
     action.socket = this;
 
     let tokenExpiredError = this._processAuthTokenExpiry();
@@ -209,37 +209,37 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.emitError(error);
 
         if (isRPC) {
-          let request = new Request(this, packet.cid, eventName, packet.data);
+          let request = new AGRequest(this, packet.cid, eventName, packet.data);
           request.error(error);
         }
         return;
       }
-      action.type = Action.PUBLISH_IN;
+      action.type = AGAction.PUBLISH_IN;
       if (packet.data) {
         action.channel = packet.data.channel;
         action.data = packet.data.data;
       }
     } else if (isSubscribe) {
-      action.type = Action.SUBSCRIBE;
+      action.type = AGAction.SUBSCRIBE;
       if (packet.data) {
         action.channel = packet.data.channel;
         action.data = packet.data.data;
       }
     } else if (eventName === '#unsubscribe') {
       // Let AGServer handle this event.
-      let request = new Request(this, packet.cid, eventName, packet.data);
+      let request = new AGRequest(this, packet.cid, eventName, packet.data);
       this._procedureDemux.write(eventName, request);
 
       return;
     } else {
       if (isRPC) {
-        action.type = Action.INVOKE;
+        action.type = AGAction.INVOKE;
         action.procedure = packet.event;
         if (packet.data !== undefined) {
           action.data = packet.data;
         }
       } else {
-        action.type = Action.TRANSMIT;
+        action.type = AGAction.TRANSMIT;
         action.receiver = packet.event;
         if (packet.data !== undefined) {
           action.data = packet.data;
@@ -250,7 +250,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     let newData;
 
     if (isRPC) {
-      let request = new Request(this, packet.cid, eventName, packet.data);
+      let request = new AGRequest(this, packet.cid, eventName, packet.data);
       try {
         let {data} = await this.server._processMiddlewareAction(this._middlewareInboundStream, action, this);
         newData = data;
@@ -492,8 +492,8 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   let packet = {event, data};
   let isPublish = event === '#publish';
   if (isPublish) {
-    let action = new Action();
-    action.type = Action.PUBLISH_OUT;
+    let action = new AGAction();
+    action.type = AGAction.PUBLISH_OUT;
     action.socket = this;
 
     if (data !== undefined) {
@@ -812,8 +812,8 @@ AGServerSocket.prototype._processAuthToken = async function (signedAuthToken) {
   this.authToken = authToken;
   this.authState = this.AUTHENTICATED;
 
-  let action = new Action();
-  action.type = Action.AUTHENTICATE;
+  let action = new AGAction();
+  action.type = AGAction.AUTHENTICATE;
   action.socket = this;
   action.signedAuthToken = this.signedAuthToken;
   action.authToken = this.authToken;

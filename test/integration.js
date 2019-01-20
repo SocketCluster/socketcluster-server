@@ -1,6 +1,6 @@
 const assert = require('assert');
 const asyngularServer = require('../');
-const Action = require('../action');
+const AGAction = require('../agaction');
 const asyngularClient = require('asyngular-client');
 const localStorage = require('localStorage');
 const AGSimpleBroker = require('ag-simple-broker');
@@ -178,7 +178,7 @@ describe('Integration tests', function () {
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
         for await (let action of middlewareStream) {
           if (
-            action.type === Action.AUTHENTICATE &&
+            action.type === AGAction.AUTHENTICATE &&
             (!action.authToken || action.authToken.username === 'alice')
           ) {
             let err = new Error('Blocked by MIDDLEWARE_INBOUND');
@@ -1355,7 +1355,7 @@ describe('Integration tests', function () {
       // though they were sent as a batch/array.
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async function (middlewareStream) {
         for await (let action of middlewareStream) {
-          if (action.type === Action.SUBSCRIBE) {
+          if (action.type === AGAction.SUBSCRIBE) {
             subscribeMiddlewareCounter++;
             assert.equal(action.channel.indexOf('my-channel-'), 0);
             if (action.channel === 'my-channel-10') {
@@ -2066,7 +2066,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === Action.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2119,7 +2119,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === Action.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2156,7 +2156,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === Action.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because of invalid query auth parameters');
@@ -2198,7 +2198,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === Action.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_AG) {
                 await wait(500);
               }
               allow();
@@ -2230,7 +2230,7 @@ describe('Integration tests', function () {
         it('Should not run AUTHENTICATE action in middleware if JWT token does not exist', async function () {
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === Action.AUTHENTICATE) {
+              if (type === AGAction.AUTHENTICATE) {
                 middlewareWasExecuted = true;
               }
               allow();
@@ -2252,7 +2252,7 @@ describe('Integration tests', function () {
 
           middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === Action.AUTHENTICATE) {
+              if (type === AGAction.AUTHENTICATE) {
                 middlewareWasExecuted = true;
               }
               allow();

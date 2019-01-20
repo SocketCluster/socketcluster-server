@@ -8,7 +8,7 @@ const uuid = require('uuid');
 const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
-const Action = require('./action');
+const AGAction = require('./agaction');
 
 const scErrors = require('sc-errors');
 const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
@@ -476,8 +476,8 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       let signedAuthToken = data.authToken || null;
       clearTimeout(agSocket._handshakeTimeoutRef);
 
-      let action = new Action();
-      action.type = Action.HANDSHAKE_AG;
+      let action = new AGAction();
+      action.type = AGAction.HANDSHAKE_AG;
       action.request = agSocket.request;
       action.socket = agSocket;
 
@@ -621,7 +621,7 @@ AGServer.prototype._processMiddlewareAction = async function (middlewareStream, 
     let clientError;
     if (error.silent) {
       clientError = new SilentMiddlewareBlockedError(
-        `Action was blocked by ${action.name} middleware`,
+        `AGAction was blocked by ${action.name} middleware`,
         action.name
       );
     } else {
@@ -674,8 +674,8 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
     handshakeMiddleware(middlewareHandshakeStream);
   }
 
-  let action = new Action();
-  action.type = Action.HANDSHAKE_WS;
+  let action = new AGAction();
+  action.type = AGAction.HANDSHAKE_WS;
   action.request = req;
 
   try {

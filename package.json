@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "ag-auth": "^1.0.1",
+    "ag-request": "^1.0.0",
     "ag-simple-broker": "^3.0.0",
     "async-stream-emitter": "^2.0.0",
     "base64id": "1.0.0",

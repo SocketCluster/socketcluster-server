@@ -80,8 +80,8 @@ function AGServerSocket(id, server, socket) {
 
     if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
       let action = new AGAction();
-      action.socket = this;
       action.type = AGAction.MESSAGE;
+      action.socket = this;
       action.data = message;
 
       try {

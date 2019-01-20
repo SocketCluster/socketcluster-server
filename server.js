@@ -477,9 +477,9 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
       clearTimeout(agSocket._handshakeTimeoutRef);
 
       let action = new AGAction();
-      action.type = AGAction.HANDSHAKE_AG;
       action.request = agSocket.request;
       action.socket = agSocket;
+      action.type = AGAction.HANDSHAKE_AG;
 
       let middlewareHandshakeStream = agSocket.request[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
 
@@ -675,8 +675,8 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
   }
 
   let action = new AGAction();
-  action.type = AGAction.HANDSHAKE_WS;
   action.request = req;
+  action.type = AGAction.HANDSHAKE_WS;
 
   try {
     await this._processMiddlewareAction(middlewareHandshakeStream, action);

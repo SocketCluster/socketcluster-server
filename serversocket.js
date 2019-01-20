@@ -80,8 +80,8 @@ function AGServerSocket(id, server, socket) {
 
     if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
       let action = new AGAction();
-      action.type = AGAction.MESSAGE;
       action.socket = this;
+      action.type = AGAction.MESSAGE;
       action.data = message;
 
       try {
@@ -493,8 +493,8 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   let isPublish = event === '#publish';
   if (isPublish) {
     let action = new AGAction();
-    action.type = AGAction.PUBLISH_OUT;
     action.socket = this;
+    action.type = AGAction.PUBLISH_OUT;
 
     if (data !== undefined) {
       action.channel = data.channel;
@@ -813,8 +813,8 @@ AGServerSocket.prototype._processAuthToken = async function (signedAuthToken) {
   this.authState = this.AUTHENTICATED;
 
   let action = new AGAction();
-  action.type = AGAction.AUTHENTICATE;
   action.socket = this;
+  action.type = AGAction.AUTHENTICATE;
   action.signedAuthToken = this.signedAuthToken;
   action.authToken = this.authToken;
 

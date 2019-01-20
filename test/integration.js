@@ -1,6 +1,6 @@
 const assert = require('assert');
 const asyngularServer = require('../');
-const AGAction = require('../agaction');
+const AGAction = require('../action');
 const asyngularClient = require('asyngular-client');
 const localStorage = require('localStorage');
 const AGSimpleBroker = require('ag-simple-broker');

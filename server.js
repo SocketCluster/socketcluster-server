@@ -1,4 +1,4 @@
-const AGServerSocket = require('./agserversocket');
+const AGServerSocket = require('./serversocket');
 const AuthEngine = require('ag-auth');
 const formatter = require('sc-formatter');
 const base64id = require('base64id');
@@ -8,7 +8,7 @@ const uuid = require('uuid');
 const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
-const AGAction = require('./agaction');
+const AGAction = require('./action');
 
 const scErrors = require('sc-errors');
 const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;

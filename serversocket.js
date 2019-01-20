@@ -2,7 +2,7 @@ const cloneDeep = require('lodash.clonedeep');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
 const StreamDemux = require('stream-demux');
 const AsyncStreamEmitter = require('async-stream-emitter');
-const AGAction = require('./agaction');
+const AGAction = require('./action');
 const AGRequest = require('ag-request');
 
 const scErrors = require('sc-errors');

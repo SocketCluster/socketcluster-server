@@ -10,7 +10,7 @@ const http = require('http');
  * @api public
  */
 
-module.exports.AGServer = require('./agserver');
+module.exports.AGServer = require('./server');
 
 /**
  * Expose AGServerSocket constructor.
@@ -18,7 +18,7 @@ module.exports.AGServer = require('./agserver');
  * @api public
  */
 
-module.exports.AGServerSocket = require('./agserversocket');
+module.exports.AGServerSocket = require('./serversocket');
 
 /**
  * Creates an http.Server exclusively used for WS upgrades.

@@ -636,7 +636,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
   } else {
     try {
       var parts = url.parse(origin);
-      parts.port = parts.port || 80;
+      parts.port = parts.port || (parts.protocol === 'https:' ? 443 : 80);
       ok = ~this.origins.indexOf(parts.hostname + ':' + parts.port) ||
         ~this.origins.indexOf(parts.hostname + ':*') ||
         ~this.origins.indexOf('*:' + parts.port);

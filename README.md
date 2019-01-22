@@ -59,6 +59,17 @@ Also, see tests from the `asyngular-client` module.
 Asyngular can work without the `for-await-of` loop; a `while` loop with `await` statements can be used instead.
 See https://github.com/SocketCluster/stream-demux#usage
 
+## Compatibility mode
+
+For compatibility with existing SocketCluster clients, set the `protocolVersion` to `1` and make sure that the `path` matches your old client path:
+
+```js
+let agServer = asyngularServer.attach(httpServer, {
+  protocolVersion: 1,
+  path: '/socketcluster/'
+});
+```
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/asyngular-server.git`

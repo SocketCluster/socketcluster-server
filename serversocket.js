@@ -18,7 +18,7 @@ const AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
 const AuthTokenError = scErrors.AuthTokenError;
 const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
 
-function AGServerSocket(id, server, socket) {
+function AGServerSocket(id, server, socket, protocolVersion) {
   AsyncStreamEmitter.call(this);
 
   this.id = id;
@@ -26,6 +26,7 @@ function AGServerSocket(id, server, socket) {
   this.socket = socket;
   this.state = this.CONNECTING;
   this.authState = this.UNAUTHENTICATED;
+  this.protocolVersion = protocolVersion;
 
   this._receiverDemux = new StreamDemux();
   this._procedureDemux = new StreamDemux();
@@ -69,6 +70,23 @@ function AGServerSocket(id, server, socket) {
     this._onClose(code, data);
   });
 
+  let pongMessage;
+  if (this.protocolVersion === 1) {
+    pongMessage = '#2';
+    this._sendPing = () => {
+      if (this.state !== this.CLOSED) {
+        this.sendObject('#1');
+      }
+    };
+  } else {
+    pongMessage = '';
+    this._sendPing = () => {
+      if (this.state !== this.CLOSED) {
+        this.send('');
+      }
+    };
+  }
+
   if (!this.server.pingTimeoutDisabled) {
     this._pingIntervalTicker = setInterval(this._sendPing.bind(this), this.server.pingInterval);
   }
@@ -76,7 +94,11 @@ function AGServerSocket(id, server, socket) {
 
   // Receive incoming raw messages
   this.socket.on('message', async (message, flags) => {
-    this._resetPongTimeout();
+    let isPong = message === pongMessage;
+
+    if (isPong) {
+      this._resetPongTimeout();
+    }
 
     if (this.server.hasMiddleware(this.server.MIDDLEWARE_INBOUND_RAW)) {
       let action = new AGAction();
@@ -95,6 +117,14 @@ function AGServerSocket(id, server, socket) {
 
     this.emit('message', {message});
 
+    if (isPong) {
+      let token = this.getAuthToken();
+      if (this.isAuthTokenExpired(token)) {
+        this.deauthenticate();
+      }
+      return;
+    }
+
     let packet;
     try {
       packet = this.decode(message);
@@ -106,21 +136,13 @@ function AGServerSocket(id, server, socket) {
       return;
     }
 
-    // If pong
-    if (packet === '#2') {
-      let token = this.getAuthToken();
-      if (this.isAuthTokenExpired(token)) {
-        this.deauthenticate();
+    if (Array.isArray(packet)) {
+      let len = packet.length;
+      for (let i = 0; i < len; i++) {
+        this._processInboundPacket(packet[i], message);
       }
     } else {
-      if (Array.isArray(packet)) {
-        let len = packet.length;
-        for (let i = 0; i < len; i++) {
-          this._processInboundPacket(packet[i], message);
-        }
-      } else {
-        this._processInboundPacket(packet, message);
-      }
+      this._processInboundPacket(packet, message);
     }
   });
 }
@@ -151,12 +173,6 @@ AGServerSocket.prototype.procedure = function (procedureName) {
 
 AGServerSocket.prototype.closeProcedure = function (procedureName) {
   this._procedureDemux.close(procedureName);
-};
-
-AGServerSocket.prototype._sendPing = function () {
-  if (this.state !== this.CLOSED) {
-    this.sendObject('#1');
-  }
 };
 
 AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {

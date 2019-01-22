@@ -4,7 +4,6 @@ const formatter = require('sc-formatter');
 const base64id = require('base64id');
 const url = require('url');
 const crypto = require('crypto');
-const uuid = require('uuid');
 const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
@@ -35,8 +34,8 @@ function AGServer(options) {
     pingTimeoutDisabled: false,
     pingInterval: 8000,
     origins: '*:*',
-    appName: uuid.v4(),
-    path: '/socketcluster/',
+    path: '/asyngular/',
+    protocolVersion: 2,
     authDefaultExpiry: 86400,
     pubSubBatchDuration: null,
     middlewareEmitFailures: true
@@ -58,9 +57,9 @@ function AGServer(options) {
   this.perMessageDeflate = opts.perMessageDeflate;
   this.httpServer = opts.httpServer;
   this.socketChannelLimit = opts.socketChannelLimit;
+  this.protocolVersion = opts.protocolVersion;
 
   this.brokerEngine = opts.brokerEngine;
-  this.appName = opts.appName || '';
   this.middlewareEmitFailures = opts.middlewareEmitFailures;
 
   // Make sure there is always a leading and a trailing slash in the WS path.
@@ -291,7 +290,7 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
 
   let socketId = this.generateId();
 
-  let agSocket = new AGServerSocket(socketId, this, wsSocket);
+  let agSocket = new AGServerSocket(socketId, this, wsSocket, this.protocolVersion);
   agSocket.exchange = this.exchange;
 
   let inboundRawMiddleware = this._middleware[this.MIDDLEWARE_INBOUND_RAW];

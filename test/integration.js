@@ -1323,6 +1323,78 @@ describe('Integration tests', function () {
     });
   });
 
+  describe('Socket backpressure', function () {
+    it('Should be able to get the message inboundBackpressure on a socket object', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let backpressureHistory = [];
+
+      server.setMiddleware(server.MIDDLEWARE_INBOUND_RAW, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          backpressureHistory.push(action.socket.inboundBackpressure);
+          action.allow();
+        }
+      });
+
+      let pause = true;
+      let messageCount = 0;
+
+      server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          messageCount++;
+          if (!pause) {
+            action.allow();
+            continue;
+          }
+          // Do not allow any messages until inboundBackpressure reaches 10.
+          while (true) {
+            if (action.socket.inboundBackpressure >= 10) {
+              pause = false;
+              break;
+            }
+            await wait(2);
+          }
+          action.allow();
+        }
+      });
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await client.listener('connect').once();
+      for (let i = 0; i < 20; i++) {
+        await wait(20);
+        client.transmitPublish('foo', 123);
+      }
+
+      while (true) {
+        await wait(10);
+        if (messageCount >= 20) {
+          break;
+        }
+      }
+
+      // There should be 1 handshake and 20 publishes.
+      assert.equal(backpressureHistory.length, 21);
+      // The first entry is for the handshake which we are not blocking;
+      // so it should not add any backpressure.
+      assert.equal(backpressureHistory[0], 1);
+      assert.equal(backpressureHistory[1], 1);
+      assert.equal(backpressureHistory[6] > 3, true);
+      assert.equal(backpressureHistory[9] > 7, true);
+      assert.equal(backpressureHistory[15], 1);
+      assert.equal(backpressureHistory[20], 1);
+    });
+  });
+
   describe('Socket pub/sub', function () {
     it('Should maintain order of publish and subscribe', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {

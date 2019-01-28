@@ -35,6 +35,9 @@ function AGServerSocket(id, server, socket, protocolVersion) {
 
   this.request = this.socket.upgradeReq;
 
+  this.inboundReceivedMessageCount = 0;
+  this.inboundProcessedMessageCount = 0;
+
   this._rawInboundMessageStream = new WritableAsyncIterableStream();
 
   this.middlewareInboundRawStream = new WritableAsyncIterableStream();
@@ -109,6 +112,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
 
   // Receive incoming raw messages
   this.socket.on('message', async (message, flags) => {
+    this.inboundReceivedMessageCount++;
+
     let isPong = message === pongMessage;
 
     if (isPong) {
@@ -125,7 +130,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
         let {data} = await this.server._processMiddlewareAction(this.middlewareInboundRawStream, action, this);
         message = data;
       } catch (error) {
-
+        this.inboundProcessedMessageCount++;
         return;
       }
     }
@@ -147,8 +152,15 @@ AGServerSocket.UNAUTHENTICATED = AGServerSocket.prototype.UNAUTHENTICATED = 'una
 AGServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 AGServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
+Object.defineProperty(AGServerSocket.prototype, 'inboundBackpressure', {
+  get: function () {
+    return this.inboundReceivedMessageCount - this.inboundProcessedMessageCount;
+  }
+});
+
 AGServerSocket.prototype._handleRawInboundMessageStream = async function (messageStream, pongMessage) {
   for await (let message of messageStream) {
+    this.inboundProcessedMessageCount++;
     let isPong = message === pongMessage;
 
     if (isPong) {
@@ -815,6 +827,7 @@ AGServerSocket.prototype.sendObjectSingle = function (object) {
   }
 };
 
+// TODO 2: Refactor batch functionality.
 AGServerSocket.prototype.sendObject = function (object, options) {
   if (options && options.batch) {
     this.sendObjectBatch(object);
@@ -823,6 +836,7 @@ AGServerSocket.prototype.sendObject = function (object, options) {
   }
 };
 
+// TODO 2: Refactor transmit and invoke using a stream and calculate outboundBackpressure.
 AGServerSocket.prototype.transmit = async function (event, data, options) {
   let newData;
   let useCache = options ? options.useCache : false;

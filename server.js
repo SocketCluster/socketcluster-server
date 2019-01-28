@@ -59,8 +59,7 @@ function AGServer(options) {
   this.brokerEngine = opts.brokerEngine;
   this.middlewareEmitFailures = opts.middlewareEmitFailures;
 
-  // Make sure there is always a leading and a trailing slash in the WS path.
-  this._path = opts.path.replace(/\/?$/, '/').replace(/^\/?/, '/');
+  this._path = opts.path;
 
   (async () => {
     for await (let {error} of this.brokerEngine.listener('error')) {

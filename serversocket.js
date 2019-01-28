@@ -16,7 +16,9 @@ const AuthTokenExpiredError = scErrors.AuthTokenExpiredError;
 const AuthTokenInvalidError = scErrors.AuthTokenInvalidError;
 const AuthTokenNotBeforeError = scErrors.AuthTokenNotBeforeError;
 const AuthTokenError = scErrors.AuthTokenError;
-const SilentMiddlewareBlockedError = scErrors.SilentMiddlewareBlockedError;
+const BrokerError = scErrors.BrokerError;
+
+const HANDSHAKE_REJECTION_STATUS_CODE = 4008;
 
 function AGServerSocket(id, server, socket, protocolVersion) {
   AsyncStreamEmitter.call(this);
@@ -33,14 +35,16 @@ function AGServerSocket(id, server, socket, protocolVersion) {
 
   this.request = this.socket.upgradeReq;
 
-  this._middlewareInboundRawStream = new WritableAsyncIterableStream();
-  this._middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
+  this._rawInboundMessageStream = new WritableAsyncIterableStream();
 
-  this._middlewareInboundStream = new WritableAsyncIterableStream();
-  this._middlewareInboundStream.type = this.server.MIDDLEWARE_INBOUND;
+  this.middlewareInboundRawStream = new WritableAsyncIterableStream();
+  this.middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
 
-  this._middlewareOutboundStream = new WritableAsyncIterableStream();
-  this._middlewareOutboundStream.type = this.server.MIDDLEWARE_OUTBOUND;
+  this.middlewareInboundStream = new WritableAsyncIterableStream();
+  this.middlewareInboundStream.type = this.server.MIDDLEWARE_INBOUND;
+
+  this.middlewareOutboundStream = new WritableAsyncIterableStream();
+  this.middlewareOutboundStream.type = this.server.MIDDLEWARE_OUTBOUND;
 
   if (this.request.connection) {
     this.remoteAddress = this.request.connection.remoteAddress;
@@ -88,9 +92,20 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   }
 
   if (!this.server.pingTimeoutDisabled) {
-    this._pingIntervalTicker = setInterval(this._sendPing.bind(this), this.server.pingInterval);
+    this._pingIntervalTicker = setInterval(() => {
+      this._sendPing();
+    }, this.server.pingInterval);
   }
   this._resetPongTimeout();
+
+  this._handshakeTimeoutRef = setTimeout(() => {
+    this._handleHandshakeTimeout();
+  }, this.server.handshakeTimeout);
+
+  this.server.pendingClients[this.id] = this;
+  this.server.pendingClientsCount++;
+
+  this._handleRawInboundMessageStream(this._rawInboundMessageStream, pongMessage);
 
   // Receive incoming raw messages
   this.socket.on('message', async (message, flags) => {
@@ -107,7 +122,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
       action.data = message;
 
       try {
-        let {data} = await this.server._processMiddlewareAction(this._middlewareInboundRawStream, action, this);
+        let {data} = await this.server._processMiddlewareAction(this.middlewareInboundRawStream, action, this);
         message = data;
       } catch (error) {
 
@@ -115,35 +130,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
       }
     }
 
+    this._rawInboundMessageStream.write(message);
     this.emit('message', {message});
-
-    if (isPong) {
-      let token = this.getAuthToken();
-      if (this.isAuthTokenExpired(token)) {
-        this.deauthenticate();
-      }
-      return;
-    }
-
-    let packet;
-    try {
-      packet = this.decode(message);
-    } catch (err) {
-      if (err.name === 'Error') {
-        err.name = 'InvalidMessageError';
-      }
-      this.emitError(err);
-      return;
-    }
-
-    if (Array.isArray(packet)) {
-      let len = packet.length;
-      for (let i = 0; i < len; i++) {
-        this._processInboundPacket(packet[i], message);
-      }
-    } else {
-      this._processInboundPacket(packet, message);
-    }
   });
 }
 
@@ -158,6 +146,40 @@ AGServerSocket.UNAUTHENTICATED = AGServerSocket.prototype.UNAUTHENTICATED = 'una
 
 AGServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 AGServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
+
+AGServerSocket.prototype._handleRawInboundMessageStream = async function (messageStream, pongMessage) {
+  for await (let message of messageStream) {
+    let isPong = message === pongMessage;
+
+    if (isPong) {
+      let token = this.getAuthToken();
+      if (this.isAuthTokenExpired(token)) {
+        this.deauthenticate();
+      }
+      continue;
+    }
+
+    let packet;
+    try {
+      packet = this.decode(message);
+    } catch (err) {
+      if (err.name === 'Error') {
+        err.name = 'InvalidMessageError';
+      }
+      this.emitError(err);
+      continue;
+    }
+
+    if (Array.isArray(packet)) {
+      let len = packet.length;
+      for (let i = 0; i < len; i++) {
+        await this._processInboundPacket(packet[i], message);
+      }
+    } else {
+      await this._processInboundPacket(packet, message);
+    }
+  }
+};
 
 AGServerSocket.prototype.receiver = function (receiverName) {
   return this._receiverDemux.stream(receiverName);
@@ -175,18 +197,276 @@ AGServerSocket.prototype.closeProcedure = function (procedureName) {
   this._procedureDemux.close(procedureName);
 };
 
-AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {
-  if (typeof packet.channel !== 'string') {
-    let error = new InvalidActionError(`Socket ${this.id} tried to publish to an invalid "${publishPacket.channel}" channel`);
+AGServerSocket.prototype._handleHandshakeTimeout = function () {
+  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+  this.disconnect(4005);
+};
+
+AGServerSocket.prototype._processHandshakeRequest = async function (request) {
+  let data = request.data || {};
+  let signedAuthToken = data.authToken || null;
+  clearTimeout(this._handshakeTimeoutRef);
+
+  let action = new AGAction();
+  action.request = this.request;
+  action.socket = this;
+  action.type = AGAction.HANDSHAKE_AG;
+
+  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+
+  try {
+    await this.server._processMiddlewareAction(middlewareHandshakeStream, action);
+  } catch (error) {
+    if (error.statusCode == null) {
+      error.statusCode = HANDSHAKE_REJECTION_STATUS_CODE;
+    }
+    request.error(error);
+    this.disconnect(error.statusCode);
+    return;
+  }
+
+  let clientSocketStatus = {
+    id: this.id,
+    pingTimeout: this.server.pingTimeout
+  };
+  let serverSocketStatus = {
+    id: this.id,
+    pingTimeout: this.server.pingTimeout
+  };
+
+  let oldAuthState = this.authState;
+  try {
+    await this._processAuthToken(signedAuthToken);
+    if (this.state === this.CLOSED) {
+      return;
+    }
+  } catch (error) {
+    if (signedAuthToken != null) {
+      // Because the token is optional as part of the handshake, we don't count
+      // it as an error if the token wasn't provided.
+      clientSocketStatus.authError = scErrors.dehydrateError(error);
+      serverSocketStatus.authError = error;
+
+      if (error.isBadToken) {
+        this.deauthenticate();
+      }
+    }
+  }
+  clientSocketStatus.isAuthenticated = !!this.authToken;
+  serverSocketStatus.isAuthenticated = clientSocketStatus.isAuthenticated;
+
+  if (this.server.pendingClients[this.id]) {
+    delete this.server.pendingClients[this.id];
+    this.server.pendingClientsCount--;
+  }
+  this.server.clients[this.id] = this;
+  this.server.clientsCount++;
+
+  this.state = this.OPEN;
+
+  if (clientSocketStatus.isAuthenticated) {
+    // Needs to be executed after the connection event to allow
+    // consumers to be setup from inside the connection loop.
+    (async () => {
+      await this.listener('connect').once();
+      this.triggerAuthenticationEvents(oldAuthState);
+    })();
+  }
+
+  this.emit('connect', serverSocketStatus);
+  this.server.emit('connection', {socket: this, ...serverSocketStatus});
+
+  // Treat authentication failure as a 'soft' error
+  request.end(clientSocketStatus);
+
+  middlewareHandshakeStream.close();
+};
+
+AGServerSocket.prototype._processAuthenticateRequest = async function (request) {
+  let signedAuthToken = request.data;
+  let oldAuthState = this.authState;
+  try {
+    await this._processAuthToken(signedAuthToken);
+  } catch (error) {
+    if (error.isBadToken) {
+      this.deauthenticate();
+      request.error(error);
+
+      return;
+    }
+
+    request.end({
+      isAuthenticated: !!this.authToken,
+      authError: signedAuthToken == null ? null : scErrors.dehydrateError(error)
+    });
+
+    return;
+  }
+  this.triggerAuthenticationEvents(oldAuthState);
+  request.end({
+    isAuthenticated: !!this.authToken,
+    authError: null
+  });
+};
+
+AGServerSocket.prototype._subscribeSocket = async function (channelName, subscriptionOptions) {
+  if (channelName === undefined || !subscriptionOptions) {
+    throw new InvalidActionError(`Socket ${this.id} provided a malformated channel payload`);
+  }
+
+  if (this.server.socketChannelLimit && this.channelSubscriptionsCount >= this.server.socketChannelLimit) {
+    throw new InvalidActionError(
+      `Socket ${this.id} tried to exceed the channel subscription limit of ${this.server.socketChannelLimit}`
+    );
+  }
+
+  if (typeof channelName !== 'string') {
+    throw new InvalidActionError(`Socket ${this.id} provided an invalid channel name`);
+  }
+
+  if (this.channelSubscriptionsCount == null) {
+    this.channelSubscriptionsCount = 0;
+  }
+  if (this.channelSubscriptions[channelName] == null) {
+    this.channelSubscriptions[channelName] = true;
+    this.channelSubscriptionsCount++;
+  }
+
+  try {
+    await this.server.brokerEngine.subscribeSocket(this, channelName);
+  } catch (err) {
+    delete this.channelSubscriptions[channelName];
+    this.channelSubscriptionsCount--;
+    throw err;
+  }
+  this.emit('subscribe', {
+    channel: channelName,
+    subscriptionOptions
+  });
+  this.server.emit('subscription', {
+    socket: this,
+    channel: channelName,
+    subscriptionOptions
+  });
+};
+
+AGServerSocket.prototype._processSubscribeRequest = async function (request) {
+  let subscriptionOptions = Object.assign({}, request.data);
+  let channelName = subscriptionOptions.channel;
+  delete subscriptionOptions.channel;
+
+  if (this.state === this.OPEN) {
+    try {
+      await this._subscribeSocket(channelName, subscriptionOptions);
+    } catch (err) {
+      let error = new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`);
+      this.emitError(error);
+      request.error(error);
+
+      return;
+    }
+    if (subscriptionOptions.batch) {
+      request.end(undefined, {batch: true});
+
+      return;
+    }
+    request.end();
+
+    return;
+  }
+  // This is an invalid state; it means the client tried to subscribe before
+  // having completed the handshake.
+  let error = new InvalidActionError('Cannot subscribe socket to a channel before it has completed the handshake');
+  this.emitError(error);
+  request.error(error);
+};
+
+AGServerSocket.prototype._unsubscribeFromAllChannels = function () {
+  Object.keys(this.channelSubscriptions).forEach((channelName) => {
+    this._unsubscribe(channelName);
+  });
+};
+
+AGServerSocket.prototype._unsubscribe = function (channel) {
+  if (typeof channel !== 'string') {
+    throw new InvalidActionError(
+      `Socket ${this.id} tried to unsubscribe from an invalid channel name`
+    );
+  }
+  if (!this.channelSubscriptions[channel]) {
+    throw new InvalidActionError(
+      `Socket ${this.id} tried to unsubscribe from a channel which it is not subscribed to`
+    );
+  }
+
+  delete this.channelSubscriptions[channel];
+  if (this.channelSubscriptionsCount != null) {
+    this.channelSubscriptionsCount--;
+  }
+
+  this.server.brokerEngine.unsubscribeSocket(this, channel);
+
+  this.emit('unsubscribe', {channel});
+  this.server.emit('unsubscription', {socket: this, channel});
+};
+
+AGServerSocket.prototype._processUnsubscribePacket = async function (packet) {
+  let channel = packet.data;
+  try {
+    this._unsubscribe(channel);
+  } catch (err) {
+    let error = new BrokerError(
+      `Failed to unsubscribe socket from the ${channel} channel - ${err}`
+    );
     this.emitError(error);
-    throw error;
+  }
+};
+
+AGServerSocket.prototype._processUnsubscribeRequest = async function (request) {
+  let channel = request.data;
+  try {
+    this._unsubscribe(channel);
+  } catch (err) {
+    let error = new BrokerError(
+      `Failed to unsubscribe socket from the ${channel} channel - ${err}`
+    );
+    this.emitError(error);
+    request.error(error);
+    return;
+  }
+  request.end();
+};
+
+AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {
+  let data = packet.data || {};
+  if (typeof data.channel !== 'string') {
+    let error = new InvalidActionError(`Socket ${this.id} tried to invoke publish to an invalid "${data.channel}" channel`);
+    this.emitError(error);
+    return;
   }
   try {
-    await this.server.exchange.invokePublish(packet.channel, packet.data);
+    await this.server.exchange.invokePublish(data.channel, data.data);
   } catch (error) {
     this.emitError(error);
-    throw error;
   }
+};
+
+AGServerSocket.prototype._processInboundPublishRequest = async function (request) {
+  let data = request.data || {};
+  if (typeof data.channel !== 'string') {
+    let error = new InvalidActionError(`Socket ${this.id} tried to transmit publish to an invalid "${data.channel}" channel`);
+    this.emitError(error);
+    request.error(error);
+    return;
+  }
+  try {
+    await this.server.exchange.invokePublish(data.channel, data.data);
+  } catch (error) {
+    this.emitError(error);
+    request.error(error);
+    return;
+  }
+  request.end();
 };
 
 AGServerSocket.prototype._processInboundPacket = async function (packet, message) {
@@ -194,19 +474,27 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     let eventName = packet.event;
     let isRPC = packet.cid != null;
 
-    if (eventName === '#handshake' || eventName === '#authenticate') {
+    if (eventName === '#handshake') {
+      let request = new AGRequest(this, packet.cid, eventName, packet.data);
+      await this._processHandshakeRequest(request);
+      this._procedureDemux.write(eventName, request);
+
+      return;
+    }
+    if (eventName === '#authenticate') {
       // Let AGServer handle these events.
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
+      await this._processAuthenticateRequest(request);
       this._procedureDemux.write(eventName, request);
 
       return;
     }
     if (eventName === '#removeAuthToken') {
+      this.deauthenticateSelf();
       this._receiverDemux.write(eventName, packet.data);
 
       return;
     }
-
 
     let action = new AGAction();
     action.socket = this;
@@ -218,6 +506,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
 
     let isPublish = eventName === '#publish';
     let isSubscribe = eventName === '#subscribe';
+    let isUnsubscribe = eventName === '#unsubscribe';
 
     if (isPublish) {
       if (!this.server.allowClientPublish) {
@@ -241,11 +530,15 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         action.channel = packet.data.channel;
         action.data = packet.data.data;
       }
-    } else if (eventName === '#unsubscribe') {
-      // Let AGServer handle this event.
-      let request = new AGRequest(this, packet.cid, eventName, packet.data);
-      this._procedureDemux.write(eventName, request);
-
+    } else if (isUnsubscribe) {
+      if (isRPC) {
+        let request = new AGRequest(this, packet.cid, eventName, packet.data);
+        await this._processUnsubscribeRequest(request);
+        this._procedureDemux.write(eventName, request);
+        return;
+      }
+      await this._processUnsubscribePacket(packet);
+      this._receiverDemux.write(eventName, packet.data);
       return;
     } else {
       if (isRPC) {
@@ -268,7 +561,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     if (isRPC) {
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
       try {
-        let {data} = await this.server._processMiddlewareAction(this._middlewareInboundStream, action, this);
+        let {data} = await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
         newData = data;
       } catch (error) {
         request.error(error);
@@ -281,18 +574,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
           request.data = {};
         }
         request.data.data = newData;
+        await this._processSubscribeRequest(request);
       } else if (isPublish) {
         if (!request.data) {
           request.data = {};
         }
         request.data.data = newData;
-        try {
-          await this._processInboundPublishPacket(request.data || {});
-        } catch (error) {
-          request.error(error);
-          return;
-        }
-        request.end();
+        await this._processInboundPublishRequest(request);
       } else {
         request.data = newData;
       }
@@ -303,7 +591,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
     try {
-      let {data} = await this.server._processMiddlewareAction(this._middlewareInboundStream, action, this);
+      let {data} = await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
       newData = data;
     } catch (error) {
 
@@ -311,11 +599,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
     if (isPublish) {
-      try {
-        await this._processInboundPublishPacket(packet.data || {});
-      } catch (error) {
-        return;
-      }
+      await this._processInboundPublishPacket(packet);
     }
 
     this._receiverDemux.write(eventName, newData);
@@ -396,11 +680,48 @@ AGServerSocket.prototype._onClose = function (code, reason) {
     if (prevState === this.CONNECTING) {
       this._abortAllPendingEventsDueToBadConnection('connectAbort');
       this.emit('connectAbort', {code, reason});
+      this.server.emit('connectionAbort', {
+        socket: this,
+        code,
+        reason
+      });
     } else {
       this._abortAllPendingEventsDueToBadConnection('disconnect');
       this.emit('disconnect', {code, reason});
+      this.server.emit('disconnection', {
+        socket: this,
+        code,
+        reason
+      });
     }
     this.emit('close', {code, reason});
+    this.server.emit('closure', {
+      socket: this,
+      code,
+      reason
+    });
+    this._unsubscribeFromAllChannels();
+
+    clearTimeout(this._handshakeTimeoutRef);
+    let isClientFullyConnected = !!this.server.clients[this.id];
+
+    if (isClientFullyConnected) {
+      delete this.server.clients[this.id];
+      this.server.clientsCount--;
+    }
+
+    let isClientPending = !!this.server.pendingClients[this.id];
+    if (isClientPending) {
+      delete this.server.pendingClients[this.id];
+      this.server.pendingClientsCount--;
+    }
+
+    let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+    middlewareHandshakeStream.close();
+    this.middlewareInboundRawStream.close();
+    this.middlewareInboundStream.close();
+    this.middlewareOutboundStream.close();
+    this._rawInboundMessageStream.close();
 
     if (!AGServerSocket.ignoreStatuses[code]) {
       let closeMessage;
@@ -516,10 +837,10 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
       action.channel = data.channel;
       action.data = data.data;
     }
-    useCache = !this.server.hasMiddleware(this._middlewareOutboundStream.type);
+    useCache = !this.server.hasMiddleware(this.middlewareOutboundStream.type);
 
     try {
-      let {data, options} = await this.server._processMiddlewareAction(this._middlewareOutboundStream, action, this);
+      let {data, options} = await this.server._processMiddlewareAction(this.middlewareOutboundStream, action, this);
       newData = data;
       useCache = options == null ? useCache : options.useCache;
     } catch (error) {
@@ -835,7 +1156,7 @@ AGServerSocket.prototype._processAuthToken = async function (signedAuthToken) {
   action.authToken = this.authToken;
 
   try {
-    await this.server._processMiddlewareAction(this._middlewareInboundStream, action, this);
+    await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
   } catch (error) {
     this.authToken = null;
     this.authState = this.UNAUTHENTICATED;

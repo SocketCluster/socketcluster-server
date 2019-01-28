@@ -1324,6 +1324,81 @@ describe('Integration tests', function () {
   });
 
   describe('Socket pub/sub', function () {
+    it('Should maintain order of publish and subscribe', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await client.listener('connect').once();
+
+      let receivedMessages = [];
+
+      (async () => {
+        for await (let data of client.subscribe('foo')) {
+          receivedMessages.push(data);
+        }
+      })();
+
+      await client.invokePublish('foo', 123);
+
+      assert.equal(client.state, client.OPEN);
+      await wait(100);
+      assert.equal(receivedMessages.length, 1);
+    });
+
+    it('Should maintain order of publish and subscribe when client starts out as disconnected', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        autoConnect: false
+      });
+
+      assert.equal(client.state, client.CLOSED);
+
+      let receivedMessages = [];
+
+      (async () => {
+        for await (let data of client.subscribe('foo')) {
+          receivedMessages.push(data);
+        }
+      })();
+
+      client.invokePublish('foo', 123);
+
+      await wait(100);
+      assert.equal(client.state, client.OPEN);
+      assert.equal(receivedMessages.length, 1);
+    });
+
     it('Should support subscription batching', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
@@ -2043,9 +2118,6 @@ describe('Integration tests', function () {
   });
 
   describe('Middleware', function () {
-    let middlewareFunction;
-    let middlewareWasExecuted = false;
-
     beforeEach('Launch server without middleware before start', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
@@ -2064,7 +2136,7 @@ describe('Integration tests', function () {
           let clientErrors = [];
           let abortStatus;
 
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
               if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
@@ -2117,7 +2189,7 @@ describe('Integration tests', function () {
           let abortStatus;
           let abortReason;
 
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
               if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
@@ -2154,7 +2226,7 @@ describe('Integration tests', function () {
           let abortStatus;
           let abortReason;
 
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
               if (type === AGAction.HANDSHAKE_AG) {
                 await wait(100);
@@ -2196,7 +2268,7 @@ describe('Integration tests', function () {
           let abortStatus;
           let abortReason;
 
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
               if (type === AGAction.HANDSHAKE_AG) {
                 await wait(500);
@@ -2228,7 +2300,8 @@ describe('Integration tests', function () {
     describe('MIDDLEWARE_INBOUND', function () {
       describe('AUTHENTICATE action', function () {
         it('Should not run AUTHENTICATE action in middleware if JWT token does not exist', async function () {
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareWasExecuted = false;
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
               if (type === AGAction.AUTHENTICATE) {
                 middlewareWasExecuted = true;
@@ -2249,8 +2322,9 @@ describe('Integration tests', function () {
 
         it('Should run AUTHENTICATE action in middleware if JWT token exists', async function () {
           global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+          let middlewareWasExecuted = false;
 
-          middlewareFunction = async function (middlewareStream) {
+          let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
               if (type === AGAction.AUTHENTICATE) {
                 middlewareWasExecuted = true;
@@ -2273,6 +2347,185 @@ describe('Integration tests', function () {
 
           await client.listener('authenticate').once();
           assert.equal(middlewareWasExecuted, true);
+        });
+      });
+
+      describe('PUBLISH_IN action', function () {
+        it('Should run PUBLISH_IN action in middleware if client publishes to a channel', async function () {
+          let middlewareWasExecuted = false;
+          let middlewareAction = null;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_IN) {
+                middlewareWasExecuted = true;
+                middlewareAction = action;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          await client.invokePublish('hello', 'world');
+
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(middlewareAction, null);
+          assert.equal(middlewareAction.channel, 'hello');
+          assert.equal(middlewareAction.data, 'world');
+        });
+
+        it('Should be able to delay and block publish using PUBLISH_IN middleware', async function () {
+          let middlewareWasExecuted = false;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_IN) {
+                middlewareWasExecuted = true;
+                let error = new Error('Blocked by middleware');
+                error.name = 'BlockedError';
+                await wait(50);
+                action.block(error);
+                continue;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let helloChannel = client.subscribe('hello');
+          await helloChannel.listener('subscribe').once();
+
+          let receivedMessages = [];
+          (async () => {
+            for await (let data of helloChannel) {
+              receivedMessages.push(data);
+            }
+          })();
+
+          let error;
+          try {
+            await client.invokePublish('hello', 'world');
+          } catch (err) {
+            error = err;
+          }
+          await wait(100);
+
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'BlockedError');
+          assert.equal(receivedMessages.length, 0);
+        });
+      });
+
+      describe('SUBSCRIBE action', function () {
+        it('Should run SUBSCRIBE action in middleware if client subscribes to a channel', async function () {
+          let middlewareWasExecuted = false;
+          let middlewareAction = null;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.SUBSCRIBE) {
+                middlewareWasExecuted = true;
+                middlewareAction = action;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          await client.subscribe('hello').listener('subscribe').once();
+
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(middlewareAction, null);
+          assert.equal(middlewareAction.channel, 'hello');
+        });
+
+        it('Should maintain pub/sub order if SUBSCRIBE action is delayed in middleware even if client starts out in disconnected state', async function () {
+          let middlewareActions = [];
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              middlewareActions.push(action);
+              if (action.type === AGAction.SUBSCRIBE) {
+                await wait(100);
+                action.allow();
+                continue;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER,
+            autoConnect: false
+          });
+
+          let receivedMessage;
+
+          let fooChannel = client.subscribe('foo');
+          client.transmitPublish('foo', 'bar');
+
+          for await (let data of fooChannel) {
+            receivedMessage = data;
+            break;
+          }
+
+          assert.equal(receivedMessage, 'bar');
+          assert.equal(middlewareActions.length, 2);
+          assert.equal(middlewareActions[0].type, AGAction.SUBSCRIBE);
+          assert.equal(middlewareActions[0].channel, 'foo');
+          assert.equal(middlewareActions[1].type, AGAction.PUBLISH_IN);
+          assert.equal(middlewareActions[1].channel, 'foo');
+        });
+      });
+    });
+
+    describe('MIDDLEWARE_OUTBOUND', function () {
+      describe('PUBLISH_OUT action', function () {
+        it('Should run PUBLISH_OUT action in middleware if client publishes to a channel', async function () {
+          let middlewareWasExecuted = false;
+          let middlewareAction = null;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_OUT) {
+                middlewareWasExecuted = true;
+                middlewareAction = action;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_OUTBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          await client.subscribe('hello').listener('subscribe').once();
+          await client.invokePublish('hello', 123);
+
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(middlewareAction, null);
+          assert.equal(middlewareAction.channel, 'hello');
+          assert.equal(middlewareAction.data, 123);
         });
       });
     });

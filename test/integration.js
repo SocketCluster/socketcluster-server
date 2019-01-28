@@ -2129,6 +2129,59 @@ describe('Integration tests', function () {
     });
 
     describe('MIDDLEWARE_HANDSHAKE', function () {
+      describe('HANDSHAKE_WS action', function () {
+        it('Delaying handshake for one client should not affect other clients', async function () {
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.HANDSHAKE_WS) {
+                if (action.request.url.indexOf('?delayMe=true') !== -1) {
+                  // Long delay.
+                  await wait(5000);
+                  action.allow();
+                  continue;
+                }
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
+
+          let clientA = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let clientB = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER,
+            query: {
+              delayMe: true
+            }
+          });
+
+          let clientAIsConnected = false;
+          let clientBIsConnected = false;
+
+          (async () => {
+            await clientA.listener('connect').once();
+            clientAIsConnected = true;
+          })();
+
+          (async () => {
+            await clientB.listener('connect').once();
+            clientBIsConnected = true;
+          })();
+
+          await wait(100);
+
+          assert.equal(clientAIsConnected, true);
+          assert.equal(clientBIsConnected, false);
+
+          clientA.disconnect();
+          clientB.disconnect();
+        });
+      });
+
       describe('HANDSHAKE_AG action', function () {
         it('Should trigger correct events if MIDDLEWARE_HANDSHAKE blocks with an error', async function () {
           let middlewareWasExecuted = false;
@@ -2294,6 +2347,57 @@ describe('Integration tests', function () {
           connectEventTime = Date.now();
           assert.equal(connectEventTime - createConnectionTime > 400, true);
         });
+
+        it('Delaying handshake for one client should not affect other clients', async function () {
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.HANDSHAKE_AG) {
+                if (action.socket.request.url.indexOf('?delayMe=true') !== -1) {
+                  // Long delay.
+                  await wait(5000);
+                  action.allow();
+                  continue;
+                }
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
+
+          let clientA = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let clientB = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER,
+            query: {
+              delayMe: true
+            }
+          });
+
+          let clientAIsConnected = false;
+          let clientBIsConnected = false;
+
+          (async () => {
+            await clientA.listener('connect').once();
+            clientAIsConnected = true;
+          })();
+
+          (async () => {
+            await clientB.listener('connect').once();
+            clientBIsConnected = true;
+          })();
+
+          await wait(100);
+
+          assert.equal(clientAIsConnected, true);
+          assert.equal(clientBIsConnected, false);
+
+          clientA.disconnect();
+          clientB.disconnect();
+        });
       });
     });
 
@@ -2424,6 +2528,66 @@ describe('Integration tests', function () {
           assert.notEqual(error, null);
           assert.equal(error.name, 'BlockedError');
           assert.equal(receivedMessages.length, 0);
+        });
+
+        it('Delaying PUBLISH_IN action for one client should not affect other clients', async function () {
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_IN) {
+                if (action.socket.request.url.indexOf('?delayMe=true') !== -1) {
+                  // Long delay.
+                  await wait(5000);
+                  action.allow();
+                  continue;
+                }
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          let clientA = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let clientB = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER,
+            query: {
+              delayMe: true
+            }
+          });
+
+          let clientC = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          await clientC.listener('connect').once();
+
+          let receivedMessages = [];
+          (async () => {
+            for await (let data of clientC.subscribe('foo')) {
+              receivedMessages.push(data);
+            }
+          })();
+
+          clientA.transmitPublish('foo', 'a1');
+          clientA.transmitPublish('foo', 'a2');
+
+          clientB.transmitPublish('foo', 'b1');
+          clientB.transmitPublish('foo', 'b2');
+
+          await wait(100);
+
+          assert.equal(receivedMessages.length, 2);
+          assert.equal(receivedMessages[0], 'a1');
+          assert.equal(receivedMessages[1], 'a2');
+
+          clientA.disconnect();
+          clientB.disconnect();
+          clientC.disconnect();
         });
       });
 

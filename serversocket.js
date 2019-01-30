@@ -62,9 +62,16 @@ function AGServerSocket(id, server, socket, protocolVersion) {
     this.forwardedForAddress = this.request.forwardedForAddress;
   }
 
+  this.isBufferingBatch = false;
+  this.isBatching = false;
+  this.batchOnHandshake = this.server.options.batchOnHandshake;
+  this.batchOnHandshakeDuration = this.server.options.batchOnHandshakeDuration;
+  this.batchInterval = this.server.options.batchInterval;
+  this._batchBuffer = [];
+
+  this._batchingIntervalId = null;
   this._cid = 1;
   this._callbackMap = {};
-  this._batchSendList = [];
 
   this.channelSubscriptions = {};
   this.channelSubscriptionsCount = 0;
@@ -157,6 +164,15 @@ Object.defineProperty(AGServerSocket.prototype, 'inboundBackpressure', {
     return this.inboundReceivedMessageCount - this.inboundProcessedMessageCount;
   }
 });
+
+AGServerSocket.prototype._startBatchOnHandshake = function () {
+  this._startBatching();
+  setTimeout(() => {
+    if (!this.isBatching) {
+      this._stopBatching();
+    }
+  }, this.batchOnHandshakeDuration);
+};
 
 AGServerSocket.prototype._handleRawInboundMessageStream = async function (messageStream, pongMessage) {
   for await (let message of messageStream) {
@@ -285,11 +301,15 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
     })();
   }
 
-  this.emit('connect', serverSocketStatus);
-  this.server.emit('connection', {socket: this, ...serverSocketStatus});
-
   // Treat authentication failure as a 'soft' error
   request.end(clientSocketStatus);
+
+  if (this.batchOnHandshake) {
+    this._startBatchOnHandshake();
+  }
+
+  this.emit('connect', serverSocketStatus);
+  this.server.emit('connection', {socket: this, ...serverSocketStatus});
 
   middlewareHandshakeStream.close();
 };
@@ -377,11 +397,7 @@ AGServerSocket.prototype._processSubscribeRequest = async function (request) {
 
       return;
     }
-    if (subscriptionOptions.batch) {
-      request.end(undefined, {batch: true});
 
-      return;
-    }
     request.end();
 
     return;
@@ -684,6 +700,8 @@ AGServerSocket.prototype._onClose = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
+  this._cancelBatching();
+
   if (this.state === this.CLOSED) {
     this._abortAllPendingEventsDueToBadConnection('connectAbort');
   } else {
@@ -792,47 +810,87 @@ AGServerSocket.prototype.encode = function (object) {
   return this.server.codec.encode(object);
 };
 
-AGServerSocket.prototype.sendObjectBatch = function (object) {
-  this._batchSendList.push(object);
-  if (this._batchTimeout) {
-    return;
-  }
-
-  this._batchTimeout = setTimeout(() => {
-    delete this._batchTimeout;
-    if (this._batchSendList.length) {
-      let str;
-      try {
-        str = this.encode(this._batchSendList);
-      } catch (err) {
-        this.emitError(err);
-      }
-      if (str != null) {
-        this.send(str);
-      }
-      this._batchSendList = [];
-    }
-  }, this.server.options.pubSubBatchDuration || 0);
+AGServerSocket.prototype.startBatch = function () {
+  this.isBufferingBatch = true;
+  this._batchBuffer = [];
 };
 
-AGServerSocket.prototype.sendObjectSingle = function (object) {
+AGServerSocket.prototype.flushBatch = function () {
+  this.isBufferingBatch = false;
+  if (!this._batchBuffer.length) {
+    return;
+  }
+  let serializedBatch = this.serializeObject(this._batchBuffer);
+  this._batchBuffer = [];
+  this.send(serializedBatch);
+};
+
+AGServerSocket.prototype.cancelBatch = function () {
+  this.isBufferingBatch = false;
+  this._batchBuffer = [];
+};
+
+AGServerSocket.prototype._startBatching = function () {
+  if (this._batchingIntervalId != null) {
+    return;
+  }
+  this.startBatch();
+  this._batchingIntervalId = setInterval(() => {
+    this.flushBatch();
+    this.startBatch();
+  }, this.batchInterval);
+};
+
+AGServerSocket.prototype.startBatching = function () {
+  this.isBatching = true;
+  this._startBatching();
+};
+
+AGServerSocket.prototype._stopBatching = function () {
+  if (this._batchingIntervalId != null) {
+    clearInterval(this._batchingIntervalId);
+  }
+  this._batchingIntervalId = null;
+  this.flushBatch();
+};
+
+AGServerSocket.prototype.stopBatching = function () {
+  this.isBatching = false;
+  this._stopBatching();
+};
+
+AGServerSocket.prototype._cancelBatching = function () {
+  if (this._batchingIntervalId != null) {
+    clearInterval(this._batchingIntervalId);
+  }
+  this._batchingIntervalId = null;
+  this.cancelBatch();
+};
+
+AGServerSocket.prototype.cancelBatching = function () {
+  this.isBatching = false;
+  this._cancelBatching();
+};
+
+AGServerSocket.prototype.serializeObject = function (object) {
   let str;
   try {
     str = this.encode(object);
   } catch (err) {
     this.emitError(err);
+    return null;
   }
-  if (str != null) {
-    this.send(str);
-  }
+  return str;
 };
 
-// TODO 2: Refactor batch functionality.
-AGServerSocket.prototype.sendObject = function (object, options) {
-  if (options && options.batch) {
-    this.sendObjectBatch(object);
-  } else {
-    this.sendObjectSingle(object);
+AGServerSocket.prototype.sendObject = function (object) {
+  if (this.isBufferingBatch) {
+    this._batchBuffer.push(object);
+    return;
+  }
+  let str = this.serializeObject(object);
+  if (str != null) {
+    this.send(str);
   }
 };
 

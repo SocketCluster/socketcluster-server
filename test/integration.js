@@ -1471,100 +1471,6 @@ describe('Integration tests', function () {
       assert.equal(receivedMessages.length, 1);
     });
 
-    it('Should support subscription batching', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
-        authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
-      });
-      bindFailureHandlers(server);
-
-      (async () => {
-        for await (let {socket} of server.listener('connection')) {
-          connectionHandler(socket);
-          let isFirstMessage = true;
-
-          (async () => {
-            for await (let {message} of socket.listener('message')) {
-              if (isFirstMessage) {
-                let data = JSON.parse(message);
-                // All 20 subscriptions should arrive as a single message.
-                assert.equal(data.length, 20);
-                isFirstMessage = false;
-              }
-            }
-          })();
-        }
-      })();
-
-      let subscribeMiddlewareCounter = 0;
-
-      // Each subscription should pass through the middleware individually, even
-      // though they were sent as a batch/array.
-      server.setMiddleware(server.MIDDLEWARE_INBOUND, async function (middlewareStream) {
-        for await (let action of middlewareStream) {
-          if (action.type === AGAction.SUBSCRIBE) {
-            subscribeMiddlewareCounter++;
-            assert.equal(action.channel.indexOf('my-channel-'), 0);
-            if (action.channel === 'my-channel-10') {
-              assert.equal(JSON.stringify(action.data), JSON.stringify({foo: 123}));
-            } else if (action.channel === 'my-channel-12') {
-              // Block my-channel-12
-              let err = new Error('You cannot subscribe to channel 12');
-              err.name = 'UnauthorizedSubscribeError';
-              action.block(err);
-              continue;
-            }
-          }
-          action.allow();
-        }
-      });
-
-      await server.listener('ready').once();
-
-      client = asyngularClient.create({
-        hostname: clientOptions.hostname,
-        port: PORT_NUMBER
-      });
-
-      let channelList = [];
-      for (let i = 0; i < 20; i++) {
-        let subscriptionOptions = {
-          batch: true
-        };
-        if (i === 10) {
-          subscriptionOptions.data = {foo: 123};
-        }
-        channelList.push(
-          client.subscribe('my-channel-' + i, subscriptionOptions)
-        );
-      }
-
-      (async () => {
-        for await (let event of channelList[12].listener('subscribe')) {
-          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
-        }
-      })();
-
-      (async () => {
-        for await (let event of channelList[12].listener('subscribeFail')) {
-          assert.notEqual(event.error, null);
-          assert.equal(event.error.name, 'UnauthorizedSubscribeError');
-        }
-      })();
-
-      (async () => {
-        for await (let event of channelList[19].listener('subscribe')) {
-          client.transmitPublish('my-channel-19', 'Hello!');
-        }
-      })();
-
-      for await (let data of channelList[19]) {
-        assert.equal(data, 'Hello!');
-        assert.equal(subscribeMiddlewareCounter, 20);
-        break;
-      }
-    });
-
     it('Client should not be able to subscribe to a channel before the handshake has completed', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
@@ -2064,6 +1970,154 @@ describe('Integration tests', function () {
       assert.equal(wasKickOutCalled, true);
       assert.equal(serverSocket.channelSubscriptionsCount, 0);
       assert.equal(Object.keys(serverSocket.channelSubscriptions).length, 0);
+    });
+  });
+
+  describe('Batching', function () {
+    it('Should batch messages sent through sockets after the handshake when the batchOnHandshake option is true', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        batchOnHandshake: true,
+        batchOnHandshakeDuration: 400,
+        batchInterval: 50
+      });
+      bindFailureHandlers(server);
+
+      let receivedServerMessages = [];
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+
+          (async () => {
+            for await (let {message} of socket.listener('message')) {
+              receivedServerMessages.push(message);
+            }
+          })();
+        }
+      })();
+
+      let subscribeMiddlewareCounter = 0;
+
+      // Each subscription should pass through the middleware individually, even
+      // though they were sent as a batch/array.
+      server.setMiddleware(server.MIDDLEWARE_INBOUND, async function (middlewareStream) {
+        for await (let action of middlewareStream) {
+          if (action.type === AGAction.SUBSCRIBE) {
+            subscribeMiddlewareCounter++;
+            assert.equal(action.channel.indexOf('my-channel-'), 0);
+            if (action.channel === 'my-channel-10') {
+              assert.equal(JSON.stringify(action.data), JSON.stringify({foo: 123}));
+            } else if (action.channel === 'my-channel-12') {
+              // Block my-channel-12
+              let err = new Error('You cannot subscribe to channel 12');
+              err.name = 'UnauthorizedSubscribeError';
+              action.block(err);
+              continue;
+            }
+          }
+          action.allow();
+        }
+      });
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        batchOnHandshake: true,
+        batchOnHandshakeDuration: 100,
+        batchInterval: 50
+      });
+
+      let receivedClientMessages = [];
+      (async () => {
+        for await (let {message} of client.listener('message')) {
+          receivedClientMessages.push(message);
+        }
+      })();
+
+      let channelList = [];
+      for (let i = 0; i < 20; i++) {
+        let subscriptionOptions = {};
+        if (i === 10) {
+          subscriptionOptions.data = {foo: 123};
+        }
+        channelList.push(
+          client.subscribe('my-channel-' + i, subscriptionOptions)
+        );
+      }
+
+      (async () => {
+        for await (let event of channelList[12].listener('subscribe')) {
+          throw new Error('The my-channel-12 channel should have been blocked by MIDDLEWARE_SUBSCRIBE');
+        }
+      })();
+
+      (async () => {
+        for await (let event of channelList[12].listener('subscribeFail')) {
+          assert.notEqual(event.error, null);
+          assert.equal(event.error.name, 'UnauthorizedSubscribeError');
+        }
+      })();
+
+      (async () => {
+        for await (let event of channelList[19].listener('subscribe')) {
+          client.transmitPublish('my-channel-19', 'Hello!');
+        }
+      })();
+
+      for await (let data of channelList[19]) {
+        assert.equal(data, 'Hello!');
+        assert.equal(subscribeMiddlewareCounter, 20);
+        break;
+      }
+
+      assert.notEqual(receivedServerMessages[0], null);
+      // All 20 subscriptions should arrive as a single message.
+      assert.equal(JSON.parse(receivedServerMessages[0]).length, 20);
+
+      assert.equal(Array.isArray(JSON.parse(receivedClientMessages[0])), false);
+      assert.equal(JSON.parse(receivedClientMessages[1]).length, 20);
+    });
+
+    it('The batchOnHandshake option should not break the order of subscribe and publish', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        batchOnHandshake: true,
+        batchOnHandshakeDuration: 400,
+        batchInterval: 50
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        autoConnect: false,
+        batchOnHandshake: true,
+        batchOnHandshakeDuration: 100,
+        batchInterval: 50
+      });
+
+      let receivedMessage;
+
+      let fooChannel = client.subscribe('foo');
+      client.transmitPublish('foo', 'bar');
+
+      for await (let data of fooChannel) {
+        receivedMessage = data;
+        break;
+      }
     });
   });
 

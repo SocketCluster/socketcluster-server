@@ -37,7 +37,8 @@ function AGServer(options) {
     batchOnHandshake: false,
     batchOnHandshakeDuration: 400,
     batchInterval: 50,
-    middlewareEmitFailures: true
+    middlewareEmitFailures: true,
+    cloneData: false
   };
 
   this.options = Object.assign(opts, options);

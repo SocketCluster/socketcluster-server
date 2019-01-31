@@ -12,18 +12,18 @@
     "ag-request": "^1.0.0",
     "ag-simple-broker": "^3.0.0",
     "async-stream-emitter": "^2.0.0",
-    "base64id": "1.0.0",
-    "lodash.clonedeep": "4.5.0",
+    "base64id": "^1.0.0",
+    "lodash.clonedeep": "^4.5.0",
     "sc-errors": "^2.0.0",
     "sc-formatter": "^3.0.2",
     "stream-demux": "^5.1.0",
     "writable-async-iterable-stream": "^5.1.0",
-    "ws": "6.1.2"
+    "ws": "^6.1.2"
   },
   "devDependencies": {
     "asyngular-client": "^4.0.0",
     "localStorage": "^1.0.3",
-    "mocha": "5.2.0"
+    "mocha": "^5.2.0"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 3000 --slow 3000"

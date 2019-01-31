@@ -38,6 +38,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.inboundReceivedMessageCount = 0;
   this.inboundProcessedMessageCount = 0;
 
+  this.cloneData = this.server.options.cloneData;
+
   this._rawInboundMessageStream = new WritableAsyncIterableStream();
 
   this.middlewareInboundRawStream = new WritableAsyncIterableStream();
@@ -885,6 +887,9 @@ AGServerSocket.prototype.serializeObject = function (object) {
 
 AGServerSocket.prototype.sendObject = function (object) {
   if (this.isBufferingBatch) {
+    if (this.cloneData) {
+      object = cloneDeep(object);
+    }
     this._batchBuffer.push(object);
     return;
   }
@@ -923,7 +928,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
     newData = packet.data;
   }
 
-  if (options && useCache && options.stringifiedData != null) {
+  if (options && useCache && options.stringifiedData != null && !this.isBufferingBatch) {
     // Optimized
     this.send(options.stringifiedData);
   } else {
@@ -969,7 +974,7 @@ AGServerSocket.prototype.invoke = async function (event, data, options) {
       timeout
     };
 
-    if (options && options.useCache && options.stringifiedData != null) {
+    if (options && options.useCache && options.stringifiedData != null && !this.isBufferingBatch) {
       // Optimized
       this.send(options.stringifiedData);
     } else {

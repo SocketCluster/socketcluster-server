@@ -1,3 +1,5 @@
+// TODO 2: Allow disconnecting out of band (disconnect message should not wait to be processed in stream sequence).
+
 const cloneDeep = require('lodash.clonedeep');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
 const StreamDemux = require('stream-demux');
@@ -220,11 +222,11 @@ AGServerSocket.prototype._handleRawInboundMessageStream = async function (pongMe
     let packet;
     try {
       packet = this.decode(message);
-    } catch (err) {
-      if (err.name === 'Error') {
-        err.name = 'InvalidMessageError';
+    } catch (error) {
+      if (error.name === 'Error') {
+        error.name = 'InvalidMessageError';
       }
-      this.emitError(err);
+      this.emitError(error);
       continue;
     }
 
@@ -380,10 +382,10 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
 
   try {
     await this.server.brokerEngine.subscribeSocket(this, channelName);
-  } catch (err) {
+  } catch (error) {
     delete this.channelSubscriptions[channelName];
     this.channelSubscriptionsCount--;
-    throw err;
+    throw error;
   }
   this.emit('subscribe', {
     channel: channelName,
@@ -891,8 +893,8 @@ AGServerSocket.prototype.serializeObject = function (object) {
   let str;
   try {
     str = this.encode(object);
-  } catch (err) {
-    this.emitError(err);
+  } catch (error) {
+    this.emitError(error);
     return null;
   }
   return str;
@@ -933,6 +935,10 @@ AGServerSocket.prototype._handleOutboundPacketStream = async function () {
 };
 
 AGServerSocket.prototype.transmit = async function (event, data, options) {
+  if (this.state != this.OPEN) {
+    let errorMessage = `Socket transmit "${event}" was aborted due to a bad connection`;
+    throw new BadConnectionError(errorMessage, 'connectAbort');
+  }
   if (this.cloneData) {
     data = cloneDeep(data);
   }
@@ -944,7 +950,12 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   });
 };
 
+// TODO 2: Should invoke timeout start counting immediately or wait until after stream processes the message?
 AGServerSocket.prototype.invoke = async function (event, data, options) {
+  if (this.state != this.OPEN) {
+    let errorMessage = `Socket invoke "${event}" was aborted due to a bad connection`;
+    throw new BadConnectionError(errorMessage, 'connectAbort');
+  }
   if (this.cloneData) {
     data = cloneDeep(data);
   }
@@ -1141,10 +1152,10 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
   this.triggerAuthenticationEvents(oldAuthState);
   try {
     await sendAuthTokenToClient(signedAuthToken);
-  } catch (err) {
-    this.emitError(err);
+  } catch (error) {
+    this.emitError(error);
     if (rejectOnFailedDelivery) {
-      throw err;
+      throw error;
     }
   }
 };
@@ -1177,9 +1188,16 @@ AGServerSocket.prototype.deauthenticateSelf = function () {
   });
 };
 
-AGServerSocket.prototype.deauthenticate = function () {
+AGServerSocket.prototype.deauthenticate = async function (options) {
   this.deauthenticateSelf();
-  return this.invoke('#removeAuthToken');
+  try {
+    await this.invoke('#removeAuthToken');
+  } catch (error) {
+    this.emitError(error);
+    if (options && options.rejectOnFailedDelivery) {
+      throw error;
+    }
+  }
 };
 
 AGServerSocket.prototype.kickOut = function (channel, message) {

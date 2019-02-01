@@ -935,9 +935,8 @@ AGServerSocket.prototype._handleOutboundPacketStream = async function () {
 };
 
 AGServerSocket.prototype.transmit = async function (event, data, options) {
-  if (this.state != this.OPEN) {
-    let errorMessage = `Socket transmit "${event}" was aborted due to a bad connection`;
-    throw new BadConnectionError(errorMessage, 'connectAbort');
+  if (this.state !== this.OPEN) {
+    return;
   }
   if (this.cloneData) {
     data = cloneDeep(data);
@@ -950,9 +949,8 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   });
 };
 
-// TODO 2: Should invoke timeout start counting immediately or wait until after stream processes the message?
 AGServerSocket.prototype.invoke = async function (event, data, options) {
-  if (this.state != this.OPEN) {
+  if (this.state !== this.OPEN) {
     let errorMessage = `Socket invoke "${event}" was aborted due to a bad connection`;
     throw new BadConnectionError(errorMessage, 'connectAbort');
   }
@@ -1122,17 +1120,6 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
 
   this.authToken = authToken;
 
-  let sendAuthTokenToClient = async (signedToken) => {
-    let tokenData = {
-      token: signedToken
-    };
-    try {
-      return await this.invoke('#setAuthToken', tokenData);
-    } catch (err) {
-      throw new AuthError(`Failed to deliver auth token to client - ${err}`);
-    }
-  };
-
   let signedAuthToken;
 
   try {
@@ -1150,14 +1137,22 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
   }
 
   this.triggerAuthenticationEvents(oldAuthState);
-  try {
-    await sendAuthTokenToClient(signedAuthToken);
-  } catch (error) {
-    this.emitError(error);
-    if (rejectOnFailedDelivery) {
+
+  let tokenData = {
+    token: signedAuthToken
+  };
+
+  if (rejectOnFailedDelivery) {
+    try {
+      await this.invoke('#setAuthToken', tokenData);
+    } catch (err) {
+      let error = new AuthError(`Failed to deliver auth token to client - ${err}`);
+      this.emitError(error);
       throw error;
     }
+    return;
   }
+  this.transmit('#setAuthToken', tokenData);
 };
 
 AGServerSocket.prototype.getAuthToken = function () {
@@ -1190,14 +1185,18 @@ AGServerSocket.prototype.deauthenticateSelf = function () {
 
 AGServerSocket.prototype.deauthenticate = async function (options) {
   this.deauthenticateSelf();
-  try {
-    await this.invoke('#removeAuthToken');
-  } catch (error) {
-    this.emitError(error);
-    if (options && options.rejectOnFailedDelivery) {
-      throw error;
+  if (options && options.rejectOnFailedDelivery) {
+    try {
+      await this.invoke('#removeAuthToken');
+    } catch (error) {
+      this.emitError(error);
+      if (options && options.rejectOnFailedDelivery) {
+        throw error;
+      }
     }
+    return;
   }
+  this.transmit('#removeAuthToken');
 };
 
 AGServerSocket.prototype.kickOut = function (channel, message) {

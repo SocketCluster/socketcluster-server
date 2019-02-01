@@ -349,6 +349,35 @@ describe('Integration tests', function () {
       assert.equal(authenticationStateChangeEvents[1].authToken, null);
     });
 
+    it('Should throw error if server socket deauthenticate is called after client disconnected and rejectOnFailedDelivery is true', async function () {
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+
+      client = asyngularClient.create(clientOptions);
+
+      let {socket} = await server.listener('connection').once();
+
+      client.disconnect();
+      let error;
+      try {
+        await socket.deauthenticate({rejectOnFailedDelivery: true});
+      } catch (err) {
+        error = err;
+      }
+      assert.notEqual(error, null);
+      assert.equal(error.name, 'BadConnectionError');
+    });
+
+    it('Should not throw error if server socket deauthenticate is called after client disconnected and rejectOnFailedDelivery is not true', async function () {
+      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+
+      client = asyngularClient.create(clientOptions);
+
+      let {socket} = await server.listener('connection').once();
+
+      client.disconnect();
+      socket.deauthenticate();
+    });
+
     it('Should not authenticate the client if MIDDLEWARE_INBOUND blocks the authentication', async function () {
       global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenAlice);
 
@@ -763,8 +792,7 @@ describe('Integration tests', function () {
         }
         assert.equal(error, null);
         await wait(0);
-        assert.notEqual(socketErrors[0], null);
-        assert.equal(socketErrors[0].name, 'AuthError');
+        assert.equal(socketErrors[0], null);
       } else {
         let err = new Error('Failed to login');
         err.name = 'FailedLoginError';

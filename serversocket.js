@@ -38,9 +38,13 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.inboundReceivedMessageCount = 0;
   this.inboundProcessedMessageCount = 0;
 
+  this.outboundPreparedMessageCount = 0;
+  this.outboundSentMessageCount = 0;
+
   this.cloneData = this.server.options.cloneData;
 
   this._rawInboundMessageStream = new WritableAsyncIterableStream();
+  this._outboundPacketStream = new WritableAsyncIterableStream();
 
   this.middlewareInboundRawStream = new WritableAsyncIterableStream();
   this.middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
@@ -91,7 +95,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
     pongMessage = '#2';
     this._sendPing = () => {
       if (this.state !== this.CLOSED) {
-        this.sendObject('#1');
+        this.send('#1');
       }
     };
   } else {
@@ -117,7 +121,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.server.pendingClients[this.id] = this;
   this.server.pendingClientsCount++;
 
-  this._handleRawInboundMessageStream(this._rawInboundMessageStream, pongMessage);
+  this._handleRawInboundMessageStream(pongMessage);
+  this._handleOutboundPacketStream();
 
   // Receive incoming raw messages
   this.socket.on('message', async (message, flags) => {
@@ -167,6 +172,12 @@ Object.defineProperty(AGServerSocket.prototype, 'inboundBackpressure', {
   }
 });
 
+Object.defineProperty(AGServerSocket.prototype, 'outboundBackpressure', {
+  get: function () {
+    return this.outboundPreparedMessageCount - this.outboundSentMessageCount;
+  }
+});
+
 AGServerSocket.prototype._startBatchOnHandshake = function () {
   this._startBatching();
   setTimeout(() => {
@@ -176,8 +187,25 @@ AGServerSocket.prototype._startBatchOnHandshake = function () {
   }, this.batchOnHandshakeDuration);
 };
 
-AGServerSocket.prototype._handleRawInboundMessageStream = async function (messageStream, pongMessage) {
-  for await (let message of messageStream) {
+AGServerSocket.prototype.receiver = function (receiverName) {
+  return this._receiverDemux.stream(receiverName);
+};
+
+AGServerSocket.prototype.closeReceiver = function (receiverName) {
+  this._receiverDemux.close(receiverName);
+};
+
+AGServerSocket.prototype.procedure = function (procedureName) {
+  return this._procedureDemux.stream(procedureName);
+};
+
+AGServerSocket.prototype.closeProcedure = function (procedureName) {
+  this._procedureDemux.close(procedureName);
+};
+
+
+AGServerSocket.prototype._handleRawInboundMessageStream = async function (pongMessage) {
+  for await (let message of this._rawInboundMessageStream) {
     this.inboundProcessedMessageCount++;
     let isPong = message === pongMessage;
 
@@ -209,22 +237,6 @@ AGServerSocket.prototype._handleRawInboundMessageStream = async function (messag
       await this._processInboundPacket(packet, message);
     }
   }
-};
-
-AGServerSocket.prototype.receiver = function (receiverName) {
-  return this._receiverDemux.stream(receiverName);
-};
-
-AGServerSocket.prototype.closeReceiver = function (receiverName) {
-  this._receiverDemux.close(receiverName);
-};
-
-AGServerSocket.prototype.procedure = function (procedureName) {
-  return this._procedureDemux.stream(procedureName);
-};
-
-AGServerSocket.prototype.closeProcedure = function (procedureName) {
-  this._procedureDemux.close(procedureName);
 };
 
 AGServerSocket.prototype._handleHandshakeTimeout = function () {
@@ -754,6 +766,7 @@ AGServerSocket.prototype._onClose = function (code, reason) {
     this.middlewareInboundStream.close();
     this.middlewareOutboundStream.close();
     this._rawInboundMessageStream.close();
+    this._outboundPacketStream.close();
 
     if (!AGServerSocket.ignoreStatuses[code]) {
       let closeMessage;
@@ -887,9 +900,6 @@ AGServerSocket.prototype.serializeObject = function (object) {
 
 AGServerSocket.prototype.sendObject = function (object) {
   if (this.isBufferingBatch) {
-    if (this.cloneData) {
-      object = cloneDeep(object);
-    }
     this._batchBuffer.push(object);
     return;
   }
@@ -899,8 +909,58 @@ AGServerSocket.prototype.sendObject = function (object) {
   }
 };
 
-// TODO 2: Refactor transmit and invoke using a stream and calculate outboundBackpressure.
+AGServerSocket.prototype._handleOutboundPacketStream = async function () {
+  for await (let packet of this._outboundPacketStream) {
+    if (packet.resolve) {
+      // Invoke has no middleware, so there is no need to await here.
+      (async () => {
+        let result;
+        try {
+          result = await this._invoke(packet.event, packet.data, packet.options);
+        } catch (error) {
+          packet.reject(error);
+          return;
+        }
+        packet.resolve(result);
+      })();
+
+      this.outboundSentMessageCount++;
+      continue;
+    }
+    await this._transmit(packet.event, packet.data, packet.options);
+    this.outboundSentMessageCount++;
+  }
+};
+
 AGServerSocket.prototype.transmit = async function (event, data, options) {
+  if (this.cloneData) {
+    data = cloneDeep(data);
+  }
+  this.outboundPreparedMessageCount++;
+  this._outboundPacketStream.write({
+    event,
+    data,
+    options
+  });
+};
+
+AGServerSocket.prototype.invoke = async function (event, data, options) {
+  if (this.cloneData) {
+    data = cloneDeep(data);
+  }
+  this.outboundPreparedMessageCount++;
+  return new Promise((resolve, reject) => {
+    this._outboundPacketStream.write({
+      event,
+      data,
+      options,
+      resolve,
+      reject
+    });
+  });
+};
+
+AGServerSocket.prototype._transmit = async function (event, data, options) {
   let newData;
   let useCache = options ? options.useCache : false;
   let packet = {event, data};
@@ -946,7 +1006,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
   }
 };
 
-AGServerSocket.prototype.invoke = async function (event, data, options) {
+AGServerSocket.prototype._invoke = async function (event, data, options) {
   return new Promise((resolve, reject) => {
     let eventObject = {
       event,

@@ -1340,23 +1340,10 @@ describe('Integration tests', function () {
         }
       });
 
-      let pause = true;
-      let messageCount = 0;
-
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
         for await (let action of middlewareStream) {
-          messageCount++;
-          if (!pause) {
-            action.allow();
-            continue;
-          }
-          // Do not allow any messages until inboundBackpressure reaches 10.
-          while (true) {
-            if (action.socket.inboundBackpressure >= 10) {
-              pause = false;
-              break;
-            }
-            await wait(2);
+          if (action.data === 5) {
+            await wait(100);
           }
           action.allow();
         }
@@ -1371,27 +1358,69 @@ describe('Integration tests', function () {
 
       await client.listener('connect').once();
       for (let i = 0; i < 20; i++) {
-        await wait(20);
-        client.transmitPublish('foo', 123);
-      }
-
-      while (true) {
         await wait(10);
-        if (messageCount >= 20) {
-          break;
-        }
+        client.transmitPublish('foo', i);
       }
 
-      // There should be 1 handshake and 20 publishes.
+      await wait(400);
+
+      // Backpressure should go up and come back down.
       assert.equal(backpressureHistory.length, 21);
-      // The first entry is for the handshake which we are not blocking;
-      // so it should not add any backpressure.
       assert.equal(backpressureHistory[0], 1);
-      assert.equal(backpressureHistory[1], 1);
-      assert.equal(backpressureHistory[6] > 3, true);
-      assert.equal(backpressureHistory[9] > 7, true);
-      assert.equal(backpressureHistory[15], 1);
-      assert.equal(backpressureHistory[20], 1);
+      assert.equal(backpressureHistory[12] > 4, true);
+      assert.equal(backpressureHistory[14] > 6, true);
+      assert.equal(backpressureHistory[19], 1);
+    });
+
+    it('Should be able to get the message outboundBackpressure on a socket object', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let backpressureHistory = [];
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            await socket.listener('subscribe').once();
+
+            for (let i = 0; i < 20; i++) {
+              await wait(10);
+              server.exchange.transmitPublish('foo', i);
+              backpressureHistory.push(socket.outboundBackpressure);
+            }
+          })();
+        }
+      })();
+
+      server.setMiddleware(server.MIDDLEWARE_OUTBOUND, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          if (action.data === 5) {
+            await wait(100);
+          }
+          action.allow();
+        }
+      });
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await client.subscribe('foo').listener('subscribe').once();
+
+      await wait(400);
+
+      // Backpressure should go up and come back down.
+      assert.equal(backpressureHistory.length, 20);
+      assert.equal(backpressureHistory[0], 1);
+      assert.equal(backpressureHistory[13] > 7, true);
+      assert.equal(backpressureHistory[14] > 8, true);
+      assert.equal(backpressureHistory[19], 1);
     });
   });
 

@@ -812,9 +812,10 @@ AGServerSocket.prototype.terminate = function () {
 };
 
 AGServerSocket.prototype.send = function (data, options) {
-  this.socket.send(data, options, (err) => {
-    if (err) {
-      this._onClose(1006, err.toString());
+  this.socket.send(data, options, (error) => {
+    if (error) {
+      this.emitError(error);
+      this._onClose(1006, error.toString());
     }
   });
 };
@@ -936,6 +937,11 @@ AGServerSocket.prototype._handleOutboundPacketStream = async function () {
 
 AGServerSocket.prototype.transmit = async function (event, data, options) {
   if (this.state !== this.OPEN) {
+    let error = new BadConnectionError(
+      `Socket transmit "${event}" was aborted due to a bad connection`,
+      'connectAbort'
+    );
+    this.emitError(error);
     return;
   }
   if (this.cloneData) {
@@ -951,8 +957,12 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
 
 AGServerSocket.prototype.invoke = async function (event, data, options) {
   if (this.state !== this.OPEN) {
-    let errorMessage = `Socket invoke "${event}" was aborted due to a bad connection`;
-    throw new BadConnectionError(errorMessage, 'connectAbort');
+    let error = new BadConnectionError(
+      `Socket invoke "${event}" was aborted due to a bad connection`,
+      'connectAbort'
+    );
+    this.emitError(error);
+    throw error;
   }
   if (this.cloneData) {
     data = cloneDeep(data);

@@ -744,7 +744,9 @@ describe('Integration tests', function () {
         assert.equal(error.name, 'AuthError');
         await wait(0);
         assert.notEqual(socketErrors[0], null);
-        assert.equal(socketErrors[0].name, 'AuthError');
+        assert.equal(socketErrors[0].name, 'BadConnectionError');
+        assert.notEqual(socketErrors[1], null);
+        assert.equal(socketErrors[1].name, 'AuthError');
       } else {
         let err = new Error('Failed to login');
         err.name = 'FailedLoginError';
@@ -792,7 +794,8 @@ describe('Integration tests', function () {
         }
         assert.equal(error, null);
         await wait(0);
-        assert.equal(socketErrors[0], null);
+        assert.notEqual(socketErrors[0], null);
+        assert.equal(socketErrors[0].name, 'BadConnectionError');
       } else {
         let err = new Error('Failed to login');
         err.name = 'FailedLoginError';
@@ -1276,6 +1279,102 @@ describe('Integration tests', function () {
       assert.equal(serverSocketClosed, true);
       assert.equal(serverSocketDisconnected, true);
       assert.equal(serverClosure, true);
+    });
+
+    it('Disconnection should support socket message backpressure', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let serverWarnings = [];
+      (async () => {
+        for await (let {warning} of server.listener('warning')) {
+          serverWarnings.push(warning);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      let currentRequestData = null;
+      let requestDataAtTimeOfDisconnect = null;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionOnServer = true;
+          connectionHandler(socket);
+
+          (async () => {
+            await socket.listener('disconnect').once();
+            requestDataAtTimeOfDisconnect = currentRequestData;
+          })();
+
+          (async () => {
+            for await (let request of socket.procedure('foo')) {
+              currentRequestData = request.data;
+              await wait(10);
+              (async () => {
+                try {
+                  await socket.invoke('bla', request.data);
+                } catch (err) {}
+              })();
+              socket.transmit('hi', request.data);
+              request.end('bar');
+              if (request.data === 10) {
+                client.disconnect();
+              }
+            }
+          })();
+        }
+      })();
+
+      for (let i = 0; i < 30; i++) {
+        (async () => {
+          let result;
+          try {
+            result = await client.invoke('foo', i);
+          } catch (error) {
+            return;
+          }
+        })();
+      }
+
+      await wait(200);
+
+      // Expect a server warning (socket error) if a response was sent on a disconnected socket.
+      assert.equal(
+        serverWarnings.some((warning) => {
+          return warning.message.match(/WebSocket is not open/g);
+        }),
+        true
+      );
+
+      // Expect a server warning (socket error) if transmit was called on a disconnected socket.
+      assert.equal(
+        serverWarnings.some((warning) => {
+          return warning.name === 'BadConnectionError' && warning.message.match(/Socket transmit "hi" was aborted/g);
+        }),
+        true
+      );
+
+      // Expect a server warning (socket error) if invoke was called on a disconnected socket.
+      assert.equal(
+        serverWarnings.some((warning) => {
+          return warning.name === 'BadConnectionError' && warning.message.match(/Socket invoke "bla" was aborted/g);
+        }),
+        true
+      );
+
+      // Check that the disconnect event on the back end socket triggers as soon as possible (out-of-band) and not at the end of the stream.
+      // Any value less than 30 indicates that the 'disconnect' event was triggerred out-of-band.
+      // Since the client disconnect() call is executed on the 11th message, we can assume that the 'disconnect' event will trigger sooner.
+      assert.equal(requestDataAtTimeOfDisconnect < 15, true);
     });
   });
 

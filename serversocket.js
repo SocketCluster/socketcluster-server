@@ -1,5 +1,3 @@
-// TODO 2: Allow disconnecting out of band (disconnect message should not wait to be processed in stream sequence).
-
 const cloneDeep = require('lodash.clonedeep');
 const WritableAsyncIterableStream = require('writable-async-iterable-stream');
 const StreamDemux = require('stream-demux');

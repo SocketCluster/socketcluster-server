@@ -1,5 +1,5 @@
 const cloneDeep = require('lodash.clonedeep');
-const WritableAsyncIterableStream = require('writable-async-iterable-stream');
+const WritableConsumableStream = require('writable-consumable-stream');
 const StreamDemux = require('stream-demux');
 const AsyncStreamEmitter = require('async-stream-emitter');
 const AGAction = require('./action');
@@ -43,16 +43,16 @@ function AGServerSocket(id, server, socket, protocolVersion) {
 
   this.cloneData = this.server.options.cloneData;
 
-  this._rawInboundMessageStream = new WritableAsyncIterableStream();
-  this._outboundPacketStream = new WritableAsyncIterableStream();
+  this._rawInboundMessageStream = new WritableConsumableStream();
+  this._outboundPacketStream = new WritableConsumableStream();
 
-  this.middlewareInboundRawStream = new WritableAsyncIterableStream();
+  this.middlewareInboundRawStream = new WritableConsumableStream();
   this.middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
 
-  this.middlewareInboundStream = new WritableAsyncIterableStream();
+  this.middlewareInboundStream = new WritableConsumableStream();
   this.middlewareInboundStream.type = this.server.MIDDLEWARE_INBOUND;
 
-  this.middlewareOutboundStream = new WritableAsyncIterableStream();
+  this.middlewareOutboundStream = new WritableConsumableStream();
   this.middlewareOutboundStream.type = this.server.MIDDLEWARE_OUTBOUND;
 
   if (this.request.connection) {
@@ -166,17 +166,13 @@ AGServerSocket.UNAUTHENTICATED = AGServerSocket.prototype.UNAUTHENTICATED = 'una
 AGServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 AGServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
-Object.defineProperty(AGServerSocket.prototype, 'inboundBackpressure', {
-  get: function () {
-    return this.inboundReceivedMessageCount - this.inboundProcessedMessageCount;
-  }
-});
+AGServerSocket.prototype.getInboundBackpressure = function () {
+  return this.inboundReceivedMessageCount - this.inboundProcessedMessageCount;
+};
 
-Object.defineProperty(AGServerSocket.prototype, 'outboundBackpressure', {
-  get: function () {
-    return this.outboundPreparedMessageCount - this.outboundSentMessageCount;
-  }
-});
+AGServerSocket.prototype.getOutboundBackpressure = function () {
+  return this.outboundPreparedMessageCount - this.outboundSentMessageCount;
+};
 
 AGServerSocket.prototype._startBatchOnHandshake = function () {
   this._startBatching();

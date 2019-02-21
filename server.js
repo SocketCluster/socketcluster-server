@@ -6,7 +6,7 @@ const url = require('url');
 const crypto = require('crypto');
 const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
-const WritableAsyncIterableStream = require('writable-async-iterable-stream');
+const WritableConsumableStream = require('writable-consumable-stream');
 const AGAction = require('./action');
 
 const scErrors = require('sc-errors');
@@ -343,7 +343,7 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
     } catch (e) {}
   }
 
-  let middlewareHandshakeStream = new WritableAsyncIterableStream();
+  let middlewareHandshakeStream = new WritableConsumableStream();
   middlewareHandshakeStream.type = this.MIDDLEWARE_HANDSHAKE;
 
   req[this.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM] = middlewareHandshakeStream;

@@ -1451,7 +1451,7 @@ describe('Integration tests', function () {
   });
 
   describe('Socket backpressure', function () {
-    it('Should be able to get the message inboundBackpressure on a socket object', async function () {
+    it('Should be able to getInboundBackpressure() on a socket object', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
@@ -1462,7 +1462,7 @@ describe('Integration tests', function () {
 
       server.setMiddleware(server.MIDDLEWARE_INBOUND_RAW, async (middlewareStream) => {
         for await (let action of middlewareStream) {
-          backpressureHistory.push(action.socket.inboundBackpressure);
+          backpressureHistory.push(action.socket.getInboundBackpressure());
           action.allow();
         }
       });
@@ -1499,7 +1499,7 @@ describe('Integration tests', function () {
       assert.equal(backpressureHistory[19], 1);
     });
 
-    it('Should be able to get the message outboundBackpressure on a socket object', async function () {
+    it('Should be able to getOutboundBackpressure() on a socket object', async function () {
       server = asyngularServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
@@ -1516,7 +1516,7 @@ describe('Integration tests', function () {
             for (let i = 0; i < 20; i++) {
               await wait(10);
               server.exchange.transmitPublish('foo', i);
-              backpressureHistory.push(socket.outboundBackpressure);
+              backpressureHistory.push(socket.getOutboundBackpressure());
             }
           })();
         }

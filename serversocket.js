@@ -43,8 +43,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
 
   this.cloneData = this.server.options.cloneData;
 
-  this._rawInboundMessageStream = new WritableConsumableStream();
-  this._outboundPacketStream = new WritableConsumableStream();
+  this.inboundMessageStream = new WritableConsumableStream();
+  this.outboundPacketStream = new WritableConsumableStream();
 
   this.middlewareInboundRawStream = new WritableConsumableStream();
   this.middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
@@ -121,7 +121,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.server.pendingClients[this.id] = this;
   this.server.pendingClientsCount++;
 
-  this._handleRawInboundMessageStream(pongMessage);
+  this._handleInboundMessageStream(pongMessage);
   this._handleOutboundPacketStream();
 
   // Receive incoming raw messages
@@ -149,7 +149,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
       }
     }
 
-    this._rawInboundMessageStream.write(message);
+    this.inboundMessageStream.write(message);
     this.emit('message', {message});
   });
 }
@@ -191,6 +191,18 @@ AGServerSocket.prototype.closeReceiver = function (receiverName) {
   this._receiverDemux.close(receiverName);
 };
 
+AGServerSocket.prototype.closeAllReceivers = function () {
+  this._receiverDemux.closeAll();
+};
+
+AGServerSocket.prototype.killReceiver = function (receiverName) {
+  this._receiverDemux.kill(receiverName);
+};
+
+AGServerSocket.prototype.killAllReceivers = function () {
+  this._receiverDemux.killAll();
+};
+
 AGServerSocket.prototype.procedure = function (procedureName) {
   return this._procedureDemux.stream(procedureName);
 };
@@ -199,9 +211,20 @@ AGServerSocket.prototype.closeProcedure = function (procedureName) {
   this._procedureDemux.close(procedureName);
 };
 
+AGServerSocket.prototype.closeAllProcedures = function () {
+  this._procedureDemux.closeAll();
+};
 
-AGServerSocket.prototype._handleRawInboundMessageStream = async function (pongMessage) {
-  for await (let message of this._rawInboundMessageStream) {
+AGServerSocket.prototype.killProcedure = function (procedureName) {
+  this._procedureDemux.kill(procedureName);
+};
+
+AGServerSocket.prototype.killAllProcedures = function () {
+  this._procedureDemux.killAll();
+};
+
+AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessage) {
+  for await (let message of this.inboundMessageStream) {
     this.inboundProcessedMessageCount++;
     let isPong = message === pongMessage;
 
@@ -706,6 +729,52 @@ AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (fa
   });
 };
 
+AGServerSocket.prototype.closeMiddlewareStreams = function () {
+  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+  middlewareHandshakeStream.close();
+  this.middlewareInboundRawStream.close();
+  this.middlewareInboundStream.close();
+  this.middlewareOutboundStream.close();
+};
+
+AGServerSocket.prototype.closeIOStreams = function () {
+  this.inboundMessageStream.close();
+  this.outboundPacketStream.close();
+};
+
+AGServerSocket.prototype.closeAllStreams = function () {
+  this.closeMiddlewareStreams();
+
+  this.closeIOStreams();
+
+  this.closeAllReceivers();
+  this.closeAllProcedures();
+  this.closeAllListeners();
+};
+
+AGServerSocket.prototype.killMiddlewareStreams = function () {
+  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+  middlewareHandshakeStream.kill();
+  this.middlewareInboundRawStream.kill();
+  this.middlewareInboundStream.kill();
+  this.middlewareOutboundStream.kill();
+};
+
+AGServerSocket.prototype.killIOStreams = function () {
+  this.inboundMessageStream.kill();
+  this.outboundPacketStream.kill();
+};
+
+AGServerSocket.prototype.killAllStreams = function () {
+  this.killMiddlewareStreams();
+
+  this.killIOStreams();
+
+  this.killAllReceivers();
+  this.killAllProcedures();
+  this.killAllListeners();
+};
+
 AGServerSocket.prototype._onClose = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
@@ -734,6 +803,20 @@ AGServerSocket.prototype._onClose = function (code, reason) {
         reason
       });
     }
+
+    let cleanupMode = this.server.options.socketStreamCleanupMode;
+    if (cleanupMode === 'kill') {
+      (async () => {
+        await this.listener('close').once();
+        this.killAllStreams();
+      })();
+    } else if (cleanupMode === 'close') {
+      (async () => {
+        await this.listener('close').once();
+        this.closeAllStreams();
+      })();
+    }
+
     this.emit('close', {code, reason});
     this.server.emit('closure', {
       socket: this,
@@ -755,14 +838,6 @@ AGServerSocket.prototype._onClose = function (code, reason) {
       delete this.server.pendingClients[this.id];
       this.server.pendingClientsCount--;
     }
-
-    let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
-    middlewareHandshakeStream.close();
-    this.middlewareInboundRawStream.close();
-    this.middlewareInboundStream.close();
-    this.middlewareOutboundStream.close();
-    this._rawInboundMessageStream.close();
-    this._outboundPacketStream.close();
 
     if (!AGServerSocket.ignoreStatuses[code]) {
       let closeMessage;
@@ -907,7 +982,7 @@ AGServerSocket.prototype.sendObject = function (object) {
 };
 
 AGServerSocket.prototype._handleOutboundPacketStream = async function () {
-  for await (let packet of this._outboundPacketStream) {
+  for await (let packet of this.outboundPacketStream) {
     if (packet.resolve) {
       // Invoke has no middleware, so there is no need to await here.
       (async () => {
@@ -942,7 +1017,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
     data = cloneDeep(data);
   }
   this.outboundPreparedMessageCount++;
-  this._outboundPacketStream.write({
+  this.outboundPacketStream.write({
     event,
     data,
     options
@@ -963,7 +1038,7 @@ AGServerSocket.prototype.invoke = async function (event, data, options) {
   }
   this.outboundPreparedMessageCount++;
   return new Promise((resolve, reject) => {
-    this._outboundPacketStream.write({
+    this.outboundPacketStream.write({
       event,
       data,
       options,

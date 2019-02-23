@@ -710,7 +710,7 @@ describe('Integration tests', function () {
       });
       bindFailureHandlers(server);
 
-      let socketErrors = [];
+      let serverWarnings = [];
 
       (async () => {
         await server.listener('ready').once();
@@ -725,8 +725,8 @@ describe('Integration tests', function () {
       let {socket} = await server.listener('connection').once();
 
       (async () => {
-        for await (let {error} of socket.listener('error')) {
-          socketErrors.push(error);
+        for await (let {warning} of server.listener('warning')) {
+          serverWarnings.push(warning);
         }
       })();
 
@@ -743,10 +743,10 @@ describe('Integration tests', function () {
         assert.notEqual(error, null);
         assert.equal(error.name, 'AuthError');
         await wait(0);
-        assert.notEqual(socketErrors[0], null);
-        assert.equal(socketErrors[0].name, 'BadConnectionError');
-        assert.notEqual(socketErrors[1], null);
-        assert.equal(socketErrors[1].name, 'AuthError');
+        assert.notEqual(serverWarnings[0], null);
+        assert.equal(serverWarnings[0].name, 'BadConnectionError');
+        assert.notEqual(serverWarnings[1], null);
+        assert.equal(serverWarnings[1].name, 'AuthError');
       } else {
         let err = new Error('Failed to login');
         err.name = 'FailedLoginError';
@@ -762,7 +762,7 @@ describe('Integration tests', function () {
       });
       bindFailureHandlers(server);
 
-      let socketErrors = [];
+      let serverWarnings = [];
 
       (async () => {
         await server.listener('ready').once();
@@ -777,8 +777,8 @@ describe('Integration tests', function () {
       let {socket} = await server.listener('connection').once();
 
       (async () => {
-        for await (let {error} of socket.listener('error')) {
-          socketErrors.push(error);
+        for await (let {warning} of server.listener('warning')) {
+          serverWarnings.push(warning);
         }
       })();
 
@@ -794,8 +794,8 @@ describe('Integration tests', function () {
         }
         assert.equal(error, null);
         await wait(0);
-        assert.notEqual(socketErrors[0], null);
-        assert.equal(socketErrors[0].name, 'BadConnectionError');
+        assert.notEqual(serverWarnings[0], null);
+        assert.equal(serverWarnings[0].name, 'BadConnectionError');
       } else {
         let err = new Error('Failed to login');
         err.name = 'FailedLoginError';
@@ -1247,7 +1247,7 @@ describe('Integration tests', function () {
       });
 
       let serverSocketClosed = false;
-      let serverSocketDisconnected = false;
+      let serverDisconnection = false;
       let serverClosure = false;
 
       (async () => {
@@ -1261,7 +1261,7 @@ describe('Integration tests', function () {
 
       (async () => {
         for await (let event of server.listener('disconnection')) {
-          serverSocketDisconnected = true;
+          serverDisconnection = true;
         }
       })();
 
@@ -1277,7 +1277,7 @@ describe('Integration tests', function () {
 
       await wait(1000);
       assert.equal(serverSocketClosed, true);
-      assert.equal(serverSocketDisconnected, true);
+      assert.equal(serverDisconnection, true);
       assert.equal(serverClosure, true);
     });
 
@@ -1375,6 +1375,140 @@ describe('Integration tests', function () {
       // Any value less than 30 indicates that the 'disconnect' event was triggerred out-of-band.
       // Since the client disconnect() call is executed on the 11th message, we can assume that the 'disconnect' event will trigger sooner.
       assert.equal(requestDataAtTimeOfDisconnect < 15, true);
+    });
+
+    it('Socket streams should be killed immediately if socket disconnects (default/kill mode)', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let handledPackets = [];
+      let closedReceiver = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let packet of socket.receiver('foo')) {
+              await wait(30);
+              handledPackets.push(packet);
+            }
+            closedReceiver = true;
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await wait(100);
+
+      for (let i = 0; i < 15; i++) {
+        client.transmit('foo', i);
+      }
+
+      await wait(110);
+
+      client.disconnect(4445, 'Disconnect');
+
+      await wait(500);
+      assert.equal(handledPackets.length, 4);
+      assert.equal(closedReceiver, true);
+    });
+
+    it('Socket streams should be closed eventually if socket disconnects (close mode)', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        socketStreamCleanupMode: 'close'
+      });
+      bindFailureHandlers(server);
+
+      let handledPackets = [];
+      let closedReceiver = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let packet of socket.receiver('foo')) {
+              await wait(30);
+              handledPackets.push(packet);
+            }
+            closedReceiver = true;
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await wait(100);
+
+      for (let i = 0; i < 15; i++) {
+        client.transmit('foo', i);
+      }
+
+      await wait(110);
+
+      client.disconnect(4445, 'Disconnect');
+
+      await wait(500);
+      assert.equal(handledPackets.length, 15);
+      assert.equal(closedReceiver, true);
+    });
+
+    it('Socket streams should be closed eventually if socket disconnects (none mode)', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        socketStreamCleanupMode: 'none'
+      });
+      bindFailureHandlers(server);
+
+      let handledPackets = [];
+      let closedReceiver = false;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          (async () => {
+            for await (let packet of socket.receiver('foo')) {
+              await wait(30);
+              handledPackets.push(packet);
+            }
+            closedReceiver = false;
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await wait(100);
+
+      for (let i = 0; i < 15; i++) {
+        client.transmit('foo', i);
+      }
+
+      await wait(110);
+
+      client.disconnect(4445, 'Disconnect');
+
+      await wait(500);
+      assert.equal(handledPackets.length, 15);
+      assert.equal(closedReceiver, false);
     });
   });
 

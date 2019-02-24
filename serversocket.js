@@ -166,6 +166,16 @@ AGServerSocket.UNAUTHENTICATED = AGServerSocket.prototype.UNAUTHENTICATED = 'una
 AGServerSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
 AGServerSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
 
+AGServerSocket.prototype.getBackpressure = function () {
+  return Math.max(
+    this.getInboundBackpressure(),
+    this.getOutboundBackpressure(),
+    this.getAllListenersBackpressure(),
+    this.getAllReceiversBackpressure(),
+    this.getAllProceduresBackpressure()
+  );
+};
+
 AGServerSocket.prototype.getInboundBackpressure = function () {
   return this.inboundReceivedMessageCount - this.inboundProcessedMessageCount;
 };
@@ -182,6 +192,8 @@ AGServerSocket.prototype._startBatchOnHandshake = function () {
     }
   }, this.batchOnHandshakeDuration);
 };
+
+// ---- Receiver logic ----
 
 AGServerSocket.prototype.receiver = function (receiverName) {
   return this._receiverDemux.stream(receiverName);
@@ -203,6 +215,44 @@ AGServerSocket.prototype.killAllReceivers = function () {
   this._receiverDemux.killAll();
 };
 
+AGServerSocket.prototype.killReceiverConsumer = function (consumerId) {
+  this._receiverDemux.killConsumer(consumerId);
+};
+
+AGServerSocket.prototype.getReceiverConsumerStats = function (consumerId) {
+  return this._receiverDemux.getConsumerStats(consumerId);
+};
+
+AGServerSocket.prototype.getReceiverConsumerStatsList = function (receiverName) {
+  return this._receiverDemux.getConsumerStatsList(receiverName);
+};
+
+AGServerSocket.prototype.getAllReceiversConsumerStatsList = function () {
+  return this._receiverDemux.getConsumerStatsListAll();
+};
+
+AGServerSocket.prototype.getReceiverBackpressure = function (receiverName) {
+  return this._receiverDemux.getBackpressure(receiverName);
+};
+
+AGServerSocket.prototype.getAllReceiversBackpressure = function () {
+  return this._receiverDemux.getBackpressureAll();
+};
+
+AGServerSocket.prototype.getReceiverConsumerBackpressure = function (consumerId) {
+  return this._receiverDemux.getConsumerBackpressure(consumerId);
+};
+
+AGServerSocket.prototype.hasReceiverConsumer = function (receiverName, consumerId) {
+  return this._receiverDemux.hasConsumer(receiverName, consumerId);
+};
+
+AGServerSocket.prototype.hasAnyReceiverConsumer = function (consumerId) {
+  return this._receiverDemux.hasConsumerAll(consumerId);
+};
+
+// ---- Procedure logic ----
+
 AGServerSocket.prototype.procedure = function (procedureName) {
   return this._procedureDemux.stream(procedureName);
 };
@@ -221,6 +271,42 @@ AGServerSocket.prototype.killProcedure = function (procedureName) {
 
 AGServerSocket.prototype.killAllProcedures = function () {
   this._procedureDemux.killAll();
+};
+
+AGServerSocket.prototype.killProcedureConsumer = function (consumerId) {
+  this._procedureDemux.killConsumer(consumerId);
+};
+
+AGServerSocket.prototype.getProcedureConsumerStats = function (consumerId) {
+  return this._procedureDemux.getConsumerStats(consumerId);
+};
+
+AGServerSocket.prototype.getProcedureConsumerStatsList = function (procedureName) {
+  return this._procedureDemux.getConsumerStatsList(procedureName);
+};
+
+AGServerSocket.prototype.getAllProceduresConsumerStatsList = function () {
+  return this._procedureDemux.getConsumerStatsListAll();
+};
+
+AGServerSocket.prototype.getProcedureBackpressure = function (procedureName) {
+  return this._procedureDemux.getBackpressure(procedureName);
+};
+
+AGServerSocket.prototype.getAllProceduresBackpressure = function () {
+  return this._procedureDemux.getBackpressureAll();
+};
+
+AGServerSocket.prototype.getProcedureConsumerBackpressure = function (consumerId) {
+  return this._procedureDemux.getConsumerBackpressure(consumerId);
+};
+
+AGServerSocket.prototype.hasProcedureConsumer = function (procedureName, consumerId) {
+  return this._procedureDemux.hasConsumer(procedureName, consumerId);
+};
+
+AGServerSocket.prototype.hasAnyProcedureConsumer = function (consumerId) {
+  return this._procedureDemux.hasConsumerAll(consumerId);
 };
 
 AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessage) {

@@ -1,6 +1,6 @@
 {
   "name": "asyngular-server",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "Server module for Asyngular",
   "main": "index.js",
   "repository": {
@@ -10,8 +10,8 @@
   "dependencies": {
     "ag-auth": "^1.0.1",
     "ag-request": "^1.0.0",
-    "ag-simple-broker": "^4.0.0",
-    "async-stream-emitter": "^3.0.0",
+    "ag-simple-broker": "^4.0.2",
+    "async-stream-emitter": "^3.0.1",
     "base64id": "^1.0.0",
     "lodash.clonedeep": "^4.5.0",
     "sc-errors": "^2.0.0",
@@ -21,7 +21,7 @@
     "ws": "^6.1.2"
   },
   "devDependencies": {
-    "asyngular-client": "^5.2.0",
+    "asyngular-client": "^5.2.2",
     "localStorage": "^1.0.3",
     "mocha": "^5.2.0"
   },

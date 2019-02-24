@@ -1683,6 +1683,54 @@ describe('Integration tests', function () {
       assert.equal(backpressureHistory[14] > 8, true);
       assert.equal(backpressureHistory[19], 1);
     });
+
+    it('Should be able to getBackpressure() on a socket object and it should be the highest backpressure', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let backpressureHistory = [];
+
+      server.setMiddleware(server.MIDDLEWARE_INBOUND_RAW, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          backpressureHistory.push(action.socket.getBackpressure());
+          action.allow();
+        }
+      });
+
+      server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          if (action.data === 5) {
+            await wait(100);
+          }
+          action.allow();
+        }
+      });
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      await client.listener('connect').once();
+      for (let i = 0; i < 20; i++) {
+        await wait(10);
+        client.transmitPublish('foo', i);
+      }
+
+      await wait(400);
+
+      // Backpressure should go up and come back down.
+      assert.equal(backpressureHistory.length, 21);
+      assert.equal(backpressureHistory[0], 1);
+      assert.equal(backpressureHistory[12] > 4, true);
+      assert.equal(backpressureHistory[14] > 6, true);
+      assert.equal(backpressureHistory[19], 1);
+    });
   });
 
   describe('Socket pub/sub', function () {

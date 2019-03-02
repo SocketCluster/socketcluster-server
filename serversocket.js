@@ -46,6 +46,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.inboundMessageStream = new WritableConsumableStream();
   this.outboundPacketStream = new WritableConsumableStream();
 
+  this.middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
+
   this.middlewareInboundRawStream = new WritableConsumableStream();
   this.middlewareInboundRawStream.type = this.server.MIDDLEWARE_INBOUND_RAW;
 
@@ -345,7 +347,6 @@ AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessa
 };
 
 AGServerSocket.prototype._handleHandshakeTimeout = function () {
-  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
   this.disconnect(4005);
 };
 
@@ -359,10 +360,8 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
   action.socket = this;
   action.type = AGAction.HANDSHAKE_AG;
 
-  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
-
   try {
-    await this.server._processMiddlewareAction(middlewareHandshakeStream, action);
+    await this.server._processMiddlewareAction(this.middlewareHandshakeStream, action);
   } catch (error) {
     if (error.statusCode == null) {
       error.statusCode = HANDSHAKE_REJECTION_STATUS_CODE;
@@ -430,7 +429,7 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
   this.emit('connect', serverSocketStatus);
   this.server.emit('connection', {socket: this, ...serverSocketStatus});
 
-  middlewareHandshakeStream.close();
+  this.middlewareHandshakeStream.close();
 };
 
 AGServerSocket.prototype._processAuthenticateRequest = async function (request) {
@@ -815,46 +814,58 @@ AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (fa
   });
 };
 
-AGServerSocket.prototype.closeMiddlewareStreams = function () {
-  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
-  middlewareHandshakeStream.close();
+AGServerSocket.prototype.closeAllMiddlewares = function () {
+  this.middlewareHandshakeStream.close();
   this.middlewareInboundRawStream.close();
   this.middlewareInboundStream.close();
   this.middlewareOutboundStream.close();
 };
 
-AGServerSocket.prototype.closeIOStreams = function () {
+AGServerSocket.prototype.closeInput = function () {
   this.inboundMessageStream.close();
+};
+
+AGServerSocket.prototype.closeOutput = function () {
   this.outboundPacketStream.close();
 };
 
-AGServerSocket.prototype.closeAllStreams = function () {
-  this.closeMiddlewareStreams();
+AGServerSocket.prototype.closeIO = function () {
+  this.closeInput();
+  this.closeOutput();
+};
 
-  this.closeIOStreams();
+AGServerSocket.prototype.closeAllStreams = function () {
+  this.closeAllMiddlewares();
+  this.closeIO();
 
   this.closeAllReceivers();
   this.closeAllProcedures();
   this.closeAllListeners();
 };
 
-AGServerSocket.prototype.killMiddlewareStreams = function () {
-  let middlewareHandshakeStream = this.request[this.server.SYMBOL_MIDDLEWARE_HANDSHAKE_STREAM];
-  middlewareHandshakeStream.kill();
+AGServerSocket.prototype.killAllMiddlewares = function () {
+  this.middlewareHandshakeStream.kill();
   this.middlewareInboundRawStream.kill();
   this.middlewareInboundStream.kill();
   this.middlewareOutboundStream.kill();
 };
 
-AGServerSocket.prototype.killIOStreams = function () {
+AGServerSocket.prototype.killInput = function () {
   this.inboundMessageStream.kill();
+};
+
+AGServerSocket.prototype.killOutput = function () {
   this.outboundPacketStream.kill();
 };
 
-AGServerSocket.prototype.killAllStreams = function () {
-  this.killMiddlewareStreams();
+AGServerSocket.prototype.killIO = function () {
+  this.killInput();
+  this.killOutput();
+};
 
-  this.killIOStreams();
+AGServerSocket.prototype.killAllStreams = function () {
+  this.killAllMiddlewares();
+  this.killIO();
 
   this.killAllReceivers();
   this.killAllProcedures();

@@ -1096,9 +1096,21 @@ AGServerSocket.prototype._handleOutboundPacketStream = async function () {
       this.outboundSentMessageCount++;
       continue;
     }
-    await this._transmit(packet.event, packet.data, packet.options);
+    await this._processTransmit(packet.event, packet.data, packet.options);
     this.outboundSentMessageCount++;
   }
+};
+
+AGServerSocket.prototype._transmit = async function (event, data, options) {
+  if (this.cloneData) {
+    data = cloneDeep(data);
+  }
+  this.outboundPreparedMessageCount++;
+  this.outboundPacketStream.write({
+    event,
+    data,
+    options
+  });
 };
 
 AGServerSocket.prototype.transmit = async function (event, data, options) {
@@ -1110,15 +1122,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
     this.emitError(error);
     return;
   }
-  if (this.cloneData) {
-    data = cloneDeep(data);
-  }
-  this.outboundPreparedMessageCount++;
-  this.outboundPacketStream.write({
-    event,
-    data,
-    options
-  });
+  this._transmit(event, data, options);
 };
 
 AGServerSocket.prototype.invoke = async function (event, data, options) {
@@ -1145,7 +1149,7 @@ AGServerSocket.prototype.invoke = async function (event, data, options) {
   });
 };
 
-AGServerSocket.prototype._transmit = async function (event, data, options) {
+AGServerSocket.prototype._processTransmit = async function (event, data, options) {
   let newData;
   let useCache = options ? options.useCache : false;
   let packet = {event, data};
@@ -1372,7 +1376,7 @@ AGServerSocket.prototype.deauthenticate = async function (options) {
     }
     return;
   }
-  this.transmit('#removeAuthToken');
+  this._transmit('#removeAuthToken');
 };
 
 AGServerSocket.prototype.kickOut = function (channel, message) {

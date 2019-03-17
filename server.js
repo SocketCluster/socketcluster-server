@@ -299,10 +299,16 @@ AGServer.prototype._processMiddlewareAction = async function (middlewareStream, 
     }
   } catch (error) {
     let clientError;
-    if (error.silent) {
+    if (!error) {
+      error = new SilentMiddlewareBlockedError(
+        `The ${action.type} AGAction was blocked by ${middlewareStream.type} middleware`,
+        middlewareStream.type
+      );
+      clientError = error;
+    } else if (error.silent) {
       clientError = new SilentMiddlewareBlockedError(
-        `AGAction was blocked by ${action.name} middleware`,
-        action.name
+        `The ${action.type} AGAction was blocked by ${middlewareStream.type} middleware`,
+        middlewareStream.type
       );
     } else {
       clientError = error;

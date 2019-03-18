@@ -1196,6 +1196,8 @@ AGServerSocket.prototype._processTransmit = async function (event, data, options
 };
 
 AGServerSocket.prototype._invoke = async function (event, data, options) {
+  options = options || {};
+
   return new Promise((resolve, reject) => {
     let eventObject = {
       event,
@@ -1205,11 +1207,13 @@ AGServerSocket.prototype._invoke = async function (event, data, options) {
       eventObject.data = data;
     }
 
+    let ackTimeout = options.ackTimeout == null ? this.server.ackTimeout : options.ackTimeout;
+
     let timeout = setTimeout(() => {
       let error = new TimeoutError(`Event response for "${event}" timed out`);
       delete this._callbackMap[eventObject.cid];
       reject(error);
-    }, this.server.ackTimeout);
+    }, ackTimeout);
 
     this._callbackMap[eventObject.cid] = {
       event,
@@ -1223,7 +1227,7 @@ AGServerSocket.prototype._invoke = async function (event, data, options) {
       timeout
     };
 
-    if (options && options.useCache && options.stringifiedData != null && !this.isBufferingBatch) {
+    if (options.useCache && options.stringifiedData != null && !this.isBufferingBatch) {
       // Optimized
       this.send(options.stringifiedData);
     } else {

@@ -7,18 +7,6 @@ var http = require('http');
 var https = require('https');
 var fs = require('fs');
 
-/*
-*
-*  SOCKETCLUSTER_SECURE_COM : force https on the internal stack
-*  SOCKETCLUSTER_BROKER_SSL_KEY : ssl key for the broker http server
-*  SOCKETCLUSTER_BROKER_SSL_CERT : ssl cert for the broker http server
-*
-*/
-
-// Should not be necessary as the scc-state is not connecting with ws, but only receive connection
-//var SOCKETCLUSTER_SSL_REJECT_UNAUTHORIZED = argv.sslru || process.env.SOCKETCLUSTER_BROKER_SSL_REJECT_UNAUTHORIZED || false;
-
-
 /**
  * Expose SCServer constructor.
  *
@@ -67,11 +55,6 @@ module.exports.start = function(port, options) {
 
 module.exports.startSSL = function(port, key, cert, options) {
 
-
-  //
-  // optionSSL.key = (SOCKETCLUSTER_SSL_KEY !== "false") ?  : void 0;
-  // optionSSL.cert = (SOCKETCLUSTER_SSL_CERT !== "false") ? fs.readFileSync(SOCKETCLUSTER_SSL_CERT) : void 0;
-
   httpServer = https.createServer({
     key : key,
     cert : cert
@@ -79,7 +62,6 @@ module.exports.startSSL = function(port, key, cert, options) {
     res.writeHead(501);
     res.end('Not Implemented');
   });
-
 
   var socketClusterServer = module.exports.attach(httpServer, options);
   socketClusterServer.httpServer = httpServer;

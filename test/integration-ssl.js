@@ -1,8 +1,9 @@
 var assert = require('assert');
 var socketClusterServer = require('../');
-var socketCluster = require('../../socketcluster-client');
+var socketCluster = require('../../socketcluster-client/index');
 var localStorage = require('localStorage');
 var SCSimpleBroker = require('sc-simple-broker').SCSimpleBroker;
+var fs = require('fs');
 
 // Add to the global scope like in browser.
 global.localStorage = localStorage;
@@ -23,6 +24,7 @@ var WS_ENGINE = 'ws';
 var validSignedAuthTokenBob = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJvYiIsImV4cCI6MzE2Mzc1ODk3OTA4MDMxMCwiaWF0IjoxNTAyNzQ3NzQ2fQ.dSZOfsImq4AvCu-Or3Fcmo7JNv1hrV3WqxaiSKkTtAo';
 var validSignedAuthTokenAlice = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFsaWNlIiwiaWF0IjoxNTE4NzI4MjU5LCJleHAiOjMxNjM3NTg5NzkwODAzMTB9.XxbzPPnnXrJfZrS0FJwb_EAhIu2VY5i7rGyUThtNLh4';
 var invalidSignedAuthToken = 'fakebGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fakec2VybmFtZSI6ImJvYiIsImlhdCI6MTUwMjYyNTIxMywiZXhwIjoxNTAyNzExNjEzfQ.fakemYcOOjM9bzmS4UYRvlWSk_lm3WGHvclmFjLbyOk';
+
 
 var server, client;
 
@@ -118,15 +120,17 @@ describe('Integration tests', function () {
     clientOptions = {
       hostname: '127.0.0.1',
       multiplex: false,
-      port: portNumber
+      port: portNumber,
+      secure : true,
+      rejectUnauthorized: false
     };
     serverOptions = {
       authKey: 'testkey',
       wsEngine: WS_ENGINE,
-      protocol : 'http'
-    };
+      protocol : 'https',
 
-    server = socketClusterServer.listen(portNumber, serverOptions);
+    };
+    server = socketClusterServer.startSSL(portNumber, __dirname + '/server.key',__dirname + '/server.cert', serverOptions);
 
     server.on('connection', connectionHandler);
 
@@ -1980,6 +1984,11 @@ describe('Integration tests', function () {
       });
 
       client = socketCluster.connect(clientOptions);
+    });
+
+    it('Test completed', function (done) {
+      server.close();
+      done()
     });
   });
 });

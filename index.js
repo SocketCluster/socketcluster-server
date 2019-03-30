@@ -2,7 +2,10 @@
  * Module dependencies.
  */
 
+var argv = require('minimist')(process.argv.slice(2));
 var http = require('http');
+var https = require('https');
+var fs = require('fs');
 
 /**
  * Expose SCServer constructor.
@@ -20,6 +23,7 @@ module.exports.SCServer = require('./scserver');
 
 module.exports.SCServerSocket = require('./scserversocket');
 
+
 /**
  * Creates an http.Server exclusively used for WS upgrades.
  *
@@ -30,13 +34,50 @@ module.exports.SCServerSocket = require('./scserversocket');
  * @api public
  */
 
+
+//
+module.exports.start = function(port, options) {
+
+  var server = http.createServer(function (req, res) {
+    res.writeHead(501);
+    res.end('Not Implemented');
+  });
+
+  var socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
+  socketClusterServer.httpServer.listen(port);
+
+  return socketClusterServer;
+
+
+};
+
+module.exports.startSSL = function(port, keyPath, crtPath, options) {
+
+  var server = https.createServer({
+    key : fs.readFileSync(keyPath),
+    cert : fs.readFileSync(crtPath)
+  }, function (req, res) {
+    res.writeHead(501);
+    res.end('Not Implemented');
+  });
+
+  var socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
+  socketClusterServer.httpServer.listen(port);
+
+  return socketClusterServer;
+
+
+};
+
 module.exports.listen = function (port, options, fn) {
   if (typeof options === 'function') {
     fn = options;
     options = {};
   }
 
-  var server = http.createServer(function (req, res) {
+  server = http.createServer(function (req, res) {
     res.writeHead(501);
     res.end('Not Implemented');
   });
@@ -47,6 +88,8 @@ module.exports.listen = function (port, options, fn) {
 
   return engine;
 };
+
+
 
 /**
  * Captures upgrade requests for a http.Server.
@@ -61,7 +104,8 @@ module.exports.attach = function (server, options) {
   if (options == null) {
     options = {};
   }
+
   options.httpServer = server;
-  var socketClusterServer = new module.exports.SCServer(options);
+  socketClusterServer = new module.exports.SCServer(options);
   return socketClusterServer;
 };

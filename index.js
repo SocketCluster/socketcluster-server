@@ -37,15 +37,14 @@ module.exports.SCServerSocket = require('./scserversocket');
 
 //
 module.exports.start = function(port, options) {
-  var httpServer;
 
-  httpServer = http.createServer(function (req, res) {
+  var server = http.createServer(function (req, res) {
     res.writeHead(501);
     res.end('Not Implemented');
   });
 
-  socketClusterServer = module.exports.attach(httpServer, options);
-  socketClusterServer.httpServer = httpServer;
+  var socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
   socketClusterServer.httpServer.listen(port);
 
   return socketClusterServer;
@@ -53,18 +52,18 @@ module.exports.start = function(port, options) {
 
 };
 
-module.exports.startSSL = function(port, key, cert, options) {
+module.exports.startSSL = function(port, keyPath, crtPath, options) {
 
-  httpServer = https.createServer({
-    key : key,
-    cert : cert
+  var server = https.createServer({
+    key : fs.readFileSync(keyPath),
+    cert : fs.readFileSync(crtPath)
   }, function (req, res) {
     res.writeHead(501);
     res.end('Not Implemented');
   });
 
-  var socketClusterServer = module.exports.attach(httpServer, options);
-  socketClusterServer.httpServer = httpServer;
+  var socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
   socketClusterServer.httpServer.listen(port);
 
   return socketClusterServer;

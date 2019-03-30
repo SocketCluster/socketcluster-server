@@ -130,7 +130,7 @@ describe('Integration tests', function () {
       protocol : 'https',
 
     };
-    server = socketClusterServer.startSSL(portNumber, fs.readFileSync(__dirname + '/server.key'),fs.readFileSync(__dirname + '/server.cert'), serverOptions);
+    server = socketClusterServer.startSSL(portNumber, __dirname + '/server.key',__dirname + '/server.cert', serverOptions);
 
     server.on('connection', connectionHandler);
 

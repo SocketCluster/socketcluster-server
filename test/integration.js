@@ -696,8 +696,11 @@ describe('Integration tests', function () {
       });
 
       await client.listener('connect').once();
-      await client.invoke('login', {username: 'bob'});
-      await client.listener('authenticate').once();
+
+      await Promise.all([
+        client.invoke('login', {username: 'bob'}),
+        client.listener('authenticate').once()
+      ]);
 
       assert.equal(authTokenSignedEventEmitted, true);
     });

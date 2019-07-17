@@ -18,10 +18,10 @@
     "sc-formatter": "^3.0.2",
     "stream-demux": "^7.0.1",
     "writable-consumable-stream": "^1.1.1",
-    "ws": "^6.1.2"
+    "ws": "^7.1.0"
   },
   "devDependencies": {
-    "asyngular-client": "^6.0.0",
+    "asyngular-client": "^6.1.0",
     "localStorage": "^1.0.3",
     "mocha": "^5.2.0"
   },

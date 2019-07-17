@@ -384,7 +384,6 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   var self = this;
 
   if (this.options.wsEngine === 'ws') {
-    // Normalize ws module to match sc-uws module.
     wsSocket.upgradeReq = upgradeReq;
   }
 
@@ -647,7 +646,7 @@ SCServer.prototype.verifyHandshake = function (info, cb) {
     var handshakeMiddleware = this._middleware[this.MIDDLEWARE_HANDSHAKE_WS];
     if (handshakeMiddleware.length) {
       var callbackInvoked = false;
-      async.applyEachSeries(handshakeMiddleware, req, function (err) {
+      async.applyEachSeries(handshakeMiddleware, req)(function (err) {
         if (callbackInvoked) {
           self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_WS + ' middleware was already invoked'));
         } else {
@@ -731,7 +730,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
         // and we won't pass this request through the subscribe middleware.
         cb(request.authTokenExpiredError, eventData);
       } else {
-        async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request,
+        async.applyEachSeries(this._middleware[this.MIDDLEWARE_SUBSCRIBE], request)(
           function (err) {
             if (callbackInvoked) {
               self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_SUBSCRIBE + ' middleware was already invoked'));
@@ -758,7 +757,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
         request.channel = eventData.channel;
         request.data = eventData.data;
 
-        async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request,
+        async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_IN], request)(
           function (err) {
             if (callbackInvoked) {
               self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_IN + ' middleware was already invoked'));
@@ -804,7 +803,7 @@ SCServer.prototype._passThroughMiddleware = function (options, cb) {
     request.event = event;
     request.data = options.data;
 
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_EMIT], request,
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_EMIT], request)(
       function (err) {
         if (callbackInvoked) {
           self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_EMIT + ' middleware was already invoked'));
@@ -833,7 +832,7 @@ SCServer.prototype._passThroughAuthenticateMiddleware = function (options, cb) {
     authToken: options.authToken
   };
 
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request,
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_AUTHENTICATE], request)(
     function (err, results) {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_AUTHENTICATE + ' middleware was already invoked'));
@@ -864,7 +863,7 @@ SCServer.prototype._passThroughHandshakeSCMiddleware = function (options, cb) {
     socket: options.socket
   };
 
-  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request,
+  async.applyEachSeries(this._middleware[this.MIDDLEWARE_HANDSHAKE_SC], request)(
     function (err, results) {
       if (callbackInvoked) {
         self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_HANDSHAKE_SC + ' middleware was already invoked'));
@@ -903,7 +902,7 @@ SCServer.prototype.verifyOutboundEvent = function (socket, eventName, eventData,
       channel: eventData.channel,
       data: eventData.data
     };
-    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request,
+    async.applyEachSeries(this._middleware[this.MIDDLEWARE_PUBLISH_OUT], request)(
       function (err) {
         if (callbackInvoked) {
           self.emit('warning', new InvalidActionError('Callback for ' + self.MIDDLEWARE_PUBLISH_OUT + ' middleware was already invoked'));

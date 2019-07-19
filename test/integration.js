@@ -126,6 +126,12 @@ function connectionHandler(socket) {
       rpc.end();
     }
   })();
+
+  (async () => {
+    for await (let rpc of socket.procedure('proc')) {
+      rpc.end('success ' + rpc.data);
+    }
+  })();
 };
 
 function bindFailureHandlers(server) {
@@ -2592,6 +2598,12 @@ describe('Integration tests', function () {
       });
       bindFailureHandlers(server);
 
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
       await server.listener('ready').once();
     });
 
@@ -2869,6 +2881,73 @@ describe('Integration tests', function () {
     });
 
     describe('MIDDLEWARE_INBOUND', function () {
+      describe('INVOKE action', function () {
+        it('Should run INVOKE action in middleware if client invokes an RPC', async function () {
+          let middlewareWasExecuted = false;
+          let middlewareAction = null;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.INVOKE) {
+                middlewareWasExecuted = true;
+                middlewareAction = action;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let result = await client.invoke('proc', 123);
+
+          assert.equal(middlewareWasExecuted, true);
+          assert.notEqual(middlewareAction, null);
+          assert.equal(result, 'success 123');
+        });
+
+        it('Should send back custom Error if INVOKE action in middleware blocks the client RPC', async function () {
+          let middlewareWasExecuted = false;
+          let middlewareAction = null;
+
+          let middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.INVOKE) {
+                middlewareWasExecuted = true;
+                middlewareAction = action;
+
+                let customError = new Error('Invoke action was blocked');
+                customError.name = 'BlockedInvokeError';
+                action.block(customError);
+                continue;
+              }
+              action.allow();
+            }
+          };
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let result;
+          let error;
+          try {
+            result = await client.invoke('proc', 123);
+          } catch (err) {
+            error = err;
+          }
+
+          assert.equal(result, null);
+          assert.notEqual(error, null);
+          assert.equal(error.name, 'BlockedInvokeError');
+        });
+      });
+
       describe('AUTHENTICATE action', function () {
         it('Should not run AUTHENTICATE action in middleware if JWT token does not exist', async function () {
           let middlewareWasExecuted = false;

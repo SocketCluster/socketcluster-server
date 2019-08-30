@@ -685,6 +685,73 @@ describe('Integration tests', function () {
         }, 300);
       });
     });
+
+    it('Should close the connection if the client tries to send a message before the handshake', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      server.on('connection', connectionHandler);
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('error', function () {});
+
+        client.transport.socket.onopen = function () {
+          client.transport.socket.send(Buffer.alloc(0));
+        };
+
+        var closeCode;
+        client.on('close', function (code, reason) {
+          closeCode = code;
+        });
+
+        setTimeout(function () {
+          assert.equal(closeCode, 4009);
+          done();
+        }, 300);
+      });
+    });
+
+    it('Should not close the connection if the client tries to send a message before the handshake and strictHandshake is false', function (done) {
+      portNumber++;
+      server = socketClusterServer.listen(portNumber, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        strictHandshake: false
+      });
+
+      server.on('connection', connectionHandler);
+
+      server.on('ready', function () {
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+        client.on('error', function () {});
+
+        client.transport.socket.onopen = function () {
+          client.transport.socket.send(Buffer.alloc(0));
+        };
+
+        var closeCode = null;
+        client.on('close', function (code, reason) {
+          closeCode = code;
+        });
+
+        setTimeout(function () {
+          assert.equal(closeCode, null);
+          done();
+        }, 300);
+      });
+    });
   });
 
   describe('Socket connection', function () {
@@ -1112,6 +1179,8 @@ describe('Integration tests', function () {
           multiplex: false
         });
 
+        client.on('error', function () {});
+
         var isSubscribed = false;
         var error;
 
@@ -1136,7 +1205,7 @@ describe('Integration tests', function () {
         setTimeout(function () {
           assert.equal(isSubscribed, false);
           assert.notEqual(error, null);
-          assert.equal(error.name, 'InvalidActionError');
+          assert.equal(error.name, 'BadConnectionError');
           done();
         }, 1000);
       });

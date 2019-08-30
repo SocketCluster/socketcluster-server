@@ -36,6 +36,7 @@ var SCServer = function (options) {
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,
+    strictHandshake: true,
     pingTimeout: 20000,
     pingTimeoutDisabled: false,
     pingInterval: 8000,
@@ -89,6 +90,7 @@ var SCServer = function (options) {
   this.perMessageDeflate = opts.perMessageDeflate;
   this.httpServer = opts.httpServer;
   this.socketChannelLimit = opts.socketChannelLimit;
+  this.strictHandshake = opts.strictHandshake;
 
   this.brokerEngine = opts.brokerEngine;
   this.appName = opts.appName || '';

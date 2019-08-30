@@ -99,6 +99,23 @@ var SCServerSocket = function (id, server, socket) {
         err.name = 'InvalidMessageError';
       }
       Emitter.prototype.emit.call(self, 'error', err);
+      if (
+        self.server.strictHandshake &&
+        self.state === self.CONNECTING
+      ) {
+        self._onSCClose(4009);
+        self.socket.close(4009);
+      }
+      return;
+    }
+
+    if (
+      self.server.strictHandshake &&
+      self.state === self.CONNECTING &&
+      (!obj || obj.event !== '#handshake')
+    ) {
+      self._onSCClose(4009);
+      self.socket.close(4009);
       return;
     }
 

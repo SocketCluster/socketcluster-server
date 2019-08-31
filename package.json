@@ -1,6 +1,6 @@
 {
   "name": "asyngular-server",
-  "version": "6.1.0",
+  "version": "6.2.0",
   "description": "Server module for Asyngular",
   "main": "index.js",
   "repository": {
@@ -21,7 +21,7 @@
     "ws": "^7.1.0"
   },
   "devDependencies": {
-    "asyngular-client": "^6.1.0",
+    "asyngular-client": "^6.2.0",
     "localStorage": "^1.0.3",
     "mocha": "^5.2.0"
   },

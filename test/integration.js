@@ -945,9 +945,14 @@ describe('Integration tests', function () {
         client.transport.socket.send(Buffer.alloc(0));
       };
 
-      let {code: closeCode} = await client.listener('close').once(200);
-
-      assert.equal(closeCode, 4009);
+      let results = await Promise.all([
+        server.listener('closure').once(200),
+        client.listener('close').once(200)
+      ]);
+      assert.equal(results[0].code, 4009);
+      assert.equal(results[0].reason, 'Server received a message before the client handshake');
+      assert.equal(results[1].code, 4009);
+      assert.equal(results[1].reason, 'Server received a message before the client handshake');
     });
 
     it('Should close the connection if the client tries to send a ping before the handshake', async function () {

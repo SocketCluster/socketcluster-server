@@ -88,8 +88,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
     this.emitError(err);
   });
 
-  this.socket.on('close', (code, data) => {
-    this._destroy(code, data);
+  this.socket.on('close', (code, reason) => {
+    this._destroy(code, reason);
   });
 
   let pongMessage;
@@ -903,6 +903,9 @@ AGServerSocket.prototype._destroy = function (code, reason) {
   if (this.state === this.CLOSED) {
     this._abortAllPendingEventsDueToBadConnection('connectAbort');
   } else {
+    if (!reason && AGServerSocket.errorStatuses[code]) {
+      reason = AGServerSocket.errorStatuses[code];
+    }
     let prevState = this.state;
     this.state = this.CLOSED;
     if (prevState === this.CONNECTING) {
@@ -981,7 +984,7 @@ AGServerSocket.prototype._destroy = function (code, reason) {
   }
 };
 
-AGServerSocket.prototype.disconnect = function (code, data) {
+AGServerSocket.prototype.disconnect = function (code, reason) {
   code = code || 1000;
 
   if (typeof code !== 'number') {
@@ -990,8 +993,8 @@ AGServerSocket.prototype.disconnect = function (code, data) {
   }
 
   if (this.state !== this.CLOSED) {
-    this._destroy(code, data);
-    this.socket.close(code, data);
+    this._destroy(code, reason);
+    this.socket.close(code, reason);
   }
 };
 

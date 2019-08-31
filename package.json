@@ -14,7 +14,7 @@
     "async-stream-emitter": "^3.0.2",
     "base64id": "^1.0.0",
     "lodash.clonedeep": "^4.5.0",
-    "sc-errors": "^2.0.0",
+    "sc-errors": "^2.0.1",
     "sc-formatter": "^3.0.2",
     "stream-demux": "^7.0.1",
     "writable-consumable-stream": "^1.1.1",

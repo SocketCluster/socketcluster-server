@@ -921,6 +921,95 @@ describe('Integration tests', function () {
       let {socket} = await server.listener('handshake').once();
       assert.notEqual(socket.exchange, null);
     });
+
+    it('Should close the connection if the client tries to send a message before the handshake', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      client.transport.socket.onopen = function () {
+        client.transport.socket.send(Buffer.alloc(0));
+      };
+
+      let {code: closeCode} = await client.listener('close').once(200);
+
+      assert.equal(closeCode, 4009);
+    });
+
+    it('Should close the connection if the client tries to send a ping before the handshake', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      client.transport.socket.onopen = function () {
+        client.transport.socket.send('');
+      };
+
+      let {code: closeCode} = await client.listener('close').once(200);
+
+      assert.equal(closeCode, 4009);
+    });
+
+    it('Should not close the connection if the client tries to send a message before the handshake and strictHandshake is false', async function () {
+      server = asyngularServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        strictHandshake: false
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = asyngularClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      let realOnOpenFunction = client.transport.socket.onopen;
+
+      client.transport.socket.onopen = function () {
+        client.transport.socket.send(Buffer.alloc(0));
+        return realOnOpenFunction.apply(this, arguments);
+      };
+
+      let packet = await client.listener('connect').once(200);
+
+      assert.notEqual(packet, null);
+      assert.notEqual(packet.id, null);
+    });
   });
 
   describe('Socket connection', function () {
@@ -1870,7 +1959,7 @@ describe('Integration tests', function () {
       await wait(1000);
       assert.equal(isSubscribed, false);
       assert.notEqual(error, null);
-      assert.equal(error.name, 'InvalidActionError');
+      assert.equal(error.name, 'BadConnectionError');
     });
 
     it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish events without crashing', async function () {
@@ -2794,7 +2883,7 @@ describe('Integration tests', function () {
           assert.equal(abortReason, 'InvalidAuthQueryHandshakeError: AG handshake failed because of invalid query auth parameters');
         });
 
-        it('Should connect with a delay if next() is called after a timeout inside the middleware function', async function () {
+        it('Should connect with a delay if allow() is called after a timeout inside the middleware function', async function () {
           let createConnectionTime = null;
           let connectEventTime = null;
           let abortStatus;

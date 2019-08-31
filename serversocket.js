@@ -89,7 +89,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   });
 
   this.socket.on('close', (code, data) => {
-    this._onClose(code, data);
+    this._destroy(code, data);
   });
 
   let pongMessage;
@@ -317,6 +317,11 @@ AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessa
     let isPong = message === pongMessage;
 
     if (isPong) {
+      if (this.server.strictHandshake && this.state === this.CONNECTING) {
+        this._destroy(4009);
+        this.socket.close(4009);
+        continue;
+      }
       let token = this.getAuthToken();
       if (this.isAuthTokenExpired(token)) {
         this.deauthenticate();
@@ -332,6 +337,10 @@ AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessa
         error.name = 'InvalidMessageError';
       }
       this.emitError(error);
+      if (this.server.strictHandshake && this.state === this.CONNECTING) {
+        this._destroy(4009);
+        this.socket.close(4009);
+      }
       continue;
     }
 
@@ -627,6 +636,12 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
 
       return;
     }
+    if (this.server.strictHandshake && this.state === this.CONNECTING) {
+      this._destroy(4009);
+      this.socket.close(4009);
+
+      return;
+    }
     if (eventName === '#authenticate') {
       // Let AGServer handle these events.
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
@@ -753,6 +768,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     return;
   }
 
+  if (this.server.strictHandshake && this.state === this.CONNECTING) {
+    this._destroy(4009);
+    this.socket.close(4009);
+
+    return;
+  }
+
   if (packet && packet.rid != null) {
     // If incoming message is a response to a previously sent message
     let ret = this._callbackMap[packet.rid];
@@ -774,7 +796,7 @@ AGServerSocket.prototype._resetPongTimeout = function () {
   }
   clearTimeout(this._pingTimeoutTicker);
   this._pingTimeoutTicker = setTimeout(() => {
-    this._onClose(4001);
+    this._destroy(4001);
     this.socket.close(4001);
   }, this.server.pingTimeout);
 };
@@ -872,7 +894,7 @@ AGServerSocket.prototype.killAllStreams = function () {
   this.killAllListeners();
 };
 
-AGServerSocket.prototype._onClose = function (code, reason) {
+AGServerSocket.prototype._destroy = function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
@@ -968,7 +990,7 @@ AGServerSocket.prototype.disconnect = function (code, data) {
   }
 
   if (this.state !== this.CLOSED) {
-    this._onClose(code, data);
+    this._destroy(code, data);
     this.socket.close(code, data);
   }
 };
@@ -981,7 +1003,7 @@ AGServerSocket.prototype.send = function (data, options) {
   this.socket.send(data, options, (error) => {
     if (error) {
       this.emitError(error);
-      this._onClose(1006, error.toString());
+      this._destroy(1006, error.toString());
     }
   });
 };
@@ -1310,7 +1332,7 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
     signedAuthToken = await this.server.auth.signToken(authToken, this.server.signatureKey, options);
   } catch (error) {
     this.emitError(error);
-    this._onClose(4002, error.toString());
+    this._destroy(4002, error.toString());
     this.socket.close(4002);
     throw error;
   }

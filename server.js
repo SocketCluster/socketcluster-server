@@ -27,6 +27,7 @@ function AGServer(options) {
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,
+    strictHandshake: true,
     pingTimeout: 20000,
     pingTimeoutDisabled: false,
     pingInterval: 8000,
@@ -59,6 +60,7 @@ function AGServer(options) {
   this.httpServer = opts.httpServer;
   this.socketChannelLimit = opts.socketChannelLimit;
   this.protocolVersion = opts.protocolVersion;
+  this.strictHandshake = opts.strictHandshake;
 
   this.brokerEngine = opts.brokerEngine;
   this.middlewareEmitFailures = opts.middlewareEmitFailures;

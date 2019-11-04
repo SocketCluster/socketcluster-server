@@ -2009,6 +2009,30 @@ describe('Integration tests', function () {
           done();
         });
       });
+
+      it('Should authenticate token and respond with isAuthenticated = true if req.socket.setAuthToken is called', function (done) {
+        var scSocket;
+
+        server.addMiddleware(server.MIDDLEWARE_HANDSHAKE_SC, function (req, next) {
+          scSocket = req.socket;
+          assert.equal(scSocket.authState, scSocket.UNAUTHENTICATED);
+          scSocket.setAuthToken({username: 'alice'});
+          next();
+        });
+
+        client = socketCluster.connect({
+          hostname: clientOptions.hostname,
+          port: portNumber,
+          multiplex: false
+        });
+
+        client.once('connect', function (data) {
+          assert.equal(scSocket.authState, scSocket.AUTHENTICATED);
+          assert.equal(data.isAuthenticated, true);
+          done();
+        });
+      });
+
     });
   });
 

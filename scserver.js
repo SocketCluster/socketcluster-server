@@ -534,6 +534,10 @@ SCServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
         scSocket.disconnect(statusCode);
         return;
       }
+      if (scSocket.signedAuthToken) {
+        // scSocket might become authenticated in HandshakeSCMiddleware
+        signedAuthToken = scSocket.signedAuthToken;
+      }
       self._processAuthToken(scSocket, signedAuthToken, function (err, isBadToken, oldState) {
         if (scSocket.state === scSocket.CLOSED) {
           return;

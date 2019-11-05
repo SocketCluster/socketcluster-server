@@ -2921,6 +2921,42 @@ describe('Integration tests', function () {
           assert.equal(connectEventTime - createConnectionTime > 400, true);
         });
 
+        it('Should not be allowed to call req.socket.setAuthToken from inside middleware', async function () {
+          let didAuthenticationEventTrigger = false;
+          let setAuthTokenError;
+
+          server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, async function (middlewareStream) {
+            for await (let {socket, type, allow, block} of middlewareStream) {
+              if (type === AGAction.HANDSHAKE_AG) {
+                try {
+                  await socket.setAuthToken({username: 'alice'});
+                } catch (error) {
+                  setAuthTokenError = error;
+                }
+              }
+              allow();
+            }
+          });
+
+          (async () => {
+            let event = await server.listener('authentication').once();
+            didAuthenticationEventTrigger = true;
+          })();
+
+          client = asyngularClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let event = await client.listener('connect').once();
+          assert.equal(event.isAuthenticated, false);
+          assert.equal(client.authState, client.UNAUTHENTICATED);
+          assert.equal(client.authToken, null);
+          assert.equal(didAuthenticationEventTrigger, false);
+          assert.notEqual(setAuthTokenError, null);
+          assert.equal(setAuthTokenError.name, 'InvalidActionError');
+        });
+
         it('Delaying handshake for one client should not affect other clients', async function () {
           let middlewareFunction = async function (middlewareStream) {
             for await (let action of middlewareStream) {

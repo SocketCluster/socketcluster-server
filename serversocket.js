@@ -1282,6 +1282,14 @@ AGServerSocket.prototype.triggerAuthenticationEvents = function (oldAuthState) {
 };
 
 AGServerSocket.prototype.setAuthToken = async function (data, options) {
+  if (this.state === this.CONNECTING) {
+    let err = new InvalidActionError(
+      'Cannot call setAuthToken before completing the handshake'
+    );
+    this.emitError(err);
+    throw err;
+  }
+  
   let authToken = cloneDeep(data);
   let oldAuthState = this.authState;
   this.authState = this.AUTHENTICATED;

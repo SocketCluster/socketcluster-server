@@ -170,6 +170,7 @@ SCServerSocket.prototype._handleEventObject = function (obj, message) {
           if (eventName === '#disconnect') {
             var disconnectData = newEventData || {};
             self._onSCClose(disconnectData.code, disconnectData.data);
+            self.socket.close(disconnectData.code);
           } else {
             if (self._autoAckEvents[eventName]) {
               if (ackData !== undefined) {

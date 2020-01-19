@@ -26,7 +26,7 @@ function AGAction() {
 }
 
 AGAction.prototype.HANDSHAKE_WS = AGAction.HANDSHAKE_WS = 'handshakeWS';
-AGAction.prototype.HANDSHAKE_AG = AGAction.HANDSHAKE_AG = 'handshakeAG';
+AGAction.prototype.HANDSHAKE_SC = AGAction.HANDSHAKE_SC = 'handshakeSC';
 
 AGAction.prototype.MESSAGE = AGAction.MESSAGE = 'message';
 

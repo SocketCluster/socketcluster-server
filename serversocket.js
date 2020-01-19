@@ -367,7 +367,7 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
   let action = new AGAction();
   action.request = this.request;
   action.socket = this;
-  action.type = AGAction.HANDSHAKE_AG;
+  action.type = AGAction.HANDSHAKE_SC;
 
   try {
     await this.server._processMiddlewareAction(this.middlewareHandshakeStream, action);

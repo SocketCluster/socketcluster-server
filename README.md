@@ -1,16 +1,16 @@
-# Asyngular server
-Minimal server module for Asyngular.
+# SocketCluster server
+Minimal server module for SocketCluster.
 
-This is a stand-alone server module for Asyngular (SocketCluster with full async/await support).
-Asyngular's protocol is backwards compatible with the SocketCluster protocol.
+This is a stand-alone server module for SocketCluster.
+SocketCluster's protocol is backwards compatible with the SocketCluster protocol.
 
 ## Setting up
 
-You will need to install both ```asyngular-server``` and ```asyngular-client``` (https://github.com/SocketCluster/asyngular-client).
+You will need to install both ```socketcluster-server``` and ```socketcluster-client``` (https://github.com/SocketCluster/socketcluster-client).
 
 To install this module:
 ```bash
-npm install asyngular-server
+npm install socketcluster-server
 ```
 
 ## Usage
@@ -18,10 +18,10 @@ npm install asyngular-server
 You need to attach it to an existing Node.js http or https server (example):
 ```js
 const http = require('http');
-const asyngularServer = require('asyngular-server');
+const socketClusterServer = require('socketcluster-server');
 
 let httpServer = http.createServer();
-let agServer = asyngularServer.attach(httpServer);
+let agServer = socketClusterServer.attach(httpServer);
 
 (async () => {
   // Handle new inbound sockets.
@@ -53,10 +53,10 @@ let agServer = asyngularServer.attach(httpServer);
 httpServer.listen(8000);
 ```
 
-For more detailed examples of how to use Asyngular, see `test/integration.js`.
-Also, see tests from the `asyngular-client` module.
+For more detailed examples of how to use SocketCluster, see `test/integration.js`.
+Also, see tests from the `socketcluster-client` module.
 
-Asyngular can work without the `for-await-of` loop; a `while` loop with `await` statements can be used instead.
+SocketCluster can work without the `for-await-of` loop; a `while` loop with `await` statements can be used instead.
 See https://github.com/SocketCluster/stream-demux#usage
 
 ## Compatibility mode
@@ -64,7 +64,7 @@ See https://github.com/SocketCluster/stream-demux#usage
 For compatibility with existing SocketCluster clients, set the `protocolVersion` to `1` and make sure that the `path` matches your old client path:
 
 ```js
-let agServer = asyngularServer.attach(httpServer, {
+let agServer = socketClusterServer.attach(httpServer, {
   protocolVersion: 1,
   path: '/socketcluster/'
 });
@@ -72,8 +72,8 @@ let agServer = asyngularServer.attach(httpServer, {
 
 ## Running the tests
 
-- Clone this repo: `git clone git@github.com:SocketCluster/asyngular-server.git`
-- Navigate to project directory: `cd asyngular-server`
+- Clone this repo: `git clone git@github.com:SocketCluster/socketcluster-server.git`
+- Navigate to project directory: `cd socketcluster-server`
 - Install all dependencies: `npm install`
 - Run the tests: `npm test`
 

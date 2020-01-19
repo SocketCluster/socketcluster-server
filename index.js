@@ -41,11 +41,11 @@ module.exports.listen = function (port, options, fn) {
     res.end('Not Implemented');
   });
 
-  let asyngularServer = module.exports.attach(server, options);
-  asyngularServer.httpServer = server;
+  let socketClusterServer = module.exports.attach(server, options);
+  socketClusterServer.httpServer = server;
   server.listen(port, fn);
 
-  return asyngularServer;
+  return socketClusterServer;
 };
 
 /**
@@ -62,6 +62,6 @@ module.exports.attach = function (server, options) {
     options = {};
   }
   options.httpServer = server;
-  let asyngularServer = new module.exports.AGServer(options);
-  return asyngularServer;
+  let socketClusterServer = new module.exports.AGServer(options);
+  return socketClusterServer;
 };

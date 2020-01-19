@@ -32,7 +32,7 @@ function AGServer(options) {
     pingTimeoutDisabled: false,
     pingInterval: 8000,
     origins: '*:*',
-    path: '/asyngular/',
+    path: '/socketcluster/',
     protocolVersion: 2,
     authDefaultExpiry: 86400,
     batchOnHandshake: false,

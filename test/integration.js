@@ -1,7 +1,7 @@
 const assert = require('assert');
-const asyngularServer = require('../');
+const socketClusterServer = require('../');
 const AGAction = require('../action');
-const asyngularClient = require('asyngular-client');
+const socketClusterClient = require('socketcluster-client');
 const localStorage = require('localStorage');
 const AGSimpleBroker = require('ag-simple-broker');
 
@@ -173,12 +173,12 @@ describe('Integration tests', function () {
       server.httpServer.close();
       await server.close();
     }
-    global.localStorage.removeItem('asyngular.authToken');
+    global.localStorage.removeItem('socketcluster.authToken');
   });
 
   describe('Client authentication', function () {
     beforeEach('Run the server before start', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, serverOptions);
+      server = socketClusterServer.listen(PORT_NUMBER, serverOptions);
       bindFailureHandlers(server);
 
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
@@ -206,13 +206,13 @@ describe('Integration tests', function () {
     });
 
     it('Should not send back error if JWT is not provided in handshake', async function () {
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
       let event = await client.listener('connect').once();
       assert.equal(event.authError === undefined, true);
     });
 
     it('Should be authenticated on connect if previous JWT token is present', async function () {
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
       await client.listener('connect').once();
       client.invoke('login', {username: 'bob'});
       await client.listener('authenticate').once();
@@ -225,9 +225,9 @@ describe('Integration tests', function () {
     });
 
     it('Should send back error if JWT is invalid during handshake', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
 
       await client.listener('connect').once();
       // Change the setAuthKey to invalidate the current token.
@@ -241,7 +241,7 @@ describe('Integration tests', function () {
     });
 
     it('Should allow switching between users', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
       let authenticateEvents = [];
       let deauthenticateEvents = [];
@@ -275,7 +275,7 @@ describe('Integration tests', function () {
       })();
 
       let clientSocketId;
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
       await client.listener('connect').once();
       clientSocketId = client.id;
       client.invoke('login', {username: 'alice'});
@@ -303,7 +303,7 @@ describe('Integration tests', function () {
     });
 
     it('Should emit correct events/data when socket is deauthenticated', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
       let authenticationStateChangeEvents = [];
       let authStateChangeEvents = [];
@@ -314,7 +314,7 @@ describe('Integration tests', function () {
         }
       })();
 
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
 
       (async () => {
         for await (let event of client.listener('connect')) {
@@ -356,9 +356,9 @@ describe('Integration tests', function () {
     });
 
     it('Should throw error if server socket deauthenticate is called after client disconnected and rejectOnFailedDelivery is true', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
 
       let {socket} = await server.listener('connection').once();
 
@@ -374,9 +374,9 @@ describe('Integration tests', function () {
     });
 
     it('Should not throw error if server socket deauthenticate is called after client disconnected and rejectOnFailedDelivery is not true', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
 
       let {socket} = await server.listener('connection').once();
 
@@ -385,9 +385,9 @@ describe('Integration tests', function () {
     });
 
     it('Should not authenticate the client if MIDDLEWARE_INBOUND blocks the authentication', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenAlice);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenAlice);
 
-      client = asyngularClient.create(clientOptions);
+      client = socketClusterClient.create(clientOptions);
       // The previous test authenticated us as 'alice', so that token will be passed to the server as
       // part of the handshake.
       let event = await client.listener('connect').once();
@@ -401,7 +401,7 @@ describe('Integration tests', function () {
 
   describe('Server authentication', function () {
     it('Token should be available after the authenticate listener resolves', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -415,7 +415,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -431,7 +431,7 @@ describe('Integration tests', function () {
     });
 
     it('Authentication can be captured using the authenticate listener', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -445,7 +445,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -461,7 +461,7 @@ describe('Integration tests', function () {
     });
 
     it('Previously authenticated client should still be authenticated after reconnecting', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -475,7 +475,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -497,7 +497,7 @@ describe('Integration tests', function () {
     });
 
     it('Should set the correct expiry when using expiresIn option when creating a JWT with socket.setAuthToken', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -511,7 +511,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -529,7 +529,7 @@ describe('Integration tests', function () {
     });
 
     it('Should set the correct expiry when adding exp claim when creating a JWT with socket.setAuthToken', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -543,7 +543,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -561,7 +561,7 @@ describe('Integration tests', function () {
     });
 
     it('The exp claim should have priority over expiresIn option when using socket.setAuthToken', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -575,7 +575,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -593,7 +593,7 @@ describe('Integration tests', function () {
     });
 
     it('Should send back error if socket.setAuthToken tries to set both iss claim and issuer option', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -609,7 +609,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -661,7 +661,7 @@ describe('Integration tests', function () {
     });
 
     it('Should trigger an authTokenSigned event and socket.signedAuthToken should be set after calling the socket.setAuthToken method', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -696,7 +696,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -712,7 +712,7 @@ describe('Integration tests', function () {
     });
 
     it('The socket.setAuthToken call should reject if token delivery fails and rejectOnFailedDelivery option is true', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         ackTimeout: 1000
@@ -723,7 +723,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -764,7 +764,7 @@ describe('Integration tests', function () {
     });
 
     it('The socket.setAuthToken call should not reject if token delivery fails and rejectOnFailedDelivery option is not true', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         ackTimeout: 1000
@@ -775,7 +775,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -813,9 +813,9 @@ describe('Integration tests', function () {
     });
 
     it('The verifyToken method of the authEngine receives correct params', async function () {
-      global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+      global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
 
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -829,7 +829,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -851,7 +851,7 @@ describe('Integration tests', function () {
     });
 
     it('Should remove client data from the server when client disconnects before authentication process finished', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -870,7 +870,7 @@ describe('Integration tests', function () {
       })();
 
       await server.listener('ready').once();
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -899,7 +899,7 @@ describe('Integration tests', function () {
 
   describe('Socket handshake', function () {
     it('Exchange is attached to socket before the handshake event is triggered', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -913,7 +913,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -923,7 +923,7 @@ describe('Integration tests', function () {
     });
 
     it('Should close the connection if the client tries to send a message before the handshake', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -936,7 +936,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -956,7 +956,7 @@ describe('Integration tests', function () {
     });
 
     it('Should close the connection if the client tries to send a ping before the handshake', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -969,7 +969,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -984,7 +984,7 @@ describe('Integration tests', function () {
     });
 
     it('Should not close the connection if the client tries to send a message before the handshake and strictHandshake is false', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         strictHandshake: false
@@ -998,7 +998,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1019,7 +1019,7 @@ describe('Integration tests', function () {
 
   describe('Socket connection', function () {
     it('Server-side socket connect event and server connection event should trigger', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1038,7 +1038,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1104,7 +1104,7 @@ describe('Integration tests', function () {
 
   describe('Socket disconnection', function () {
     it('Server-side socket disconnect event should not trigger if the socket did not complete the handshake; instead, it should trigger connectAbort', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1127,7 +1127,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1182,7 +1182,7 @@ describe('Integration tests', function () {
     });
 
     it('Server-side socket disconnect event should trigger if the socket completed the handshake (not connectAbort)', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1205,7 +1205,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1261,7 +1261,7 @@ describe('Integration tests', function () {
     });
 
     it('The close event should trigger when the socket loses the connection before the handshake', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1282,7 +1282,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1323,7 +1323,7 @@ describe('Integration tests', function () {
     });
 
     it('The close event should trigger when the socket loses the connection after the handshake', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1344,7 +1344,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1385,7 +1385,7 @@ describe('Integration tests', function () {
     });
 
     it('Disconnection should support socket message backpressure', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1400,7 +1400,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1481,7 +1481,7 @@ describe('Integration tests', function () {
     });
 
     it('Socket streams should be killed immediately if socket disconnects (default/kill mode)', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1504,7 +1504,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1525,7 +1525,7 @@ describe('Integration tests', function () {
     });
 
     it('Socket streams should be closed eventually if socket disconnects (close mode)', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         socketStreamCleanupMode: 'close'
@@ -1549,7 +1549,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1570,7 +1570,7 @@ describe('Integration tests', function () {
     });
 
     it('Socket streams should be closed eventually if socket disconnects (none mode)', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         socketStreamCleanupMode: 'none'
@@ -1594,7 +1594,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1617,7 +1617,7 @@ describe('Integration tests', function () {
 
   describe('Socket RPC invoke', function () {
     it ('Should support invoking a remote procedure on the server', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1639,7 +1639,7 @@ describe('Integration tests', function () {
         }
       })();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1660,7 +1660,7 @@ describe('Integration tests', function () {
 
   describe('Socket transmit', function () {
     it ('Should support receiving remote transmitted data on the server', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1669,7 +1669,7 @@ describe('Integration tests', function () {
       (async () => {
         await wait(10);
 
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -1689,7 +1689,7 @@ describe('Integration tests', function () {
 
   describe('Socket backpressure', function () {
     it('Should be able to getInboundBackpressure() on a socket object', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1715,7 +1715,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1737,7 +1737,7 @@ describe('Integration tests', function () {
     });
 
     it('Should be able to getOutboundBackpressure() on a socket object', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1770,7 +1770,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1788,7 +1788,7 @@ describe('Integration tests', function () {
     });
 
     it('Should be able to getBackpressure() on a socket object and it should be the highest backpressure', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1814,7 +1814,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1838,7 +1838,7 @@ describe('Integration tests', function () {
 
   describe('Socket pub/sub', function () {
     it('Should maintain order of publish and subscribe', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1852,7 +1852,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1875,7 +1875,7 @@ describe('Integration tests', function () {
     });
 
     it('Should maintain order of publish and subscribe when client starts out as disconnected', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1889,7 +1889,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER,
         autoConnect: false
@@ -1913,7 +1913,7 @@ describe('Integration tests', function () {
     });
 
     it('Client should not be able to subscribe to a channel before the handshake has completed', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1933,7 +1933,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -1968,7 +1968,7 @@ describe('Integration tests', function () {
     });
 
     it('Server should be able to handle invalid #subscribe and #unsubscribe and #publish events without crashing', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -1982,7 +1982,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2072,7 +2072,7 @@ describe('Integration tests', function () {
     });
 
     it('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2083,7 +2083,7 @@ describe('Integration tests', function () {
       (async () => {
         await server.listener('ready').once();
 
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -2118,7 +2118,7 @@ describe('Integration tests', function () {
     });
 
     it('When default AGSimpleBroker broker engine is used, agServer.exchange should support consuming data from a channel', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2126,7 +2126,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2167,7 +2167,7 @@ describe('Integration tests', function () {
     });
 
     it('When default AGSimpleBroker broker engine is used, agServer.exchange should support publishing data to a channel', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2175,7 +2175,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2218,7 +2218,7 @@ describe('Integration tests', function () {
         return resolveAfterTimeout(100, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
@@ -2229,7 +2229,7 @@ describe('Integration tests', function () {
 
       (async () => {
         await server.listener('ready').once();
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -2268,7 +2268,7 @@ describe('Integration tests', function () {
     });
 
     it('Socket should emit an error when trying to unsubscribe from a channel which it is not subscribed to', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2288,7 +2288,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2314,7 +2314,7 @@ describe('Integration tests', function () {
         return resolveAfterTimeout(300, defaultUnsubscribeSocket.call(this, socket, channel));
       };
 
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         brokerEngine: customBrokerEngine
@@ -2335,7 +2335,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2365,7 +2365,7 @@ describe('Integration tests', function () {
     });
 
     it('Socket channelSubscriptions and channelSubscriptionsCount should update when socket.kickOut(channel) is called', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2399,7 +2399,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER
       });
@@ -2416,7 +2416,7 @@ describe('Integration tests', function () {
 
   describe('Batching', function () {
     it('Should batch messages sent through sockets after the handshake when the batchOnHandshake option is true', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         batchOnHandshake: true,
@@ -2464,7 +2464,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER,
         batchOnHandshake: true,
@@ -2524,7 +2524,7 @@ describe('Integration tests', function () {
     });
 
     it('The batchOnHandshake option should not break the order of subscribe and publish', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE,
         batchOnHandshake: true,
@@ -2541,7 +2541,7 @@ describe('Integration tests', function () {
 
       await server.listener('ready').once();
 
-      client = asyngularClient.create({
+      client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER,
         autoConnect: false,
@@ -2567,7 +2567,7 @@ describe('Integration tests', function () {
       beforeEach('Launch server with ping options before start', async function () {
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
-        server = asyngularServer.listen(PORT_NUMBER, {
+        server = socketClusterServer.listen(PORT_NUMBER, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
           pingInterval: 2000,
@@ -2579,7 +2579,7 @@ describe('Integration tests', function () {
       });
 
       it('Should disconnect socket if server does not receive a pong from client before timeout', async function () {
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER
         });
@@ -2627,7 +2627,7 @@ describe('Integration tests', function () {
       beforeEach('Launch server with ping options before start', async function () {
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
-        server = asyngularServer.listen(PORT_NUMBER, {
+        server = socketClusterServer.listen(PORT_NUMBER, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
           pingInterval: 2000,
@@ -2640,7 +2640,7 @@ describe('Integration tests', function () {
       });
 
       it('Should not disconnect socket if server does not receive a pong from client before timeout', async function () {
-        client = asyngularClient.create({
+        client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER,
           pingTimeoutDisabled: true
@@ -2686,7 +2686,7 @@ describe('Integration tests', function () {
 
   describe('Middleware', function () {
     beforeEach('Launch server without middleware before start', async function () {
-      server = asyngularServer.listen(PORT_NUMBER, {
+      server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
         wsEngine: WS_ENGINE
       });
@@ -2719,12 +2719,12 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
-          let clientA = asyngularClient.create({
+          let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
 
-          let clientB = asyngularClient.create({
+          let clientB = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER,
             query: {
@@ -2755,7 +2755,7 @@ describe('Integration tests', function () {
         });
       });
 
-      describe('HANDSHAKE_AG action', function () {
+      describe('HANDSHAKE_SC action', function () {
         it('Should trigger correct events if MIDDLEWARE_HANDSHAKE blocks with an error', async function () {
           let middlewareWasExecuted = false;
           let serverWarnings = [];
@@ -2764,7 +2764,7 @@ describe('Integration tests', function () {
 
           let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === AGAction.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_SC) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2783,7 +2783,7 @@ describe('Integration tests', function () {
             }
           })();
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -2817,7 +2817,7 @@ describe('Integration tests', function () {
 
           let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === AGAction.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_SC) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because the server was too lazy');
@@ -2830,7 +2830,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -2854,7 +2854,7 @@ describe('Integration tests', function () {
 
           let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow, block} of middlewareStream) {
-              if (type === AGAction.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_SC) {
                 await wait(100);
                 middlewareWasExecuted = true;
                 let err = new Error('AG handshake failed because of invalid query auth parameters');
@@ -2871,7 +2871,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -2896,7 +2896,7 @@ describe('Integration tests', function () {
 
           let middlewareFunction = async function (middlewareStream) {
             for await (let {type, allow} of middlewareStream) {
-              if (type === AGAction.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_SC) {
                 await wait(500);
               }
               allow();
@@ -2905,7 +2905,7 @@ describe('Integration tests', function () {
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
           createConnectionTime = Date.now();
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -2927,7 +2927,7 @@ describe('Integration tests', function () {
 
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, async function (middlewareStream) {
             for await (let {socket, type, allow, block} of middlewareStream) {
-              if (type === AGAction.HANDSHAKE_AG) {
+              if (type === AGAction.HANDSHAKE_SC) {
                 try {
                   await socket.setAuthToken({username: 'alice'});
                 } catch (error) {
@@ -2943,7 +2943,7 @@ describe('Integration tests', function () {
             didAuthenticationEventTrigger = true;
           })();
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -2960,7 +2960,7 @@ describe('Integration tests', function () {
         it('Delaying handshake for one client should not affect other clients', async function () {
           let middlewareFunction = async function (middlewareStream) {
             for await (let action of middlewareStream) {
-              if (action.type === AGAction.HANDSHAKE_AG) {
+              if (action.type === AGAction.HANDSHAKE_SC) {
                 if (action.socket.request.url.indexOf('?delayMe=true') !== -1) {
                   // Long delay.
                   await wait(5000);
@@ -2973,12 +2973,12 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_HANDSHAKE, middlewareFunction);
 
-          let clientA = asyngularClient.create({
+          let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
 
-          let clientB = asyngularClient.create({
+          let clientB = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER,
             query: {
@@ -3027,7 +3027,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3059,7 +3059,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3091,7 +3091,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3101,7 +3101,7 @@ describe('Integration tests', function () {
         });
 
         it('Should run AUTHENTICATE action in middleware if JWT token exists', async function () {
-          global.localStorage.setItem('asyngular.authToken', validSignedAuthTokenBob);
+          global.localStorage.setItem('socketcluster.authToken', validSignedAuthTokenBob);
           let middlewareWasExecuted = false;
 
           let middlewareFunction = async function (middlewareStream) {
@@ -3114,7 +3114,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3146,7 +3146,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3177,7 +3177,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3222,12 +3222,12 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          let clientA = asyngularClient.create({
+          let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
 
-          let clientB = asyngularClient.create({
+          let clientB = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER,
             query: {
@@ -3235,7 +3235,7 @@ describe('Integration tests', function () {
             }
           });
 
-          let clientC = asyngularClient.create({
+          let clientC = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3283,7 +3283,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3311,7 +3311,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER,
             autoConnect: false
@@ -3354,7 +3354,7 @@ describe('Integration tests', function () {
           };
           server.setMiddleware(server.MIDDLEWARE_OUTBOUND, middlewareFunction);
 
-          client = asyngularClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });

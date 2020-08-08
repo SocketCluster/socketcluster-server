@@ -2690,6 +2690,8 @@ describe('Integration tests', function () {
   });
 
   describe('Middleware', function () {
+    let server;
+
     beforeEach('Launch server without middleware before start', async function () {
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
@@ -2704,6 +2706,18 @@ describe('Integration tests', function () {
       })();
 
       await server.listener('ready').once();
+    });
+
+    afterEach('Close server after each middleware test', async function () {
+      if (client) {
+        client.closeAllListeners();
+        client.disconnect();
+      }
+      if (server) {
+        server.closeAllListeners();
+        server.httpServer.close();
+        await server.close();
+      }
     });
 
     describe('MIDDLEWARE_HANDSHAKE', function () {
@@ -3286,7 +3300,7 @@ describe('Integration tests', function () {
 
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          let client = socketClusterClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3329,7 +3343,7 @@ describe('Integration tests', function () {
 
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          let client = socketClusterClient.create({
+          client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });

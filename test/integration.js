@@ -3265,10 +3265,11 @@ describe('Integration tests', function () {
           clientB.disconnect();
           clientC.disconnect();
         });
+
         it('Should allow to change message in middleware when client invokePublish', async function() {
-          const clientMessage = 'world';
-          const middlewareMessage = 'intercepted';
-          const middlewareFunction = async function (middlewareStream) {
+          let clientMessage = 'world';
+          let middlewareMessage = 'intercepted';
+          let middlewareFunction = async function (middlewareStream) {
             for await (let action of middlewareStream) {
               if (action.type === AGAction.PUBLISH_IN) {
                 action.allow({data: middlewareMessage});
@@ -3280,7 +3281,7 @@ describe('Integration tests', function () {
 
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          const client = socketClusterClient.create({
+          let client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3303,14 +3304,15 @@ describe('Integration tests', function () {
           }
 
           await wait(100);
-          
+
           assert.notEqual(clientMessage, middlewareMessage);
           assert.equal(receivedMessages[0], middlewareMessage);
         });
+
         it('Should allow to change message in middleware when client transmitPublish', async function() {
-          const clientMessage = 'world';
-          const middlewareMessage = 'intercepted';
-          const middlewareFunction = async function (middlewareStream) {
+          let clientMessage = 'world';
+          let middlewareMessage = 'intercepted';
+          let middlewareFunction = async function (middlewareStream) {
             for await (let action of middlewareStream) {
               if (action.type === AGAction.PUBLISH_IN) {
                 action.allow({data: middlewareMessage});
@@ -3322,7 +3324,7 @@ describe('Integration tests', function () {
 
           server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
 
-          const client = socketClusterClient.create({
+          let client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER
           });
@@ -3345,7 +3347,7 @@ describe('Integration tests', function () {
           }
 
           await wait(100);
-                    
+
           assert.notEqual(clientMessage, middlewareMessage);
           assert.equal(receivedMessages[0], middlewareMessage);
         })

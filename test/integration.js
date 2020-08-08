@@ -3265,6 +3265,90 @@ describe('Integration tests', function () {
           clientB.disconnect();
           clientC.disconnect();
         });
+        it('Should allow to change message in middleware when client invokePublish', async function() {
+          const clientMessage = 'world';
+          const middlewareMessage = 'intercepted';
+          const middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_IN) {
+                action.allow({data: middlewareMessage});
+              } else {
+                action.allow();
+              }
+            }
+          };
+
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          const client = socketClusterClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let helloChannel = client.subscribe('hello');
+          await helloChannel.listener('subscribe').once();
+
+          let receivedMessages = [];
+          (async () => {
+            for await (let data of helloChannel) {
+              receivedMessages.push(data);
+            }
+          })();
+
+          let error;
+          try {
+            await client.invokePublish('hello', clientMessage);
+          } catch (err) {
+            error = err;
+          }
+
+          await wait(100);
+          
+          assert.notEqual(clientMessage, middlewareMessage);
+          assert.equal(receivedMessages[0], middlewareMessage);
+        });
+        it('Should allow to change message in middleware when client transmitPublish', async function() {
+          const clientMessage = 'world';
+          const middlewareMessage = 'intercepted';
+          const middlewareFunction = async function (middlewareStream) {
+            for await (let action of middlewareStream) {
+              if (action.type === AGAction.PUBLISH_IN) {
+                action.allow({data: middlewareMessage});
+              } else {
+                action.allow();
+              }
+            }
+          };
+
+          server.setMiddleware(server.MIDDLEWARE_INBOUND, middlewareFunction);
+
+          const client = socketClusterClient.create({
+            hostname: clientOptions.hostname,
+            port: PORT_NUMBER
+          });
+
+          let helloChannel = client.subscribe('hello');
+          await helloChannel.listener('subscribe').once();
+
+          let receivedMessages = [];
+          (async () => {
+            for await (let data of helloChannel) {
+              receivedMessages.push(data);
+            }
+          })();
+
+          let error;
+          try {
+            await client.transmitPublish('hello', clientMessage);
+          } catch (err) {
+            error = err;
+          }
+
+          await wait(100);
+                    
+          assert.notEqual(clientMessage, middlewareMessage);
+          assert.equal(receivedMessages[0], middlewareMessage);
+        })
       });
 
       describe('SUBSCRIBE action', function () {

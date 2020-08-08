@@ -760,6 +760,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
     if (isPublish) {
+      packet.data.data = newData;
       await this._processInboundPublishPacket(packet);
     }
 

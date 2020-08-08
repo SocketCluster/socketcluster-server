@@ -2691,6 +2691,7 @@ describe('Integration tests', function () {
 
   describe('Middleware', function () {
     let server;
+    let client;
 
     beforeEach('Launch server without middleware before start', async function () {
       server = socketClusterServer.listen(PORT_NUMBER, {

@@ -2115,7 +2115,6 @@ describe('Integration tests', function () {
       })();
 
       await wait(300);
-
       assert.equal(eventList[0].type, 'disconnect');
       assert.equal(eventList[1].type, 'unsubscribe');
       assert.equal(eventList[1].channel, 'foo');

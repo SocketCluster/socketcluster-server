@@ -2104,14 +2104,18 @@ describe('Integration tests', function () {
         }
       })();
 
-      let disconnectPacket = await socket.listener('disconnect').once();
-      eventList.push({
-        type: 'disconnect',
-        code: disconnectPacket.code,
-        reason: disconnectPacket.data
-      });
+      (async () => {
+        for await (let disconnectPacket of socket.listener('disconnect')) {
+          eventList.push({
+            type: 'disconnect',
+            code: disconnectPacket.code,
+            reason: disconnectPacket.data
+          });
+        }
+      })();
 
-      await wait(0);
+      await wait(300);
+
       assert.equal(eventList[0].type, 'disconnect');
       assert.equal(eventList[1].type, 'unsubscribe');
       assert.equal(eventList[1].channel, 'foo');
@@ -2253,15 +2257,17 @@ describe('Integration tests', function () {
         }
       })();
 
-      let event = await socket.listener('disconnect').once();
+      (async () => {
+        for await (let event of socket.listener('disconnect')) {
+          eventList.push({
+            type: 'disconnect',
+            code: event.code,
+            reason: event.reason
+          });
+        }
+      })();
 
-      eventList.push({
-        type: 'disconnect',
-        code: event.code,
-        reason: event.reason
-      });
-
-      await wait(0);
+      await wait(300);
       assert.equal(eventList[0].type, 'disconnect');
       assert.equal(eventList[1].type, 'unsubscribe');
       assert.equal(eventList[1].channel, 'foo');

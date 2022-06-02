@@ -15,7 +15,7 @@
     "base64id": "^1.0.0",
     "clone-deep": "^4.0.1",
     "sc-errors": "^2.0.1",
-    "sc-formatter": "^3.0.2",
+    "sc-formatter": "^3.0.3",
     "stream-demux": "^8.0.0",
     "writable-consumable-stream": "^2.0.0",
     "ws": "^7.4.6"
@@ -23,7 +23,7 @@
   "devDependencies": {
     "localStorage": "^1.0.3",
     "mocha": "^9.0.0",
-    "socketcluster-client": "^16.0.0"
+    "socketcluster-client": "^16.1.0"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 3000 --slow 3000"

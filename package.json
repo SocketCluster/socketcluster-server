@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "16.2.0",
+  "version": "16.2.1",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {
@@ -23,7 +23,7 @@
   "devDependencies": {
     "localStorage": "^1.0.3",
     "mocha": "^9.0.0",
-    "socketcluster-client": "^16.1.0"
+    "socketcluster-client": "^16.1.1"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 3000 --slow 3000"

@@ -364,11 +364,13 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
   let signedAuthToken = data.authToken || null;
   clearTimeout(this._handshakeTimeoutRef);
 
+  let authInfo = await this._validateAuthToken(signedAuthToken);
+
   let action = new AGAction();
   action.request = this.request;
   action.socket = this;
   action.type = AGAction.HANDSHAKE_SC;
-  action.data = data;
+  action.data = authInfo;
 
   try {
     await this.server._processMiddlewareAction(this.middlewareHandshakeStream, action);
@@ -392,7 +394,7 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
 
   let oldAuthState = this.authState;
   try {
-    await this._processAuthToken(signedAuthToken);
+    await this._processAuthentication(authInfo);
     if (this.state === this.CLOSED) {
       return;
     }
@@ -445,8 +447,9 @@ AGServerSocket.prototype._processHandshakeRequest = async function (request) {
 AGServerSocket.prototype._processAuthenticateRequest = async function (request) {
   let signedAuthToken = request.data;
   let oldAuthState = this.authState;
+  let authInfo = await this._validateAuthToken(signedAuthToken);
   try {
-    await this._processAuthToken(signedAuthToken);
+    await this._processAuthentication(authInfo);
   } catch (error) {
     if (error.isBadToken) {
       this.deauthenticate();
@@ -1495,24 +1498,41 @@ AGServerSocket.prototype._emitBadAuthTokenError = function (error, signedAuthTok
   });
 };
 
-AGServerSocket.prototype._processAuthToken = async function (signedAuthToken) {
+AGServerSocket.prototype._validateAuthToken = async function (signedAuthToken) {
   let verificationOptions = Object.assign({}, this.server.defaultVerificationOptions, {
     socket: this
   });
-  let authToken;
 
+  let authToken;
   try {
     authToken = await this.server.auth.verifyToken(signedAuthToken, this.server.verificationKey, verificationOptions);
   } catch (error) {
+    let authTokenError = this._processTokenError(error);
+    return {
+      signedAuthToken,
+      authTokenError,
+      authToken: null,
+      authState: this.UNAUTHENTICATED
+    };
+  }
+
+  return {
+    signedAuthToken,
+    authTokenError: null,
+    authToken,
+    authState: this.AUTHENTICATED
+  };
+};
+
+AGServerSocket.prototype._processAuthentication = async function ({signedAuthToken, authTokenError, authToken, authState}) {
+  if (authTokenError) {
     this.signedAuthToken = null;
     this.authToken = null;
     this.authState = this.UNAUTHENTICATED;
 
-    let authTokenError = this._processTokenError(error);
-
     // If the error is related to the JWT being badly formatted, then we will
     // treat the error as a socket error.
-    if (error && signedAuthToken != null) {
+    if (signedAuthToken != null) {
       this.emitError(authTokenError);
       if (authTokenError.isBadToken) {
         this._emitBadAuthTokenError(authTokenError, signedAuthToken);

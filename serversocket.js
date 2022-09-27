@@ -88,7 +88,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
     this.emitError(err);
   });
 
-  this.socket.on('close', (code, reason) => {
+  this.socket.on('close', (code, reasonBuffer) => {
+    let reason = reasonBuffer.toString();
     this._destroy(code, reason);
   });
 
@@ -127,7 +128,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this._handleOutboundPacketStream();
 
   // Receive incoming raw messages
-  this.socket.on('message', async (message, flags) => {
+  this.socket.on('message', async (messageBuffer, isBinary) => {
+    let message = isBinary ? messageBuffer : messageBuffer.toString();
     this.inboundReceivedMessageCount++;
 
     let isPong = message === pongMessage;

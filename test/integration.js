@@ -2568,7 +2568,7 @@ describe('Integration tests', function () {
   });
 
   describe('Socket Ping/pong', function () {
-    describe('When when pingTimeoutDisabled is not set', function () {
+    describe('When pingTimeoutDisabled is not set', function () {
       beforeEach('Launch server with ping options before start', async function () {
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
@@ -2628,7 +2628,7 @@ describe('Integration tests', function () {
       });
     });
 
-    describe('When when pingTimeoutDisabled is true', function () {
+    describe('When pingTimeoutDisabled is true', function () {
       beforeEach('Launch server with ping options before start', async function () {
         // Intentionally make pingInterval higher than pingTimeout, that
         // way the client will never receive a ping or send back a pong.
@@ -2687,12 +2687,67 @@ describe('Integration tests', function () {
         assert.equal(serverDisconnectionCode, null);
       });
     });
+
+    describe('When pingTimeout is greater than pingInterval', function () {
+      beforeEach('Launch server with ping options before start', async function () {
+        // Intentionally make pingInterval higher than pingTimeout, that
+        // way the client will never receive a ping or send back a pong.
+        server = socketClusterServer.listen(PORT_NUMBER, {
+          authKey: serverOptions.authKey,
+          wsEngine: WS_ENGINE,
+          pingInterval: 400,
+          pingTimeout: 1000
+        });
+        bindFailureHandlers(server);
+
+        await server.listener('ready').once();
+      });
+
+      it('Should not disconnect socket if server receives a pong from client before timeout', async function () {
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: PORT_NUMBER
+        });
+
+        let serverWarning = null;
+        (async () => {
+          for await (let {warning} of server.listener('warning')) {
+            serverWarning = warning;
+          }
+        })();
+
+        let serverDisconnectionCode = null;
+        (async () => {
+          for await (let event of server.listener('disconnection')) {
+            serverDisconnectionCode = event.code;
+          }
+        })();
+
+        let clientError = null;
+        (async () => {
+          for await (let {error} of client.listener('error')) {
+            clientError = error;
+          }
+        })();
+
+        let clientDisconnectCode = null;
+        (async () => {
+          for await (let event of client.listener('disconnect')) {
+            clientDisconnectCode = event.code;
+          }
+        })();
+
+        await wait(2000);
+        assert.equal(clientError, null);
+        assert.equal(clientDisconnectCode, null);
+
+        assert.equal(serverWarning, null);
+        assert.equal(serverDisconnectionCode, null);
+      });
+    });
   });
 
   describe('Middleware', function () {
-    let server;
-    let client;
-
     beforeEach('Launch server without middleware before start', async function () {
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
@@ -2707,18 +2762,6 @@ describe('Integration tests', function () {
       })();
 
       await server.listener('ready').once();
-    });
-
-    afterEach('Close server after each middleware test', async function () {
-      if (client) {
-        client.closeAllListeners();
-        client.disconnect();
-      }
-      if (server) {
-        server.closeAllListeners();
-        server.httpServer.close();
-        await server.close();
-      }
     });
 
     describe('MIDDLEWARE_HANDSHAKE', function () {

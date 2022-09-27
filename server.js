@@ -239,7 +239,7 @@ AGServer.prototype._handleSocketConnection = function (wsSocket, upgradeReq) {
   this.emit('handshake', {socket: agSocket});
 };
 
-AGServer.prototype.close = function () {
+AGServer.prototype.close = function (keepSocketsOpen) {
   this.isReady = false;
   return new Promise((resolve, reject) => {
     this.wsServer.close((err) => {
@@ -249,6 +249,11 @@ AGServer.prototype.close = function () {
       }
       resolve();
     });
+    if (!keepSocketsOpen) {
+      for (let socket of Object.values(this.clients)) {
+        socket.terminate();
+      }
+    }
   });
 };
 

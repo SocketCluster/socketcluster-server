@@ -8,7 +8,7 @@
     "url": "git://github.com/SocketCluster/socketcluster-server.git"
   },
   "dependencies": {
-    "ag-auth": "^1.0.1",
+    "ag-auth": "^2.0.0",
     "ag-request": "^1.0.0",
     "ag-simple-broker": "^5.0.0",
     "async-stream-emitter": "^4.0.0",

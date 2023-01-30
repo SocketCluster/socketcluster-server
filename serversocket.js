@@ -1427,10 +1427,19 @@ AGServerSocket.prototype.deauthenticate = async function (options) {
 };
 
 AGServerSocket.prototype.kickOut = function (channel, message) {
-  delete this.channelSubscriptions[channel];
-  this.channelSubscriptionsCount--;
-  this.transmit('#kickOut', {channel, message});
-  return this.server.brokerEngine.unsubscribeSocket(this, channel);
+  let channels = channel;
+  if (!channels) {
+    channels = Object.keys(this.channelSubscriptions);
+  }
+  if (!Array.isArray(channels)) {
+    channels = [channel];
+  }
+  for (const channelName of channels) {
+    delete this.channelSubscriptions[channelName];
+    this.channelSubscriptionsCount--;
+    this.transmit('#kickOut', {channel: channelName, message});
+    this.server.brokerEngine.unsubscribeSocket(this, channelName);
+  }
 };
 
 AGServerSocket.prototype.subscriptions = function () {

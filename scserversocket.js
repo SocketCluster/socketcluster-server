@@ -527,13 +527,15 @@ SCServerSocket.prototype.kickOut = function (channel, message, callback) {
       delete self.channelSubscriptions[channelName];
       self.channelSubscriptionsCount--;
       self.emit('#kickOut', {message: message, channel: channelName});
+      self.server.brokerEngine.unsubscribeSocket(self, channelName);
     });
+    callback && callback();
   } else {
     delete this.channelSubscriptions[channel];
     this.channelSubscriptionsCount--;
     this.emit('#kickOut', {message: message, channel: channel});
+    this.server.brokerEngine.unsubscribeSocket(this, channel, callback);
   }
-  this.server.brokerEngine.unsubscribeSocket(this, channel, callback);
 };
 
 SCServerSocket.prototype.subscriptions = function () {

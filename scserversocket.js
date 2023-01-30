@@ -521,21 +521,20 @@ SCServerSocket.prototype.deauthenticate = function (callback) {
 
 SCServerSocket.prototype.kickOut = function (channel, message, callback) {
   var self = this;
-
-  if (channel == null) {
-    Object.keys(this.channelSubscriptions).forEach(function (channelName) {
-      delete self.channelSubscriptions[channelName];
-      self.channelSubscriptionsCount--;
-      self.emit('#kickOut', {message: message, channel: channelName});
-      self.server.brokerEngine.unsubscribeSocket(self, channelName);
-    });
-    callback && callback();
-  } else {
-    delete this.channelSubscriptions[channel];
-    this.channelSubscriptionsCount--;
-    this.emit('#kickOut', {message: message, channel: channel});
-    this.server.brokerEngine.unsubscribeSocket(this, channel, callback);
+  var channels = channel;
+  if (!channels) {
+    channels = Object.keys(this.channelSubscriptions);
   }
+  if (!Array.isArray(channels)) {
+    channels = [channel];
+  }
+  channels.forEach(function (channelName) {
+    delete self.channelSubscriptions[channelName];
+    self.channelSubscriptionsCount--;
+    self.emit('#kickOut', {message: message, channel: channelName});
+    self.server.brokerEngine.unsubscribeSocket(self, channelName);
+  });
+  callback && callback();
 };
 
 SCServerSocket.prototype.subscriptions = function () {

@@ -2214,7 +2214,7 @@ describe('Integration tests', function () {
       assert.equal(receivedChannelData[1], 'hello2');
     });
 
-    it('When disconnecting a socket, the unsubscribe event should trigger after the disconnect event', async function () {
+    it('When disconnecting a socket, the unsubscribe event should trigger after the disconnect and close events', async function () {
       let customBrokerEngine = new AGSimpleBroker();
       let defaultUnsubscribeSocket = customBrokerEngine.unsubscribeSocket;
       customBrokerEngine.unsubscribeSocket = function (socket, channel) {
@@ -2266,10 +2266,21 @@ describe('Integration tests', function () {
         }
       })();
 
-      await wait(300);
+      (async () => {
+        for await (let event of socket.listener('close')) {
+          eventList.push({
+            type: 'close',
+            code: event.code,
+            reason: event.reason
+          });
+        }
+      })();
+
+      await wait(700);
       assert.equal(eventList[0].type, 'disconnect');
-      assert.equal(eventList[1].type, 'unsubscribe');
-      assert.equal(eventList[1].channel, 'foo');
+      assert.equal(eventList[1].type, 'close');
+      assert.equal(eventList[2].type, 'unsubscribe');
+      assert.equal(eventList[2].channel, 'foo');
     });
 
     it('Socket should emit an error when trying to unsubscribe from a channel which it is not subscribed to', async function () {

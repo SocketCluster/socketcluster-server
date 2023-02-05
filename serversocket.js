@@ -908,7 +908,7 @@ AGServerSocket.prototype.killAllStreams = function () {
   this.killAllListeners();
 };
 
-AGServerSocket.prototype._destroy = function (code, reason) {
+AGServerSocket.prototype._destroy = async function (code, reason) {
   clearInterval(this._pingIntervalTicker);
   clearTimeout(this._pingTimeoutTicker);
 
@@ -940,26 +940,12 @@ AGServerSocket.prototype._destroy = function (code, reason) {
       });
     }
 
-    let cleanupMode = this.server.options.socketStreamCleanupMode;
-    if (cleanupMode === 'kill') {
-      (async () => {
-        await this.listener('close').once();
-        this.killAllStreams();
-      })();
-    } else if (cleanupMode === 'close') {
-      (async () => {
-        await this.listener('close').once();
-        this.closeAllStreams();
-      })();
-    }
-
     this.emit('close', {code, reason});
     this.server.emit('closure', {
       socket: this,
       code,
       reason
     });
-    this._unsubscribeFromAllChannels();
 
     clearTimeout(this._handshakeTimeoutRef);
     let isClientFullyConnected = !!this.server.clients[this.id];
@@ -995,10 +981,27 @@ AGServerSocket.prototype._destroy = function (code, reason) {
       let err = new SocketProtocolError(AGServerSocket.errorStatuses[code] || closeMessage, code);
       this.emitError(err);
     }
+
+    await this._unsubscribeFromAllChannels();
+
+    let cleanupMode = this.server.options.socketStreamCleanupMode;
+    if (cleanupMode === 'kill') {
+      (async () => {
+        await this.listener('end').once();
+        this.killAllStreams();
+      })();
+    } else if (cleanupMode === 'close') {
+      (async () => {
+        await this.listener('end').once();
+        this.closeAllStreams();
+      })();
+    }
+
+    this.emit('end');
   }
 };
 
-AGServerSocket.prototype.disconnect = function (code, reason) {
+AGServerSocket.prototype.disconnect = async function (code, reason) {
   code = code || 1000;
 
   if (typeof code !== 'number') {

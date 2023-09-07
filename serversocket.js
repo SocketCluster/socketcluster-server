@@ -21,7 +21,7 @@ const BrokerError = scErrors.BrokerError;
 const HANDSHAKE_REJECTION_STATUS_CODE = 4008;
 
 function AGServerSocket(id, server, socket, protocolVersion) {
-  AsyncStreamEmitter.call(this);
+  AsyncStreamEmitter.call(this, { usabilityMode: server.usabilityMode });
 
   this.id = id;
   this.server = server;

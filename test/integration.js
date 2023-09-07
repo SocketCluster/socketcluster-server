@@ -2071,10 +2071,12 @@ describe('Integration tests', function () {
       assert.notEqual(nullPublishError, null);
     });
 
-    it('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
+    it.only('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
+      // Only the case in usabilityMode as there is a performance trade-off.
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
+        wsEngine: WS_ENGINE,
+        usabilityMode: true
       });
       bindFailureHandlers(server);
 

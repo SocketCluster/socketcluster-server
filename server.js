@@ -273,11 +273,11 @@ AGServer.prototype.setMiddleware = function (type, middleware) {
     type !== this.MIDDLEWARE_OUTBOUND
   ) {
     throw new InvalidArgumentsError(
-      `Middleware type "${type}" is not supported`
+      `Middleware ${type} type is not supported`
     );
   }
   if (this._middleware[type]) {
-    throw new InvalidActionError(`Middleware type "${type}" has already been set`);
+    throw new InvalidActionError(`Middleware ${type} type has already been set`);
   }
   this._middleware[type] = middleware;
 };

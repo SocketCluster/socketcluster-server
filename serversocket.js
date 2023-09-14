@@ -456,7 +456,6 @@ AGServerSocket.prototype._processAuthenticateRequest = async function (request) 
     if (error.isBadToken) {
       this.deauthenticate();
       request.error(error);
-
       return;
     }
 
@@ -464,7 +463,6 @@ AGServerSocket.prototype._processAuthenticateRequest = async function (request) 
       isAuthenticated: !!this.authToken,
       authError: signedAuthToken == null ? null : scErrors.dehydrateError(error)
     });
-
     return;
   }
   this.triggerAuthenticationEvents(oldAuthState);
@@ -474,19 +472,20 @@ AGServerSocket.prototype._processAuthenticateRequest = async function (request) 
   });
 };
 
-AGServerSocket.prototype._subscribeSocket = async function (channelName, subscriptionOptions) {
-  if (channelName === undefined || !subscriptionOptions) {
-    throw new InvalidActionError(`Socket ${this.id} provided a malformated channel payload`);
+AGServerSocket.prototype._validateSubscribePacket = function (request) {
+  if (request.data == null || typeof request.data !== 'object') {
+    throw new InvalidActionError(`Socket ${this.id} provided a malformatted channel payload`);
   }
+  if (typeof request.data.channel !== 'string') {
+    throw new InvalidActionError(`Socket ${this.id} provided an invalid channel name`);
+  }
+}
 
+AGServerSocket.prototype._subscribeSocket = async function (channelName, subscriptionOptions) {
   if (this.server.socketChannelLimit && this.channelSubscriptionsCount >= this.server.socketChannelLimit) {
     throw new InvalidActionError(
       `Socket ${this.id} tried to exceed the channel subscription limit of ${this.server.socketChannelLimit}`
     );
-  }
-
-  if (typeof channelName !== 'string') {
-    throw new InvalidActionError(`Socket ${this.id} provided an invalid channel name`);
   }
 
   if (this.channelSubscriptionsCount == null) {
@@ -516,23 +515,30 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
 };
 
 AGServerSocket.prototype._processSubscribeRequest = async function (request) {
-  let subscriptionOptions = Object.assign({}, request.data);
-  let channelName = subscriptionOptions.channel;
-  delete subscriptionOptions.channel;
-
   if (this.state === this.OPEN) {
+    try {
+      this._validateSubscribePacket(request);
+    } catch (err) {
+      let error = new BrokerError(`Failed to subscribe socket - ${err}`);
+      this.emitError(error);
+      request.error(error);
+      return;
+    }
+
+    let subscriptionOptions = Object.assign({}, request.data);
+    let channelName = subscriptionOptions.channel;
+    delete subscriptionOptions.channel;
+
     try {
       await this._subscribeSocket(channelName, subscriptionOptions);
     } catch (err) {
       let error = new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`);
       this.emitError(error);
       request.error(error);
-
       return;
     }
 
     request.end();
-
     return;
   }
   // This is an invalid state; it means the client tried to subscribe before
@@ -547,18 +553,20 @@ AGServerSocket.prototype._unsubscribeFromAllChannels = function () {
   return Promise.all(channels.map((channel) => this._unsubscribe(channel)));
 };
 
-AGServerSocket.prototype._unsubscribe = async function (channel) {
-  if (typeof channel !== 'string') {
+AGServerSocket.prototype._validateUnsubscribePacket = function (packet) {
+  if (typeof packet.data !== 'string') {
     throw new InvalidActionError(
       `Socket ${this.id} tried to unsubscribe from an invalid channel name`
     );
   }
+}
+
+AGServerSocket.prototype._unsubscribe = async function (channel) {
   if (!this.channelSubscriptions[channel]) {
     throw new InvalidActionError(
       `Socket ${this.id} tried to unsubscribe from a channel which it is not subscribed to`
     );
   }
-
   try {
     await this.server.brokerEngine.unsubscribeSocket(this, channel);
     delete this.channelSubscriptions[channel];
@@ -576,6 +584,15 @@ AGServerSocket.prototype._unsubscribe = async function (channel) {
 };
 
 AGServerSocket.prototype._processUnsubscribePacket = async function (packet) {
+  try {
+    this._validateUnsubscribePacket(packet);
+  } catch (err) {
+    let error = new BrokerError(
+      `Failed to unsubscribe socket - ${err}`
+    );
+    this.emitError(error);
+    return;
+  }
   let channel = packet.data;
   try {
     await this._unsubscribe(channel);
@@ -588,6 +605,16 @@ AGServerSocket.prototype._processUnsubscribePacket = async function (packet) {
 };
 
 AGServerSocket.prototype._processUnsubscribeRequest = async function (request) {
+  try {
+    this._validateUnsubscribePacket(request);
+  } catch (err) {
+    let error = new BrokerError(
+      `Failed to unsubscribe socket - ${err}`
+    );
+    this.emitError(error);
+    request.error(error);
+    return;
+  }
   let channel = request.data;
   try {
     await this._unsubscribe(channel);
@@ -605,7 +632,7 @@ AGServerSocket.prototype._processUnsubscribeRequest = async function (request) {
 AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {
   let data = packet.data || {};
   if (typeof data.channel !== 'string') {
-    let error = new InvalidActionError(`Socket ${this.id} tried to invoke publish to an invalid "${data.channel}" channel`);
+    let error = new InvalidActionError(`Socket ${this.id} tried to invoke publish to an invalid channel`);
     this.emitError(error);
     return;
   }
@@ -619,7 +646,7 @@ AGServerSocket.prototype._processInboundPublishPacket = async function (packet) 
 AGServerSocket.prototype._processInboundPublishRequest = async function (request) {
   let data = request.data || {};
   if (typeof data.channel !== 'string') {
-    let error = new InvalidActionError(`Socket ${this.id} tried to transmit publish to an invalid "${data.channel}" channel`);
+    let error = new InvalidActionError(`Socket ${this.id} tried to transmit publish to an invalid channel`);
     this.emitError(error);
     request.error(error);
     return;
@@ -643,13 +670,11 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
       await this._processHandshakeRequest(request);
       this._procedureDemux.write(eventName, request);
-
       return;
     }
     if (this.server.strictHandshake && this.state === this.CONNECTING) {
       this._destroy(4009);
       this.socket.close(4009);
-
       return;
     }
     if (eventName === '#authenticate') {
@@ -657,13 +682,11 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
       await this._processAuthenticateRequest(request);
       this._procedureDemux.write(eventName, request);
-
       return;
     }
     if (eventName === '#removeAuthToken') {
       this.deauthenticateSelf();
       this._receiverDemux.write(eventName, packet.data);
-
       return;
     }
 
@@ -736,7 +759,6 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         newData = data;
       } catch (error) {
         request.error(error);
-
         return;
       }
 
@@ -757,7 +779,6 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       }
 
       this._procedureDemux.write(eventName, request);
-
       return;
     }
 
@@ -765,7 +786,6 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       let {data} = await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
       newData = data;
     } catch (error) {
-
       return;
     }
 
@@ -778,14 +798,12 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
     this._receiverDemux.write(eventName, newData);
-
     return;
   }
 
   if (this.server.strictHandshake && this.state === this.CONNECTING) {
     this._destroy(4009);
     this.socket.close(4009);
-
     return;
   }
 
@@ -840,7 +858,7 @@ AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (fa
     clearTimeout(eventObject.timeout);
     delete eventObject.timeout;
 
-    let errorMessage = `Event "${eventObject.event}" was aborted due to a bad connection`;
+    let errorMessage = `Event ${eventObject.event} was aborted due to a bad connection`;
     let badConnectionError = new BadConnectionError(errorMessage, failureType);
 
     let callback = eventObject.callback;
@@ -1158,7 +1176,7 @@ AGServerSocket.prototype._transmit = async function (event, data, options) {
 AGServerSocket.prototype.transmit = async function (event, data, options) {
   if (this.state !== this.OPEN) {
     let error = new BadConnectionError(
-      `Socket transmit "${event}" was aborted due to a bad connection`,
+      `Socket transmit ${event} event was aborted due to a bad connection`,
       'connectAbort'
     );
     this.emitError(error);
@@ -1170,7 +1188,7 @@ AGServerSocket.prototype.transmit = async function (event, data, options) {
 AGServerSocket.prototype.invoke = async function (event, data, options) {
   if (this.state !== this.OPEN) {
     let error = new BadConnectionError(
-      `Socket invoke "${event}" was aborted due to a bad connection`,
+      `Socket invoke ${event} event was aborted due to a bad connection`,
       'connectAbort'
     );
     this.emitError(error);
@@ -1212,7 +1230,6 @@ AGServerSocket.prototype._processTransmit = async function (event, data, options
       newData = data;
       useCache = options == null ? useCache : options.useCache;
     } catch (error) {
-
       return;
     }
   } else {
@@ -1252,7 +1269,7 @@ AGServerSocket.prototype._invoke = async function (event, data, options) {
     let ackTimeout = options.ackTimeout == null ? this.server.ackTimeout : options.ackTimeout;
 
     let timeout = setTimeout(() => {
-      let error = new TimeoutError(`Event response for "${event}" timed out`);
+      let error = new TimeoutError(`Event response for ${event} event timed out`);
       delete this._callbackMap[eventObject.cid];
       reject(error);
     }, ackTimeout);

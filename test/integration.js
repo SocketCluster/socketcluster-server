@@ -1461,7 +1461,7 @@ describe('Integration tests', function () {
       // Expect a server warning (socket error) if transmit was called on a disconnected socket.
       assert.equal(
         serverWarnings.some((warning) => {
-          return warning.name === 'BadConnectionError' && warning.message.match(/Socket transmit "hi" was aborted/g);
+          return warning.name === 'BadConnectionError' && warning.message.match(/Socket transmit hi event was aborted/g);
         }),
         true
       );
@@ -1469,7 +1469,7 @@ describe('Integration tests', function () {
       // Expect a server warning (socket error) if invoke was called on a disconnected socket.
       assert.equal(
         serverWarnings.some((warning) => {
-          return warning.name === 'BadConnectionError' && warning.message.match(/Socket invoke "bla" was aborted/g);
+          return warning.name === 'BadConnectionError' && warning.message.match(/Socket invoke bla event was aborted/g);
         }),
         true
       );
@@ -2071,7 +2071,7 @@ describe('Integration tests', function () {
       assert.notEqual(nullPublishError, null);
     });
 
-    it.only('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
+    it('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
       // Only the case in usabilityMode as there is a performance trade-off.
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,

@@ -1100,6 +1100,42 @@ describe('Integration tests', function () {
       // a reference to the same object.
       assert.notEqual(clientConnectStatus.foo, connectStatus.foo);
     });
+
+    it('Server-side connection event should trigger with large number of concurrent connections', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let connectionList = [];
+
+      (async () => {
+        for await (let event of server.listener('connection')) {
+          connectionList.push(event);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      let clientList = [];
+
+      for (let i = 0; i < 100; i++) {
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: PORT_NUMBER
+        });
+        clientList.push(client);
+      }
+
+      await wait(2000);
+
+      assert.equal(connectionList.length, 100);
+
+      for (let client of clientList) {
+        client.disconnect();
+      }
+    });
   });
 
   describe('Socket disconnection', function () {
@@ -2588,7 +2624,7 @@ describe('Integration tests', function () {
         server = socketClusterServer.listen(PORT_NUMBER, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
-          pingInterval: 2000,
+          pingInterval: 5000,
           pingTimeout: 500
         });
         bindFailureHandlers(server);
@@ -2648,7 +2684,7 @@ describe('Integration tests', function () {
         server = socketClusterServer.listen(PORT_NUMBER, {
           authKey: serverOptions.authKey,
           wsEngine: WS_ENGINE,
-          pingInterval: 2000,
+          pingInterval: 1000,
           pingTimeout: 500,
           pingTimeoutDisabled: true
         });
@@ -2661,7 +2697,7 @@ describe('Integration tests', function () {
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
           port: PORT_NUMBER,
-          pingTimeoutDisabled: true
+          pingTimeoutDisabled: true,
         });
 
         let serverWarning = null;

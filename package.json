@@ -26,7 +26,7 @@
     "socketcluster-client": "^18.0.0"
   },
   "scripts": {
-    "test": "mocha --reporter spec --timeout 3000 --slow 3000"
+    "test": "mocha --reporter spec --timeout 10000 --slow 10000"
   },
   "keywords": [
     "websocket",

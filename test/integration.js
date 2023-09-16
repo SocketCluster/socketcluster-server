@@ -1135,6 +1135,54 @@ describe('Integration tests', function () {
       for (let client of clientList) {
         client.disconnect();
       }
+      await wait(1000);
+    });
+
+    it('Server should support large a number of connections invoking procedures concurrently immediately upon connect', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let connectionCount = 0;
+      let requestCount = 0;
+
+      (async () => {
+        for await (let { socket } of server.listener('connection')) {
+          connectionCount++;
+          (async () => {
+            for await (let request of socket.procedure('greeting')) {
+              requestCount++;
+              await wait(20);
+              request.end('hello');
+            }
+          })();
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      let clientList = [];
+      for (let i = 0; i < 100; i++) {
+        client = socketClusterClient.create({
+          hostname: clientOptions.hostname,
+          port: PORT_NUMBER,
+          autoConnect: true,
+        });
+        clientList.push(client);
+        await client.invoke('greeting');
+      }
+
+      await wait(2500);
+
+      assert.equal(requestCount, 100);
+      assert.equal(connectionCount, 100);
+
+      for (let client of clientList) {
+        client.disconnect();
+      }
+      await wait(1000);
     });
   });
 

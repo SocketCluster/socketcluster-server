@@ -23,7 +23,7 @@
   "devDependencies": {
     "localStorage": "^1.0.3",
     "mocha": "^10.2.0",
-    "socketcluster-client": "^18.0.3"
+    "socketcluster-client": "^18.1.0"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 10000 --slow 10000"

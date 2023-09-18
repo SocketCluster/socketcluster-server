@@ -954,18 +954,8 @@ AGServerSocket.prototype._destroy = async function (code, reason) {
 
     if (!AGServerSocket.ignoreStatuses[code]) {
       let closeMessage;
-      if (reason) {
-        let reasonString;
-        if (typeof reason === 'string') {
-          reasonString = reason;
-        } else {
-          try {
-            reasonString = JSON.stringify(reason);
-          } catch (error) {
-            reasonString = typeof reason.toString === 'function' ? reason.toString() : 'Malformatted reason';
-          }
-        }
-        closeMessage = `Socket connection closed with status code ${code} and reason: ${reasonString}`;
+      if (typeof reason === 'string') {
+        closeMessage = `Socket connection closed with status code ${code} and reason: ${reason}`;
       } else {
         closeMessage = `Socket connection closed with status code ${code}`;
       }

@@ -340,7 +340,7 @@ AGServer.prototype._processMiddlewareAction = async function (middlewareStream, 
 AGServer.prototype.verifyHandshake = async function (info, callback) {
   let req = info.req;
   let origin = info.origin;
-  if (origin === 'null' || origin == null) {
+  if (typeof origin !== 'string' || origin === 'null') {
     origin = '*';
   }
   let ok = false;

@@ -895,6 +895,46 @@ describe('Integration tests', function () {
       assert.equal(server.pendingClientsCount, 0);
       assert.equal(JSON.stringify(server.pendingClients), '{}');
     });
+
+    it('Should close the connection if the client tries to send a malformatted authenticate packet', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      let originalInvoke = client.invoke;
+      client.invoke = async function (...args) {
+        if (args[0] === '#authenticate') {
+          client.transmit(args[0], args[1]);
+          return;
+        }
+        return originalInvoke.apply(this, args);
+      };
+
+      client.authenticate(validSignedAuthTokenBob)
+
+      let results = await Promise.all([
+        server.listener('closure').once(500),
+        client.listener('close').once(100)
+      ]);
+      assert.equal(results[0].code, 4008);
+      assert.equal(results[0].reason, 'Server rejected handshake from client');
+      assert.equal(results[1].code, 4008);
+      assert.equal(results[1].reason, 'Server rejected handshake from client');
+    });
   });
 
   describe('Socket handshake', function () {
@@ -981,6 +1021,39 @@ describe('Integration tests', function () {
       let {code: closeCode} = await client.listener('close').once(200);
 
       assert.equal(closeCode, 4009);
+    });
+
+    it('Should close the connection if the client tries to send a malformatted handshake', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER
+      });
+
+      client.transport._handshake = async function () {
+        this.transmit('#handshake', {}, {force: true});
+      };
+
+      let results = await Promise.all([
+        server.listener('closure').once(200),
+        client.listener('close').once(200)
+      ]);
+      assert.equal(results[0].code, 4008);
+      assert.equal(results[0].reason, 'Server rejected handshake from client');
+      assert.equal(results[1].code, 4008);
+      assert.equal(results[1].reason, 'Server rejected handshake from client');
     });
 
     it('Should not close the connection if the client tries to send a message before the handshake and strictHandshake is false', async function () {

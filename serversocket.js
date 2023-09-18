@@ -472,15 +472,6 @@ AGServerSocket.prototype._processAuthenticateRequest = async function (request) 
   });
 };
 
-AGServerSocket.prototype._validateSubscribePacket = function (request) {
-  if (request.data == null || typeof request.data !== 'object') {
-    throw new InvalidActionError(`Socket ${this.id} provided a malformatted channel payload`);
-  }
-  if (typeof request.data.channel !== 'string') {
-    throw new InvalidActionError(`Socket ${this.id} provided an invalid channel name`);
-  }
-}
-
 AGServerSocket.prototype._subscribeSocket = async function (channelName, subscriptionOptions) {
   if (this.server.socketChannelLimit && this.channelSubscriptionsCount >= this.server.socketChannelLimit) {
     throw new InvalidActionError(
@@ -516,15 +507,6 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
 
 AGServerSocket.prototype._processSubscribeRequest = async function (request) {
   if (this.state === this.OPEN) {
-    try {
-      this._validateSubscribePacket(request);
-    } catch (err) {
-      let error = new BrokerError(`Failed to subscribe socket - ${err}`);
-      this.emitError(error);
-      request.error(error);
-      return;
-    }
-
     let subscriptionOptions = Object.assign({}, request.data);
     let channelName = subscriptionOptions.channel;
     delete subscriptionOptions.channel;
@@ -553,14 +535,6 @@ AGServerSocket.prototype._unsubscribeFromAllChannels = function () {
   return Promise.all(channels.map((channel) => this._unsubscribe(channel)));
 };
 
-AGServerSocket.prototype._validateUnsubscribePacket = function (packet) {
-  if (typeof packet.data !== 'string') {
-    throw new InvalidActionError(
-      `Socket ${this.id} tried to unsubscribe from an invalid channel name`
-    );
-  }
-}
-
 AGServerSocket.prototype._unsubscribe = async function (channel) {
   if (!this.channelSubscriptions[channel]) {
     throw new InvalidActionError(
@@ -584,15 +558,6 @@ AGServerSocket.prototype._unsubscribe = async function (channel) {
 };
 
 AGServerSocket.prototype._processUnsubscribePacket = async function (packet) {
-  try {
-    this._validateUnsubscribePacket(packet);
-  } catch (err) {
-    let error = new BrokerError(
-      `Failed to unsubscribe socket - ${err}`
-    );
-    this.emitError(error);
-    return;
-  }
   let channel = packet.data;
   try {
     await this._unsubscribe(channel);
@@ -605,16 +570,6 @@ AGServerSocket.prototype._processUnsubscribePacket = async function (packet) {
 };
 
 AGServerSocket.prototype._processUnsubscribeRequest = async function (request) {
-  try {
-    this._validateUnsubscribePacket(request);
-  } catch (err) {
-    let error = new BrokerError(
-      `Failed to unsubscribe socket - ${err}`
-    );
-    this.emitError(error);
-    request.error(error);
-    return;
-  }
   let channel = request.data;
   try {
     await this._unsubscribe(channel);
@@ -630,29 +585,16 @@ AGServerSocket.prototype._processUnsubscribeRequest = async function (request) {
 };
 
 AGServerSocket.prototype._processInboundPublishPacket = async function (packet) {
-  let data = packet.data || {};
-  if (typeof data.channel !== 'string') {
-    let error = new InvalidActionError(`Socket ${this.id} tried to invoke publish to an invalid channel`);
-    this.emitError(error);
-    return;
-  }
   try {
-    await this.server.exchange.invokePublish(data.channel, data.data);
+    await this.server.exchange.invokePublish(packet.data.channel, packet.data.data);
   } catch (error) {
     this.emitError(error);
   }
 };
 
 AGServerSocket.prototype._processInboundPublishRequest = async function (request) {
-  let data = request.data || {};
-  if (typeof data.channel !== 'string') {
-    let error = new InvalidActionError(`Socket ${this.id} tried to transmit publish to an invalid channel`);
-    this.emitError(error);
-    request.error(error);
-    return;
-  }
   try {
-    await this.server.exchange.invokePublish(data.channel, data.data);
+    await this.server.exchange.invokePublish(request.data.channel, request.data.data);
   } catch (error) {
     this.emitError(error);
     request.error(error);
@@ -662,11 +604,18 @@ AGServerSocket.prototype._processInboundPublishRequest = async function (request
 };
 
 AGServerSocket.prototype._processInboundPacket = async function (packet, message) {
-  if (packet && packet.event != null) {
+  if (packet && typeof packet.event === 'string') {
     let eventName = packet.event;
-    let isRPC = packet.cid != null;
+    let isRPC = typeof packet.cid === 'number';
 
     if (eventName === '#handshake') {
+      if (!isRPC) {
+        let error = new InvalidActionError('Handshake request was malformatted');
+        this.emitError(error);
+        this._destroy(HANDSHAKE_REJECTION_STATUS_CODE);
+        this.socket.close(HANDSHAKE_REJECTION_STATUS_CODE);
+        return;
+      }
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
       await this._processHandshakeRequest(request);
       this._procedureDemux.write(eventName, request);
@@ -678,6 +627,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       return;
     }
     if (eventName === '#authenticate') {
+      if (!isRPC) {
+        let error = new InvalidActionError('Authenticate request was malformatted');
+        this.emitError(error);
+        this._destroy(HANDSHAKE_REJECTION_STATUS_CODE);
+        this.socket.close(HANDSHAKE_REJECTION_STATUS_CODE);
+        return;
+      }
       // Let AGServer handle these events.
       let request = new AGRequest(this, packet.cid, eventName, packet.data);
       await this._processAuthenticateRequest(request);
@@ -713,18 +669,44 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         }
         return;
       }
+      if (!packet.data || typeof packet.data.channel !== 'string') {
+        let error = new InvalidActionError('Publish channel name was malformatted');
+        this.emitError(error);
+
+        if (isRPC) {
+          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          request.error(error);
+        }
+        return;
+      }
       action.type = AGAction.PUBLISH_IN;
-      if (packet.data) {
-        action.channel = packet.data.channel;
-        action.data = packet.data.data;
-      }
+      action.channel = packet.data.channel;
+      action.data = packet.data.data;
     } else if (isSubscribe) {
-      action.type = AGAction.SUBSCRIBE;
-      if (packet.data) {
-        action.channel = packet.data.channel;
-        action.data = packet.data.data;
+      if (!packet.data || typeof packet.data.channel !== 'string') {
+        let error = new InvalidActionError('Subscribe channel name was malformatted');
+        this.emitError(error);
+
+        if (isRPC) {
+          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          request.error(error);
+        }
+        return;
       }
+      action.type = AGAction.SUBSCRIBE;
+      action.channel = packet.data.channel;
+      action.data = packet.data.data;
     } else if (isUnsubscribe) {
+      if (typeof packet.data !== 'string') {
+        let error = new InvalidActionError('Unsubscribe channel name was malformatted');
+        this.emitError(error);
+
+        if (isRPC) {
+          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          request.error(error);
+        }
+        return;
+      }
       if (isRPC) {
         let request = new AGRequest(this, packet.cid, eventName, packet.data);
         await this._processUnsubscribeRequest(request);
@@ -763,15 +745,9 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
       }
 
       if (isSubscribe) {
-        if (!request.data) {
-          request.data = {};
-        }
         request.data.data = newData;
         await this._processSubscribeRequest(request);
       } else if (isPublish) {
-        if (!request.data) {
-          request.data = {};
-        }
         request.data.data = newData;
         await this._processInboundPublishRequest(request);
       } else {
@@ -790,9 +766,6 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     }
 
     if (isPublish) {
-      if (!packet.data) {
-        packet.data = {};
-      }
       packet.data.data = newData;
       await this._processInboundPublishPacket(packet);
     }
@@ -807,7 +780,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     return;
   }
 
-  if (packet && packet.rid != null) {
+  if (packet && typeof packet.rid === 'number') {
     // If incoming message is a response to a previously sent message
     let ret = this._callbackMap[packet.rid];
     if (ret) {
@@ -983,14 +956,14 @@ AGServerSocket.prototype._destroy = async function (code, reason) {
       let closeMessage;
       if (reason) {
         let reasonString;
-        if (typeof reason === 'object') {
+        if (typeof reason === 'string') {
+          reasonString = reason;
+        } else {
           try {
             reasonString = JSON.stringify(reason);
           } catch (error) {
-            reasonString = reason.toString();
+            reasonString = typeof reason.toString === 'function' ? reason.toString() : 'Malformatted reason';
           }
-        } else {
-          reasonString = reason;
         }
         closeMessage = `Socket connection closed with status code ${code} and reason: ${reasonString}`;
       } else {

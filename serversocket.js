@@ -1397,7 +1397,14 @@ AGServerSocket.prototype.setAuthToken = async function (data, options) {
     try {
       await this.invoke('#setAuthToken', tokenData);
     } catch (err) {
-      let error = new AuthError(`Failed to deliver auth token to client - ${err}`);
+      let error;
+      if (err && typeof err.message === 'string') {
+        error = new AuthError(`Failed to deliver auth token to client - ${err.message}`);
+      } else {
+        error = new AuthError(
+          'Failed to confirm delivery of auth token to client due to malformatted error response'
+        );
+      }
       this.emitError(error);
       throw error;
     }

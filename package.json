@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "18.1.1",
+  "version": "18.1.2",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {
@@ -14,7 +14,7 @@
     "async-stream-emitter": "^6.0.1",
     "base64id": "^2.0.0",
     "clone-deep": "^4.0.1",
-    "sc-errors": "^2.0.2",
+    "sc-errors": "^2.0.3",
     "sc-formatter": "^4.0.0",
     "stream-demux": "^9.0.2",
     "writable-consumable-stream": "^4.0.1",

@@ -21,6 +21,14 @@ module.exports.AGServer = require('./server');
 module.exports.AGServerSocket = require('./serversocket');
 
 /**
+ * Expose AGRequest constructor.
+ *
+ * @api public
+ */
+
+module.exports.AGRequest = require('ag-request');
+
+/**
  * Creates an http.Server exclusively used for WS upgrades.
  *
  * @param {Number} port

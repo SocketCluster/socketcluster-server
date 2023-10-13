@@ -41,6 +41,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this.outboundPreparedMessageCount = 0;
   this.outboundSentMessageCount = 0;
 
+  this.createRequest = this.server.options.requestCreator || this.defaultRequestCreator;
   this.cloneData = this.server.options.cloneData;
 
   this.inboundMessageStream = new WritableConsumableStream();
@@ -195,6 +196,10 @@ AGServerSocket.prototype._startBatchOnHandshake = function () {
       this._stopBatching();
     }
   }, this.batchOnHandshakeDuration);
+};
+
+AGServerSocket.prototype.defaultRequestCreator = function (socket, id, procedureName, data) {
+  return new AGRequest(socket, id, procedureName, data);
 };
 
 // ---- Receiver logic ----
@@ -616,7 +621,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.socket.close(HANDSHAKE_REJECTION_STATUS_CODE);
         return;
       }
-      let request = new AGRequest(this, packet.cid, eventName, packet.data);
+      let request = this.createRequest(this, packet.cid, eventName, packet.data);
       await this._processHandshakeRequest(request);
       this._procedureDemux.write(eventName, request);
       return;
@@ -635,7 +640,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         return;
       }
       // Let AGServer handle these events.
-      let request = new AGRequest(this, packet.cid, eventName, packet.data);
+      let request = this.createRequest(this, packet.cid, eventName, packet.data);
       await this._processAuthenticateRequest(request);
       this._procedureDemux.write(eventName, request);
       return;
@@ -664,7 +669,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.emitError(error);
 
         if (isRPC) {
-          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          let request = this.createRequest(this, packet.cid, eventName, packet.data);
           request.error(error);
         }
         return;
@@ -674,7 +679,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.emitError(error);
 
         if (isRPC) {
-          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          let request = this.createRequest(this, packet.cid, eventName, packet.data);
           request.error(error);
         }
         return;
@@ -688,7 +693,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.emitError(error);
 
         if (isRPC) {
-          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          let request = this.createRequest(this, packet.cid, eventName, packet.data);
           request.error(error);
         }
         return;
@@ -702,13 +707,13 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
         this.emitError(error);
 
         if (isRPC) {
-          let request = new AGRequest(this, packet.cid, eventName, packet.data);
+          let request = this.createRequest(this, packet.cid, eventName, packet.data);
           request.error(error);
         }
         return;
       }
       if (isRPC) {
-        let request = new AGRequest(this, packet.cid, eventName, packet.data);
+        let request = this.createRequest(this, packet.cid, eventName, packet.data);
         await this._processUnsubscribeRequest(request);
         this._procedureDemux.write(eventName, request);
         return;
@@ -735,7 +740,7 @@ AGServerSocket.prototype._processInboundPacket = async function (packet, message
     let newData;
 
     if (isRPC) {
-      let request = new AGRequest(this, packet.cid, eventName, packet.data);
+      let request = this.createRequest(this, packet.cid, eventName, packet.data);
       try {
         let {data} = await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
         newData = data;

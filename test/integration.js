@@ -155,7 +155,8 @@ describe('Integration tests', function () {
   beforeEach('Prepare options', async function () {
     clientOptions = {
       hostname: '127.0.0.1',
-      port: PORT_NUMBER
+      port: PORT_NUMBER,
+      authTokenName: 'socketcluster.authToken'
     };
     serverOptions = {
       authKey: 'testkey',
@@ -417,7 +418,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -433,7 +435,8 @@ describe('Integration tests', function () {
     it('Authentication can be captured using the authenticate listener', async function () {
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE
+        wsEngine: WS_ENGINE,
+        authTokenName: 'socketcluster.authToken'
       });
       bindFailureHandlers(server);
 
@@ -447,7 +450,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -477,7 +481,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -513,7 +518,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -545,7 +551,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -577,7 +584,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -611,7 +619,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -698,7 +707,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -725,7 +735,8 @@ describe('Integration tests', function () {
         await server.listener('ready').once();
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
         await client.listener('connect').once();
         client.invoke('login', {username: 'bob'});
@@ -777,7 +788,8 @@ describe('Integration tests', function () {
         await server.listener('ready').once();
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
         await client.listener('connect').once();
         client.invoke('login', {username: 'bob'});
@@ -831,7 +843,8 @@ describe('Integration tests', function () {
         await server.listener('ready').once();
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
       })();
 
@@ -872,7 +885,8 @@ describe('Integration tests', function () {
       await server.listener('ready').once();
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let serverSocket;
@@ -912,7 +926,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let originalInvoke = client.invoke;
@@ -955,7 +970,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let {socket} = await server.listener('handshake').once();
@@ -978,7 +994,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       client.transport.socket.onopen = function () {
@@ -1011,7 +1028,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       client.transport.socket.onopen = function () {
@@ -1039,7 +1057,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       client.transport._handshake = async function () {
@@ -1073,7 +1092,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let realOnOpenFunction = client.transport.socket.onopen;
@@ -1113,7 +1133,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let connectEmitted = false;
@@ -1196,7 +1217,8 @@ describe('Integration tests', function () {
       for (let i = 0; i < 100; i++) {
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
         clientList.push(client);
       }
@@ -1242,6 +1264,7 @@ describe('Integration tests', function () {
           hostname: clientOptions.hostname,
           port: PORT_NUMBER,
           autoConnect: true,
+          authTokenName: 'socketcluster.authToken'
         });
         clientList.push(client);
         await client.invoke('greeting');
@@ -1286,7 +1309,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let socketDisconnected = false;
@@ -1364,7 +1388,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let socketDisconnected = false;
@@ -1441,7 +1466,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let serverSocketClosed = false;
@@ -1503,7 +1529,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let serverSocketClosed = false;
@@ -1559,7 +1586,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let currentRequestData = null;
@@ -1663,7 +1691,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await wait(100);
@@ -1708,7 +1737,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await wait(100);
@@ -1753,7 +1783,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await wait(100);
@@ -1798,7 +1829,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let result = await client.invoke('customProc', {good: true});
@@ -1828,7 +1860,8 @@ describe('Integration tests', function () {
 
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
 
         client.transmit('customRemoteEvent', 'This is data');
@@ -1874,7 +1907,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -1929,7 +1963,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.subscribe('foo').listener('subscribe').once();
@@ -1973,7 +2008,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -2011,7 +2047,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       await client.listener('connect').once();
@@ -2049,7 +2086,8 @@ describe('Integration tests', function () {
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
         port: PORT_NUMBER,
-        autoConnect: false
+        autoConnect: false,
+        authTokenName: 'socketcluster.authToken'
       });
 
       assert.equal(client.state, client.CLOSED);
@@ -2092,7 +2130,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let isSubscribed = false;
@@ -2141,7 +2180,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let nullInChannelArrayError;
@@ -2229,11 +2269,9 @@ describe('Integration tests', function () {
     });
 
     it('When default AGSimpleBroker broker engine is used, disconnect event should trigger before unsubscribe event', async function () {
-      // Only the case in usabilityMode as there is a performance trade-off.
       server = socketClusterServer.listen(PORT_NUMBER, {
         authKey: serverOptions.authKey,
-        wsEngine: WS_ENGINE,
-        usabilityMode: true
+        wsEngine: WS_ENGINE
       });
       bindFailureHandlers(server);
 
@@ -2244,7 +2282,8 @@ describe('Integration tests', function () {
 
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
 
         await client.subscribe('foo').listener('subscribe').once();
@@ -2290,7 +2329,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       (async () => {
@@ -2339,7 +2379,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       (async () => {
@@ -2393,7 +2434,8 @@ describe('Integration tests', function () {
         await server.listener('ready').once();
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
 
         for await (let event of client.subscribe('foo').listener('subscribe')) {
@@ -2465,7 +2507,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let error;
@@ -2512,7 +2555,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
       // Stub the isSubscribed method so that it always returns true.
       // That way the client will always invoke watchers whenever
@@ -2576,7 +2620,8 @@ describe('Integration tests', function () {
 
       client = socketClusterClient.create({
         hostname: clientOptions.hostname,
-        port: PORT_NUMBER
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
       });
 
       client.subscribe('foo');
@@ -2644,7 +2689,8 @@ describe('Integration tests', function () {
         port: PORT_NUMBER,
         batchOnHandshake: true,
         batchOnHandshakeDuration: 100,
-        batchInterval: 50
+        batchInterval: 50,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let receivedClientMessages = [];
@@ -2722,7 +2768,8 @@ describe('Integration tests', function () {
         autoConnect: false,
         batchOnHandshake: true,
         batchOnHandshakeDuration: 100,
-        batchInterval: 50
+        batchInterval: 50,
+        authTokenName: 'socketcluster.authToken'
       });
 
       let receivedMessage;
@@ -2756,7 +2803,8 @@ describe('Integration tests', function () {
       it('Should disconnect socket if server does not receive a pong from client before timeout', async function () {
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
 
         let serverWarning = null;
@@ -2819,6 +2867,7 @@ describe('Integration tests', function () {
           hostname: clientOptions.hostname,
           port: PORT_NUMBER,
           pingTimeoutDisabled: true,
+          authTokenName: 'socketcluster.authToken'
         });
 
         let serverWarning = null;
@@ -2876,7 +2925,8 @@ describe('Integration tests', function () {
       it('Should not disconnect socket if server receives a pong from client before timeout', async function () {
         client = socketClusterClient.create({
           hostname: clientOptions.hostname,
-          port: PORT_NUMBER
+          port: PORT_NUMBER,
+          authTokenName: 'socketcluster.authToken'
         });
 
         let serverWarning = null;
@@ -2954,7 +3004,8 @@ describe('Integration tests', function () {
 
           let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientB = socketClusterClient.create({
@@ -2962,7 +3013,8 @@ describe('Integration tests', function () {
             port: PORT_NUMBER,
             query: {
               delayMe: true
-            }
+            },
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientAIsConnected = false;
@@ -3018,7 +3070,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           (async () => {
@@ -3065,7 +3118,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           (async () => {
@@ -3106,7 +3160,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           (async () => {
@@ -3140,7 +3195,8 @@ describe('Integration tests', function () {
           createConnectionTime = Date.now();
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           (async () => {
@@ -3178,7 +3234,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let event = await client.listener('connect').once();
@@ -3208,7 +3265,8 @@ describe('Integration tests', function () {
 
           let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientB = socketClusterClient.create({
@@ -3216,7 +3274,8 @@ describe('Integration tests', function () {
             port: PORT_NUMBER,
             query: {
               delayMe: true
-            }
+            },
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientAIsConnected = false;
@@ -3262,7 +3321,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let result = await client.invoke('proc', 123);
@@ -3294,7 +3354,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let result;
@@ -3326,7 +3387,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           await client.listener('connect').once();
@@ -3349,7 +3411,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           (async () => {
@@ -3381,7 +3444,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           await client.invokePublish('hello', 'world');
@@ -3412,7 +3476,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let helloChannel = client.subscribe('hello');
@@ -3457,7 +3522,8 @@ describe('Integration tests', function () {
 
           let clientA = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientB = socketClusterClient.create({
@@ -3465,12 +3531,14 @@ describe('Integration tests', function () {
             port: PORT_NUMBER,
             query: {
               delayMe: true
-            }
+            },
+            authTokenName: 'socketcluster.authToken'
           });
 
           let clientC = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           await clientC.listener('connect').once();
@@ -3516,7 +3584,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let helloChannel = client.subscribe('hello');
@@ -3559,7 +3628,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let helloChannel = client.subscribe('hello');
@@ -3604,7 +3674,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           await client.subscribe('hello').listener('subscribe').once();
@@ -3633,7 +3704,8 @@ describe('Integration tests', function () {
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
             port: PORT_NUMBER,
-            autoConnect: false
+            autoConnect: false,
+            authTokenName: 'socketcluster.authToken'
           });
 
           let receivedMessage;
@@ -3675,7 +3747,8 @@ describe('Integration tests', function () {
 
           client = socketClusterClient.create({
             hostname: clientOptions.hostname,
-            port: PORT_NUMBER
+            port: PORT_NUMBER,
+            authTokenName: 'socketcluster.authToken'
           });
 
           await client.subscribe('hello').listener('subscribe').once();

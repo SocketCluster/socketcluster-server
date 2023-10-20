@@ -10,20 +10,20 @@
   "dependencies": {
     "ag-auth": "^2.0.0",
     "ag-request": "^1.0.1",
-    "ag-simple-broker": "^5.0.1",
-    "async-stream-emitter": "^6.0.1",
+    "ag-simple-broker": "^6.0.0",
+    "async-stream-emitter": "^7.0.0",
     "base64id": "^2.0.0",
     "clone-deep": "^4.0.1",
     "sc-errors": "^2.0.3",
     "sc-formatter": "^4.0.0",
-    "stream-demux": "^9.0.2",
+    "stream-demux": "^10.0.0",
     "writable-consumable-stream": "^4.0.1",
     "ws": "^8.9.0"
   },
   "devDependencies": {
     "localStorage": "^1.0.3",
     "mocha": "^10.2.0",
-    "socketcluster-client": "^18.1.2"
+    "socketcluster-client": "18.x.x"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 10000 --slow 10000"

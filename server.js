@@ -17,7 +17,7 @@ const InvalidActionError = scErrors.InvalidActionError;
 const ServerProtocolError = scErrors.ServerProtocolError;
 
 function AGServer(options) {
-  AsyncStreamEmitter.call(this, { usabilityMode: options?.usabilityMode ?? false });
+  AsyncStreamEmitter.call(this);
 
   let opts = {
     brokerEngine: new AGSimpleBroker(),

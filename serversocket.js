@@ -828,7 +828,7 @@ AGServerSocket.prototype.emitError = function (error) {
   this.server.emitWarning(error);
 };
 
-AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
+AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (failureType, code, reason) {
   Object.keys(this._callbackMap || {}).forEach((i) => {
     let eventObject = this._callbackMap[i];
     delete this._callbackMap[i];
@@ -837,7 +837,7 @@ AGServerSocket.prototype._abortAllPendingEventsDueToBadConnection = function (fa
     delete eventObject.timeout;
 
     let errorMessage = `Event ${eventObject.event} was aborted due to a bad connection`;
-    let badConnectionError = new BadConnectionError(errorMessage, failureType);
+    let badConnectionError = new BadConnectionError(errorMessage, failureType, code, reason);
 
     let callback = eventObject.callback;
     delete eventObject.callback;
@@ -911,7 +911,7 @@ AGServerSocket.prototype._destroy = async function (code, reason) {
   this._cancelBatching();
 
   if (this.state === this.CLOSED) {
-    this._abortAllPendingEventsDueToBadConnection('connectAbort');
+    this._abortAllPendingEventsDueToBadConnection('connectAbort', code, reason);
   } else {
     if (!reason && AGServerSocket.errorStatuses[code]) {
       reason = AGServerSocket.errorStatuses[code];
@@ -919,7 +919,7 @@ AGServerSocket.prototype._destroy = async function (code, reason) {
     let prevState = this.state;
     this.state = this.CLOSED;
     if (prevState === this.CONNECTING) {
-      this._abortAllPendingEventsDueToBadConnection('connectAbort');
+      this._abortAllPendingEventsDueToBadConnection('connectAbort', code, reason);
       this.emit('connectAbort', {code, reason});
       this.server.emit('connectionAbort', {
         socket: this,
@@ -927,7 +927,7 @@ AGServerSocket.prototype._destroy = async function (code, reason) {
         reason
       });
     } else {
-      this._abortAllPendingEventsDueToBadConnection('disconnect');
+      this._abortAllPendingEventsDueToBadConnection('disconnect', code, reason);
       this.emit('disconnect', {code, reason});
       this.server.emit('disconnection', {
         socket: this,

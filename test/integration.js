@@ -32,7 +32,7 @@ let allowedUsers = {
   alice: true
 };
 
-const PORT_NUMBER = 8008;
+const PORT_NUMBER = 8718;
 const WS_ENGINE = 'ws';
 const LOG_WARNINGS = false;
 const LOG_ERRORS = false;
@@ -168,6 +168,13 @@ function bindFailureHandlers(server) {
 }
 
 describe('Integration tests', function () {
+  before('Show port availability notice', async function () {
+    console.log('');
+    console.log(`  NOTICE: These tests start and stop a server on port ${PORT_NUMBER} of 127.0.0.1.`);
+    console.log(`  Make sure that port ${PORT_NUMBER} is free before running the test cases, otherwise tests will fail.`);
+    console.log('');
+  });
+
   beforeEach('Prepare options', async function () {
     clientOptions = {
       hostname: '127.0.0.1',

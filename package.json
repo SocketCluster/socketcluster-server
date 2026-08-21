@@ -21,8 +21,12 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "mocha": "^10.2.0",
-    "socketcluster-client": "*"
+    "mocha": "^11.8.0",
+    "socketcluster-client": "^20.0.2"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.1.0"
   },
   "scripts": {
     "test": "mocha --reporter spec --timeout 10000 --slow 10000"

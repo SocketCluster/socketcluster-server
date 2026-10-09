@@ -82,6 +82,18 @@ let agServer = socketClusterServer.attach(httpServer, {
 
 Set it to `null` to fall back to the `wsEngine` default.
 
+## Maximum inbound batch size
+
+Since version 21.0.0, the `maxInboundBatchSize` option limits how many packets a single batched (array) message from a client may contain; it defaults to `1000`. A message which exceeds the limit is rejected and the socket is closed with status code `1009`.
+
+```js
+let agServer = socketClusterServer.attach(httpServer, {
+  maxInboundBatchSize: 100
+});
+```
+
+Set it to `null` to allow batches of any size.
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/socketcluster-server.git`

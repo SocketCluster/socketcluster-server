@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "21.0.0",
+  "version": "21.0.1",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {
@@ -11,7 +11,7 @@
     "ag-auth": "^2.1.1",
     "ag-request": "^1.1.0",
     "ag-simple-broker": "^6.1.1",
-    "async-stream-emitter": "^7.0.1",
+    "async-stream-emitter": "^7.1.1",
     "base64id": "^2.0.0",
     "clone-deep": "^4.0.1",
     "sc-errors": "^3.0.0",

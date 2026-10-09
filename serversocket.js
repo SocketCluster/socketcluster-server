@@ -84,12 +84,8 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this._callbackMap = {};
   this._lastPongResetTime = 0;
 
-  // A null-prototype object is used so that channel names which collide with
-  // Object.prototype members (such as __proto__, constructor or toString) are
-  // treated as ordinary channel names. With a plain object, a lookup such as
-  // this.channelSubscriptions[channelName] returns an inherited value for
-  // those names, which lets a client unsubscribe from channels which it was
-  // never subscribed to and thereby bypass the socketChannelLimit.
+  // Null-prototype so that channel names which collide with Object.prototype
+  // members cannot be mistaken for existing subscriptions.
   this.channelSubscriptions = Object.create(null);
   this.channelSubscriptionsCount = 0;
 
@@ -367,6 +363,15 @@ AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessa
 
     if (Array.isArray(packet)) {
       let len = packet.length;
+      if (this.server.maxInboundBatchSize && len > this.server.maxInboundBatchSize) {
+        let error = new InvalidActionError(
+          `Socket ${this.id} sent a message which contained ${len} packets; this exceeds the maxInboundBatchSize of ${this.server.maxInboundBatchSize}`
+        );
+        this.emitError(error);
+        this._destroy(1009);
+        this.socket.close(1009);
+        continue;
+      }
       for (let i = 0; i < len; i++) {
         await this._processInboundPacket(packet[i], message);
       }
@@ -382,9 +387,7 @@ AGServerSocket.prototype._handleHandshakeTimeout = function () {
 
 AGServerSocket.prototype._processHandshakeRequest = async function (request) {
   if (this.state !== this.CONNECTING) {
-    // Processing a second handshake would increment the server clientsCount
-    // and re-emit the connect and connection events for a socket which is
-    // already connected.
+    // A second handshake would double-count the client and re-emit connect.
     let error = new InvalidActionError(
       `Socket ${this.id} tried to complete the handshake more than once`
     );
@@ -522,9 +525,7 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
   try {
     await this.server.brokerEngine.subscribeSocket(this, channelName);
   } catch (error) {
-    // Only roll back the subscription if it was added by this call; otherwise
-    // a failure here would discard an existing subscription and leave the
-    // channelSubscriptionsCount too low.
+    // Only roll back what this call added.
     if (isNewSubscription) {
       delete this.channelSubscriptions[channelName];
       this.channelSubscriptionsCount--;
@@ -551,9 +552,7 @@ AGServerSocket.prototype._processSubscribeRequest = async function (request) {
     try {
       await this._subscribeSocket(channelName, subscriptionOptions);
     } catch (err) {
-      // The underlying error can expose details of the broker engine backend
-      // (such as host names or connection strings), so it is only reported on
-      // the server; the client is told which channel failed and nothing more.
+      // The underlying error may expose broker backend details.
       this.emitError(
         new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`)
       );
@@ -639,8 +638,7 @@ AGServerSocket.prototype._processInboundPublishRequest = async function (request
   try {
     await this.server.exchange.invokePublish(request.data.channel, request.data.data);
   } catch (error) {
-    // As with subscribe failures, the raw error may expose details of the
-    // broker engine backend, so only a generic error is sent to the client.
+    // As with subscribe failures; the raw error may expose backend details.
     this.emitError(error);
     request.error(
       new BrokerError(`Failed to publish to the ${request.data.channel} channel`)

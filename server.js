@@ -22,7 +22,10 @@ function AGServer(options) {
     brokerEngine: new AGSimpleBroker(),
     wsEngine: 'ws',
     wsEngineServerOptions: {},
-    maxPayload: null,
+    // ws defaults to 100MB; null uses the wsEngine default.
+    maxPayload: 4 * 1024 * 1024,
+    // Max packets per batched message; null disables.
+    maxInboundBatchSize: 1000,
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,
@@ -59,6 +62,7 @@ function AGServer(options) {
   this.perMessageDeflate = opts.perMessageDeflate;
   this.httpServer = opts.httpServer;
   this.socketChannelLimit = opts.socketChannelLimit;
+  this.maxInboundBatchSize = opts.maxInboundBatchSize;
   this.protocolVersion = opts.protocolVersion;
   this.strictHandshake = opts.strictHandshake;
 
@@ -337,17 +341,13 @@ AGServer.prototype._processMiddlewareAction = async function (middlewareStream, 
   return {data: newData, options};
 };
 
-// Converts the origins option into a Set of host:port entries. The entries are
-// matched exactly; matching them as substrings of the raw option would accept
-// any origin whose host:port is a substring of an allowed entry. For example,
-// an origins option of 'app.example.com:443' would otherwise also accept the
-// unrelated origins example.com and p.example.com.
+// Entries are matched exactly; substring matching would admit any origin whose
+// host:port is a substring of an allowed entry.
 AGServer.prototype._parseOrigins = function (origins) {
   let originList = Array.isArray(origins) ? origins : String(origins).split(/[;,]/);
   let entries = originList
     .map((entry) => {
-      // A scheme prefix is tolerated for backwards compatibility; the scheme
-      // itself is not part of the comparison.
+      // Scheme prefixes are tolerated but not compared.
       return String(entry).trim().replace(/^[a-z][a-z0-9+.\-]*:\/\//i, '');
     })
     .filter((entry) => entry !== '');
@@ -365,9 +365,8 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
   if (this._allowAllOrigins) {
     ok = true;
   } else {
-    // If the origin cannot be parsed (which includes the case where the client
-    // did not send an Origin header at all), fall back to the wildcard host on
-    // the default port so that only a wildcard entry can match it.
+    // An unparsable origin (including an absent Origin header) can only be
+    // matched by a wildcard entry.
     let hostname = '*';
     let port = '80';
     try {

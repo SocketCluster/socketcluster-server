@@ -3822,8 +3822,7 @@ describe('Integration tests', function () {
         responses.push(messageBuffer.toString());
       });
 
-      // Capture unhandled rejections for the duration of this test; without a
-      // listener, Node turns them into an uncaught exception and exits.
+      // Without a listener, Node turns these into an uncaught exception.
       let rejections = [];
       let captureRejection = (error) => rejections.push(error);
       let existingListeners = process.listeners('unhandledRejection');
@@ -3835,9 +3834,7 @@ describe('Integration tests', function () {
       try {
         rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
         await wait(100);
-        // The event name is looked up on a plain object inside the receiver
-        // demux, so every Object.prototype key passes the existence check and
-        // then fails when the server tries to write to it.
+        // This used to throw inside the receiver demux and kill the process.
         rawSocket.send(JSON.stringify({event: '__proto__', data: 1}));
         await wait(100);
         // The socket should still be able to process messages afterwards.
@@ -3930,8 +3927,7 @@ describe('Integration tests', function () {
 
       await client.listener('connect').once();
 
-      // 'toString' is not a real subscription but it is truthy on a plain
-      // object, so the unsubscribe guard lets it through.
+      // 'toString' is truthy on a plain object, so it used to pass the guard.
       for (let i = 0; i < 5; i++) {
         try {
           await client.invoke('#unsubscribe', 'toString');
@@ -3985,8 +3981,7 @@ describe('Integration tests', function () {
       }
 
       assert.equal(await isOriginAllowed('https://app.example.com'), true);
-      // The origins option is matched as a substring, so any origin whose
-      // host:port is a suffix of an allowed entry is accepted as well.
+      // These used to match as substrings of the allowed entry.
       assert.equal(
         await isOriginAllowed('https://example.com'),
         false,
@@ -4047,6 +4042,59 @@ describe('Integration tests', function () {
         0,
         `clientsCount did not return to 0 after disconnect; it is ${server.clientsCount}`
       );
+    });
+
+    it('Should reject a message which exceeds the maxPayload option', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.wsServer.options.maxPayload, 4 * 1024 * 1024);
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      let responses = [];
+      let closeCodes = [];
+      rawSocket.on('message', (messageBuffer) => {
+        responses.push(messageBuffer.toString());
+      });
+      rawSocket.on('close', (code) => {
+        closeCodes.push(code);
+      });
+
+      rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
+      await wait(100);
+
+      // Comfortably within the limit.
+      rawSocket.send(JSON.stringify({event: 'proc', data: 'a'.repeat(1024 * 1024), cid: 2}));
+      await wait(500);
+
+      assert.equal(responses.some((message) => message.indexOf('"rid":2') !== -1), true);
+      assert.equal(closeCodes.length, 0);
+
+      // Over the limit.
+      rawSocket.send(JSON.stringify({event: 'proc', data: 'a'.repeat(5 * 1024 * 1024), cid: 3}));
+      await wait(500);
+
+      assert.equal(
+        responses.some((message) => message.indexOf('"rid":3') !== -1),
+        false,
+        'The oversized message should not have been processed'
+      );
+      assert.equal(closeCodes[0], 1009);
+
+      rawSocket.close();
     });
   });
 });

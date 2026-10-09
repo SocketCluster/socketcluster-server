@@ -70,6 +70,18 @@ let agServer = socketClusterServer.attach(httpServer, {
 });
 ```
 
+## Maximum payload size
+
+Since version 21.0.0, the `maxPayload` option defaults to 4MB; before that it was unset, which left the `ws` engine default of 100MB in place. A message which exceeds the limit is rejected and the socket is closed with status code `1009`.
+
+```js
+let agServer = socketClusterServer.attach(httpServer, {
+  maxPayload: 8 * 1024 * 1024
+});
+```
+
+Set it to `null` to fall back to the `wsEngine` default.
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/socketcluster-server.git`

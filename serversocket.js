@@ -551,9 +551,15 @@ AGServerSocket.prototype._processSubscribeRequest = async function (request) {
     try {
       await this._subscribeSocket(channelName, subscriptionOptions);
     } catch (err) {
-      let error = new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`);
-      this.emitError(error);
-      request.error(error);
+      // The underlying error can expose details of the broker engine backend
+      // (such as host names or connection strings), so it is only reported on
+      // the server; the client is told which channel failed and nothing more.
+      this.emitError(
+        new BrokerError(`Failed to subscribe socket to the ${channelName} channel - ${err}`)
+      );
+      request.error(
+        new BrokerError(`Failed to subscribe socket to the ${channelName} channel`)
+      );
       return;
     }
 
@@ -633,8 +639,12 @@ AGServerSocket.prototype._processInboundPublishRequest = async function (request
   try {
     await this.server.exchange.invokePublish(request.data.channel, request.data.data);
   } catch (error) {
+    // As with subscribe failures, the raw error may expose details of the
+    // broker engine backend, so only a generic error is sent to the client.
     this.emitError(error);
-    request.error(error);
+    request.error(
+      new BrokerError(`Failed to publish to the ${request.data.channel} channel`)
+    );
     return;
   }
   request.end();

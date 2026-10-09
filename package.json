@@ -1,6 +1,6 @@
 {
   "name": "socketcluster-server",
-  "version": "21.0.1",
+  "version": "21.0.2",
   "description": "Server module for SocketCluster",
   "main": "index.js",
   "repository": {
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "mocha": "^11.8.0",
-    "socketcluster-client": "^20.0.2"
+    "socketcluster-client": "^21.0.0"
   },
   "overrides": {
     "diff": "^8.0.4",

@@ -2,7 +2,6 @@ const AGServerSocket = require('./serversocket');
 const AuthEngine = require('ag-auth');
 const formatter = require('sc-formatter');
 const base64id = require('base64id');
-const url = require('url');
 const crypto = require('crypto');
 const AGSimpleBroker = require('ag-simple-broker');
 const AsyncStreamEmitter = require('async-stream-emitter');
@@ -48,7 +47,8 @@ function AGServer(options) {
   this._middleware = {};
 
   this.origins = opts.origins;
-  this._allowAllOrigins = this.origins.indexOf('*:*') !== -1;
+  this._originSet = this._parseOrigins(this.origins);
+  this._allowAllOrigins = this._originSet.has('*:*');
 
   this.ackTimeout = opts.ackTimeout;
   this.handshakeTimeout = opts.handshakeTimeout;
@@ -337,6 +337,23 @@ AGServer.prototype._processMiddlewareAction = async function (middlewareStream, 
   return {data: newData, options};
 };
 
+// Converts the origins option into a Set of host:port entries. The entries are
+// matched exactly; matching them as substrings of the raw option would accept
+// any origin whose host:port is a substring of an allowed entry. For example,
+// an origins option of 'app.example.com:443' would otherwise also accept the
+// unrelated origins example.com and p.example.com.
+AGServer.prototype._parseOrigins = function (origins) {
+  let originList = Array.isArray(origins) ? origins : String(origins).split(/[;,]/);
+  let entries = originList
+    .map((entry) => {
+      // A scheme prefix is tolerated for backwards compatibility; the scheme
+      // itself is not part of the comparison.
+      return String(entry).trim().replace(/^[a-z][a-z0-9+.\-]*:\/\//i, '');
+    })
+    .filter((entry) => entry !== '');
+  return new Set(entries);
+};
+
 AGServer.prototype.verifyHandshake = async function (info, callback) {
   let req = info.req;
   let origin = info.origin;
@@ -348,13 +365,19 @@ AGServer.prototype.verifyHandshake = async function (info, callback) {
   if (this._allowAllOrigins) {
     ok = true;
   } else {
+    // If the origin cannot be parsed (which includes the case where the client
+    // did not send an Origin header at all), fall back to the wildcard host on
+    // the default port so that only a wildcard entry can match it.
+    let hostname = '*';
+    let port = '80';
     try {
-      let parts = url.parse(origin);
-      parts.port = parts.port || (parts.protocol === 'https:' ? 443 : 80);
-      ok = ~this.origins.indexOf(parts.hostname + ':' + parts.port) ||
-        ~this.origins.indexOf(parts.hostname + ':*') ||
-        ~this.origins.indexOf('*:' + parts.port);
-    } catch (e) {}
+      let parsedOrigin = new URL(origin);
+      hostname = parsedOrigin.hostname;
+      port = parsedOrigin.port || (parsedOrigin.protocol === 'https:' ? '443' : '80');
+    } catch (error) {}
+    ok = this._originSet.has(`${hostname}:${port}`) ||
+      this._originSet.has(`${hostname}:*`) ||
+      this._originSet.has(`*:${port}`);
   }
 
   let middlewareHandshakeStream = new WritableConsumableStream();

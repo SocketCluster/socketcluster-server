@@ -3,6 +3,7 @@ const socketClusterServer = require('../');
 const AGAction = require('../action');
 const socketClusterClient = require('socketcluster-client');
 const AGSimpleBroker = require('ag-simple-broker');
+const WebSocket = require('ws');
 
 // Add to the global scope like in browser.
 // Simple in-memory localStorage implementation for testing
@@ -3783,6 +3784,269 @@ describe('Integration tests', function () {
           assert.equal(middlewareAction.data, 123);
         });
       });
+    });
+  });
+
+  describe('Security', function () {
+    function createRawSocket(options) {
+      return new WebSocket(`ws://${clientOptions.hostname}:${PORT_NUMBER}/socketcluster/`, options);
+    }
+
+    function waitForRawSocketOpen(rawSocket) {
+      return new Promise((resolve, reject) => {
+        rawSocket.on('open', resolve);
+        rawSocket.on('error', reject);
+      });
+    }
+
+    it('Should not crash the process if a client sends an event which is named after an Object.prototype property', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      let responses = [];
+      rawSocket.on('message', (messageBuffer) => {
+        responses.push(messageBuffer.toString());
+      });
+
+      // Capture unhandled rejections for the duration of this test; without a
+      // listener, Node turns them into an uncaught exception and exits.
+      let rejections = [];
+      let captureRejection = (error) => rejections.push(error);
+      let existingListeners = process.listeners('unhandledRejection');
+      existingListeners.forEach((listener) => {
+        process.removeListener('unhandledRejection', listener);
+      });
+      process.on('unhandledRejection', captureRejection);
+
+      try {
+        rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
+        await wait(100);
+        // The event name is looked up on a plain object inside the receiver
+        // demux, so every Object.prototype key passes the existence check and
+        // then fails when the server tries to write to it.
+        rawSocket.send(JSON.stringify({event: '__proto__', data: 1}));
+        await wait(100);
+        // The socket should still be able to process messages afterwards.
+        rawSocket.send(JSON.stringify({event: 'proc', data: 'abc', cid: 2}));
+        await wait(100);
+      } finally {
+        process.removeListener('unhandledRejection', captureRejection);
+        existingListeners.forEach((listener) => {
+          process.on('unhandledRejection', listener);
+        });
+        rawSocket.close();
+      }
+
+      assert.equal(
+        rejections.length,
+        0,
+        `The __proto__ event caused an unhandled rejection: ${rejections[0] && rejections[0].message}`
+      );
+      assert.equal(
+        responses.some((message) => message.indexOf('"rid":2') !== -1),
+        true,
+        'The socket stopped processing inbound messages after the __proto__ event'
+      );
+    });
+
+    it('Should not pollute Object.prototype if a client subscribes to a channel which is named after an Object.prototype property', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
+      });
+
+      await client.listener('connect').once();
+
+      try {
+        await client.invoke('#subscribe', {channel: '__proto__'});
+      } catch (error) {}
+
+      let pollutedKeys = Object.keys(Object.prototype);
+      // Clean up before asserting so that a failure cannot affect other tests.
+      pollutedKeys.forEach((key) => {
+        delete Object.prototype[key];
+      });
+
+      assert.equal(
+        pollutedKeys.length,
+        0,
+        `Object.prototype was polluted with the following keys: ${pollutedKeys.join(', ')}`
+      );
+    });
+
+    it('Should not let a client reduce its channel subscription count by unsubscribing from a channel which it is not subscribed to', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        socketChannelLimit: 3
+      });
+      bindFailureHandlers(server);
+
+      let serverSocket;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
+      });
+
+      await client.listener('connect').once();
+
+      // 'toString' is not a real subscription but it is truthy on a plain
+      // object, so the unsubscribe guard lets it through.
+      for (let i = 0; i < 5; i++) {
+        try {
+          await client.invoke('#unsubscribe', 'toString');
+        } catch (error) {}
+      }
+
+      assert.equal(
+        serverSocket.channelSubscriptionsCount,
+        0,
+        `The channel subscription count drifted to ${serverSocket.channelSubscriptionsCount}`
+      );
+
+      let subscribedCount = 0;
+      for (let i = 0; i < 6; i++) {
+        try {
+          await client.invoke('#subscribe', {channel: `channel${i}`});
+          subscribedCount++;
+        } catch (error) {}
+      }
+
+      assert.equal(
+        subscribedCount,
+        3,
+        `The socketChannelLimit of 3 was bypassed; ${subscribedCount} channels were subscribed`
+      );
+    });
+
+    it('Should only allow origins which match an entry of the origins option exactly', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        origins: 'app.example.com:443'
+      });
+      bindFailureHandlers(server);
+
+      // The server emits a warning for every rejected origin.
+      (async () => {
+        for await (let event of server.listener('warning')) {}
+      })();
+
+      await server.listener('ready').once();
+
+      async function isOriginAllowed(origin) {
+        let rawSocket = createRawSocket({origin});
+        let allowed = await new Promise((resolve) => {
+          rawSocket.on('open', () => resolve(true));
+          rawSocket.on('error', () => resolve(false));
+        });
+        rawSocket.close();
+        return allowed;
+      }
+
+      assert.equal(await isOriginAllowed('https://app.example.com'), true);
+      // The origins option is matched as a substring, so any origin whose
+      // host:port is a suffix of an allowed entry is accepted as well.
+      assert.equal(
+        await isOriginAllowed('https://example.com'),
+        false,
+        'example.com is not in the origins list but was allowed'
+      );
+      assert.equal(
+        await isOriginAllowed('https://p.example.com'),
+        false,
+        'p.example.com is not in the origins list but was allowed'
+      );
+      assert.equal(await isOriginAllowed('https://evil.com'), false);
+    });
+
+    it('Should ignore additional handshake packets sent by the same client', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let connectionEvents = [];
+
+      (async () => {
+        for await (let event of server.listener('connection')) {
+          connectionEvents.push(event);
+          connectionHandler(event.socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      for (let i = 1; i <= 5; i++) {
+        rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: i}));
+      }
+
+      await wait(200);
+
+      assert.equal(Object.keys(server.clients).length, 1);
+      assert.equal(
+        server.clientsCount,
+        1,
+        `A single socket inflated clientsCount to ${server.clientsCount}`
+      );
+      assert.equal(
+        connectionEvents.length,
+        1,
+        `A single socket triggered ${connectionEvents.length} connection events`
+      );
+
+      rawSocket.close();
+      await wait(200);
+
+      assert.equal(
+        server.clientsCount,
+        0,
+        `clientsCount did not return to 0 after disconnect; it is ${server.clientsCount}`
+      );
     });
   });
 });

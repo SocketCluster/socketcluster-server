@@ -84,7 +84,13 @@ function AGServerSocket(id, server, socket, protocolVersion) {
   this._callbackMap = {};
   this._lastPongResetTime = 0;
 
-  this.channelSubscriptions = {};
+  // A null-prototype object is used so that channel names which collide with
+  // Object.prototype members (such as __proto__, constructor or toString) are
+  // treated as ordinary channel names. With a plain object, a lookup such as
+  // this.channelSubscriptions[channelName] returns an inherited value for
+  // those names, which lets a client unsubscribe from channels which it was
+  // never subscribed to and thereby bypass the socketChannelLimit.
+  this.channelSubscriptions = Object.create(null);
   this.channelSubscriptionsCount = 0;
 
   this.socket.on('error', (err) => {
@@ -375,6 +381,18 @@ AGServerSocket.prototype._handleHandshakeTimeout = function () {
 };
 
 AGServerSocket.prototype._processHandshakeRequest = async function (request) {
+  if (this.state !== this.CONNECTING) {
+    // Processing a second handshake would increment the server clientsCount
+    // and re-emit the connect and connection events for a socket which is
+    // already connected.
+    let error = new InvalidActionError(
+      `Socket ${this.id} tried to complete the handshake more than once`
+    );
+    this.emitError(error);
+    request.error(error);
+    return;
+  }
+
   let data = request.data || {};
   let signedAuthToken = data.authToken || null;
   clearTimeout(this._handshakeTimeoutRef);
@@ -495,7 +513,8 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
   if (this.channelSubscriptionsCount == null) {
     this.channelSubscriptionsCount = 0;
   }
-  if (this.channelSubscriptions[channelName] == null) {
+  let isNewSubscription = this.channelSubscriptions[channelName] == null;
+  if (isNewSubscription) {
     this.channelSubscriptions[channelName] = true;
     this.channelSubscriptionsCount++;
   }
@@ -503,8 +522,13 @@ AGServerSocket.prototype._subscribeSocket = async function (channelName, subscri
   try {
     await this.server.brokerEngine.subscribeSocket(this, channelName);
   } catch (error) {
-    delete this.channelSubscriptions[channelName];
-    this.channelSubscriptionsCount--;
+    // Only roll back the subscription if it was added by this call; otherwise
+    // a failure here would discard an existing subscription and leave the
+    // channelSubscriptionsCount too low.
+    if (isNewSubscription) {
+      delete this.channelSubscriptions[channelName];
+      this.channelSubscriptionsCount--;
+    }
     throw error;
   }
   this.emit('subscribe', {

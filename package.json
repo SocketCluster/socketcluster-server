@@ -10,14 +10,14 @@
   "dependencies": {
     "ag-auth": "^2.1.1",
     "ag-request": "^1.1.0",
-    "ag-simple-broker": "^6.0.1",
+    "ag-simple-broker": "^6.1.1",
     "async-stream-emitter": "^7.0.1",
     "base64id": "^2.0.0",
     "clone-deep": "^4.0.1",
     "sc-errors": "^3.0.0",
     "sc-formatter": "^4.0.0",
-    "stream-demux": "^10.0.1",
-    "writable-consumable-stream": "^4.1.0",
+    "stream-demux": "^10.2.1",
+    "writable-consumable-stream": "^5.0.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

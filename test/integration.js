@@ -4155,8 +4155,7 @@ describe('Integration tests', function () {
       });
       bindFailureHandlers(server);
 
-      // Slow inbound middleware so that messages queue up faster than they
-      // are processed.
+      // Slow inbound middleware so the backlog builds up.
       server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
         for await (let action of middlewareStream) {
           await wait(30);
@@ -4185,8 +4184,7 @@ describe('Integration tests', function () {
       rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
       await wait(50);
 
-      // Flood the socket with far more messages than the limit, faster than
-      // the slow middleware can drain them.
+      // Flood with far more messages than the limit can drain.
       for (let i = 0; i < 500; i++) {
         rawSocket.send(JSON.stringify({event: 'proc', data: 123, cid: i + 2}));
       }
@@ -4320,7 +4318,6 @@ describe('Integration tests', function () {
         closeCodes.push(code);
       });
 
-      // A batched (array) message of any non-zero length must be rejected.
       rawSocket.send(JSON.stringify([
         {event: '#handshake', data: {}, cid: 1},
         {event: 'proc', data: 123, cid: 2}

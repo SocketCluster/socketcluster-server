@@ -148,12 +148,7 @@ function AGServerSocket(id, server, socket, protocolVersion) {
         this._resetPongTimeout();
       }
 
-      // If the client keeps sending messages faster than they can be
-      // processed (e.g. while async inbound middleware is applied), the
-      // unprocessed messages accumulate in inboundMessageStream unbounded.
-      // Once the backlog exceeds the limit, close the socket rather than
-      // continue buffering. Pongs are exempt so that a client which is
-      // temporarily backpressured can still keep its connection alive.
+      // Close the socket if the unprocessed inbound backlog exceeds the limit.
       if (
         this.server.inboundBackpressureLimit != null &&
         this.getInboundBackpressure() > this.server.inboundBackpressureLimit

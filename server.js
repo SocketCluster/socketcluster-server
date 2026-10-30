@@ -26,6 +26,8 @@ function AGServer(options) {
     maxPayload: 4 * 1024 * 1024,
     // Max packets per batched message; null disables.
     maxInboundBatchSize: 1000,
+    // Max queued unprocessed inbound messages before the socket is closed; null disables.
+    inboundBackpressureLimit: 1000,
     // Max channels a single socket may subscribe to; null disables.
     socketChannelLimit: 1000,
     allowClientPublish: true,
@@ -65,6 +67,7 @@ function AGServer(options) {
   this.httpServer = opts.httpServer;
   this.socketChannelLimit = opts.socketChannelLimit;
   this.maxInboundBatchSize = opts.maxInboundBatchSize;
+  this.inboundBackpressureLimit = opts.inboundBackpressureLimit;
   this.protocolVersion = opts.protocolVersion;
   this.strictHandshake = opts.strictHandshake;
 

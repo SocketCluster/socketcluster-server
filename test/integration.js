@@ -4146,5 +4146,107 @@ describe('Integration tests', function () {
       // Exceeding the limit must not close the connection.
       assert.equal(serverSocket.state, serverSocket.OPEN);
     });
+
+    it('Should close the socket with code 1009 when inbound backpressure exceeds the inboundBackpressureLimit', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        inboundBackpressureLimit: 50
+      });
+      bindFailureHandlers(server);
+
+      // Slow inbound middleware so that messages queue up faster than they
+      // are processed.
+      server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          await wait(30);
+          action.allow();
+        }
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.inboundBackpressureLimit, 50);
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      let closeCodes = [];
+      rawSocket.on('close', (code) => {
+        closeCodes.push(code);
+      });
+
+      rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
+      await wait(50);
+
+      // Flood the socket with far more messages than the limit, faster than
+      // the slow middleware can drain them.
+      for (let i = 0; i < 500; i++) {
+        rawSocket.send(JSON.stringify({event: 'proc', data: 123, cid: i + 2}));
+      }
+
+      await wait(500);
+
+      assert.equal(closeCodes[0], 1009);
+
+      rawSocket.close();
+    });
+
+    it('Should not close the socket due to inbound backpressure when inboundBackpressureLimit is null', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        inboundBackpressureLimit: null
+      });
+      bindFailureHandlers(server);
+
+      server.setMiddleware(server.MIDDLEWARE_INBOUND, async (middlewareStream) => {
+        for await (let action of middlewareStream) {
+          await wait(30);
+          action.allow();
+        }
+      });
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.inboundBackpressureLimit, null);
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      let closeCodes = [];
+      rawSocket.on('close', (code) => {
+        closeCodes.push(code);
+      });
+
+      rawSocket.send(JSON.stringify({event: '#handshake', data: {}, cid: 1}));
+      await wait(50);
+
+      for (let i = 0; i < 500; i++) {
+        rawSocket.send(JSON.stringify({event: 'proc', data: 123, cid: i + 2}));
+      }
+
+      await wait(500);
+
+      assert.equal(
+        closeCodes.indexOf(1009),
+        -1,
+        'The socket should not have been closed with code 1009 when the limit is disabled'
+      );
+
+      rawSocket.close();
+    });
   });
 });

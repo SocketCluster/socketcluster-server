@@ -106,6 +106,18 @@ let agServer = socketClusterServer.attach(httpServer, {
 
 Set it to `null` to allow any number of subscriptions per socket. Note that each subscription costs memory on both the socket and the broker, so an unlimited setting lets a single client exhaust server memory; prefer a finite limit which suits your application.
 
+## Inbound backpressure limit
+
+The `inboundBackpressureLimit` option limits how many unprocessed inbound messages a single socket may accumulate; since version 21.0.3 it defaults to `1000`. Inbound messages are processed one at a time (for example while asynchronous inbound middleware is applied), so a client which sends messages faster than the server can process them causes the backlog to grow. When the backlog exceeds the limit, the socket is closed with status code `1009`.
+
+```js
+let agServer = socketClusterServer.attach(httpServer, {
+  inboundBackpressureLimit: 100
+});
+```
+
+Set it to `null` to allow an unbounded backlog. Since each queued message is held in memory, an unlimited setting lets a single client exhaust server memory; prefer a finite limit which suits your application. The current backlog for a socket can be inspected at runtime with `socket.getInboundBackpressure()`.
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/socketcluster-server.git`

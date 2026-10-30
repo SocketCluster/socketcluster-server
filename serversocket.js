@@ -382,7 +382,7 @@ AGServerSocket.prototype._handleInboundMessageStream = async function (pongMessa
 
     if (Array.isArray(packet)) {
       let len = packet.length;
-      if (this.server.maxInboundBatchSize && len > this.server.maxInboundBatchSize) {
+      if (this.server.maxInboundBatchSize != null && len > this.server.maxInboundBatchSize) {
         let error = new InvalidActionError(
           `Socket ${this.id} sent a message which contained ${len} packets; this exceeds the maxInboundBatchSize of ${this.server.maxInboundBatchSize}`
         );
@@ -526,7 +526,7 @@ AGServerSocket.prototype._processAuthenticateRequest = async function (request) 
 };
 
 AGServerSocket.prototype._subscribeSocket = async function (channelName, subscriptionOptions) {
-  if (this.server.socketChannelLimit && this.channelSubscriptionsCount >= this.server.socketChannelLimit) {
+  if (this.server.socketChannelLimit != null && this.channelSubscriptionsCount >= this.server.socketChannelLimit) {
     throw new InvalidActionError(
       `Socket ${this.id} tried to exceed the channel subscription limit of ${this.server.socketChannelLimit}`
     );

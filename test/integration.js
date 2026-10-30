@@ -4248,5 +4248,89 @@ describe('Integration tests', function () {
 
       rawSocket.close();
     });
+
+    it('Should treat a socketChannelLimit of 0 as a limit which rejects every subscription', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        socketChannelLimit: 0
+      });
+      bindFailureHandlers(server);
+
+      let serverSocket;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.socketChannelLimit, 0);
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
+      });
+
+      await client.listener('connect').once();
+
+      let subscribedCount = 0;
+      let rejectedCount = 0;
+      for (let i = 0; i < 3; i++) {
+        try {
+          await client.invoke('#subscribe', {channel: `channel${i}`});
+          subscribedCount++;
+        } catch (error) {
+          rejectedCount++;
+        }
+      }
+
+      assert.equal(subscribedCount, 0);
+      assert.equal(rejectedCount, 3);
+      assert.equal(serverSocket.channelSubscriptionsCount, 0);
+    });
+
+    it('Should treat a maxInboundBatchSize of 0 as a limit which rejects any non-empty batch', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE,
+        maxInboundBatchSize: 0
+      });
+      bindFailureHandlers(server);
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.maxInboundBatchSize, 0);
+
+      let rawSocket = createRawSocket();
+      await waitForRawSocketOpen(rawSocket);
+
+      let closeCodes = [];
+      rawSocket.on('close', (code) => {
+        closeCodes.push(code);
+      });
+
+      // A batched (array) message of any non-zero length must be rejected.
+      rawSocket.send(JSON.stringify([
+        {event: '#handshake', data: {}, cid: 1},
+        {event: 'proc', data: 123, cid: 2}
+      ]));
+
+      await wait(300);
+
+      assert.equal(closeCodes[0], 1009);
+
+      rawSocket.close();
+    });
   });
 });

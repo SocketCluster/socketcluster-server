@@ -1590,19 +1590,22 @@ AGServerSocket.prototype._processAuthentication = async function ({signedAuthTok
     throw authTokenError;
   }
 
-  this.signedAuthToken = signedAuthToken;
-  this.authToken = authToken;
-  this.authState = this.AUTHENTICATED;
-
+  // The action carries the proposed token so that middleware can inspect it
+  // before deciding, but the socket itself is not promoted until the
+  // middleware has allowed the action. Promoting it first would let anything
+  // which runs concurrently - outbound middleware, or an app handler resuming
+  // from an await - observe an identity which is still subject to being
+  // blocked below.
   let action = new AGAction();
   action.socket = this;
   action.type = AGAction.AUTHENTICATE;
-  action.signedAuthToken = this.signedAuthToken;
-  action.authToken = this.authToken;
+  action.signedAuthToken = signedAuthToken;
+  action.authToken = authToken;
 
   try {
     await this.server._processMiddlewareAction(this.middlewareInboundStream, action, this);
   } catch (error) {
+    this.signedAuthToken = null;
     this.authToken = null;
     this.authState = this.UNAUTHENTICATED;
 
@@ -1611,6 +1614,10 @@ AGServerSocket.prototype._processAuthentication = async function ({signedAuthTok
     }
     throw error;
   }
+
+  this.signedAuthToken = signedAuthToken;
+  this.authToken = authToken;
+  this.authState = this.AUTHENTICATED;
 };
 
 module.exports = AGServerSocket;

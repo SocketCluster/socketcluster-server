@@ -26,6 +26,8 @@ function AGServer(options) {
     maxPayload: 4 * 1024 * 1024,
     // Max packets per batched message; null disables.
     maxInboundBatchSize: 1000,
+    // Max channels a single socket may subscribe to; null disables.
+    socketChannelLimit: 1000,
     allowClientPublish: true,
     ackTimeout: 10000,
     handshakeTimeout: 10000,

@@ -4096,5 +4096,55 @@ describe('Integration tests', function () {
 
       rawSocket.close();
     });
+
+    it('Should cap channel subscriptions at the default socketChannelLimit', async function () {
+      server = socketClusterServer.listen(PORT_NUMBER, {
+        authKey: serverOptions.authKey,
+        wsEngine: WS_ENGINE
+      });
+      bindFailureHandlers(server);
+
+      let serverSocket;
+
+      (async () => {
+        for await (let {socket} of server.listener('connection')) {
+          serverSocket = socket;
+          connectionHandler(socket);
+        }
+      })();
+
+      await server.listener('ready').once();
+
+      assert.equal(server.socketChannelLimit, 1000);
+
+      client = socketClusterClient.create({
+        hostname: clientOptions.hostname,
+        port: PORT_NUMBER,
+        authTokenName: 'socketcluster.authToken'
+      });
+
+      await client.listener('connect').once();
+
+      let subscribedCount = 0;
+      let rejectedCount = 0;
+      for (let i = 0; i < 1100; i++) {
+        try {
+          await client.invoke('#subscribe', {channel: `channel${i}`});
+          subscribedCount++;
+        } catch (error) {
+          rejectedCount++;
+        }
+      }
+
+      assert.equal(
+        subscribedCount,
+        1000,
+        `The default socketChannelLimit was bypassed; ${subscribedCount} channels were subscribed`
+      );
+      assert.equal(rejectedCount, 100);
+      assert.equal(serverSocket.channelSubscriptionsCount, 1000);
+      // Exceeding the limit must not close the connection.
+      assert.equal(serverSocket.state, serverSocket.OPEN);
+    });
   });
 });

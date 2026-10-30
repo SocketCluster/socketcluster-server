@@ -94,6 +94,18 @@ let agServer = socketClusterServer.attach(httpServer, {
 
 Set it to `null` to allow batches of any size.
 
+## Socket channel limit
+
+The `socketChannelLimit` option limits how many channels a single socket may be subscribed to at once; since version 21.0.3 it defaults to `1000`. A `#subscribe` request which would exceed the limit is rejected; the socket keeps its existing subscriptions and stays connected.
+
+```js
+let agServer = socketClusterServer.attach(httpServer, {
+  socketChannelLimit: 100
+});
+```
+
+Set it to `null` to allow any number of subscriptions per socket. Note that each subscription costs memory on both the socket and the broker, so an unlimited setting lets a single client exhaust server memory; prefer a finite limit which suits your application.
+
 ## Running the tests
 
 - Clone this repo: `git clone git@github.com:SocketCluster/socketcluster-server.git`
